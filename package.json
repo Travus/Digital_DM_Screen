@@ -1,10 +1,11 @@
 {
   "name": "digital-dm-screen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A tiling digital DM screen for tabletop RPGs",
   "main": "./out/main/index.js",
   "author": "Travus",
-  "license": "MIT",
+  "//license": "Split on purpose — the code is mine, the SRD text under src/renderer/src/data/ is not. See LICENSE.md.",
+  "license": "MIT AND CC-BY-4.0",
   "private": true,
   "//homepage": "Required by the .deb target. Point this at the real repo when there is one.",
   "homepage": "https://github.com/Travus/digital-dm-screen",

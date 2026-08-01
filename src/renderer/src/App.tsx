@@ -198,6 +198,20 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
           </p>
         )}
 
+        {/*
+          CC BY 4.0 requires the attribution wherever the material is used, so it
+          belongs here and not only in LICENSE.md. Plain text, not links:
+          setWindowOpenHandler only intercepts window opens, so an anchor would
+          navigate the app window itself with no way back.
+        */}
+        <p className="note">
+          This work includes material taken from the System Reference Document 5.1 (“SRD
+          5.1”) by Wizards of the Coast LLC and available at
+          https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is
+          licensed under the Creative Commons Attribution 4.0 International License
+          available at https://creativecommons.org/licenses/by/4.0/legalcode.
+        </p>
+
         <button className="btn primary" onClick={onClose}>
           Close
         </button>

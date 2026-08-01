@@ -199,3 +199,15 @@ export const myModule = defineModule<State, Settings>({
 Then add it to `MODULES` in `src/renderer/src/modules/registry.ts`. Persistence,
 the picker, fullscreen and the settings drawer come for free — `setState` writes
 straight into the layout document.
+
+## Licence
+
+Two licences, because two different things live here. The code is MIT. The reference
+text under `src/renderer/src/data/` is summarised from the D&D System Reference
+Document 5.1 and is used under CC BY 4.0 — see [LICENSE.md](LICENSE.md) for the full
+terms and the required attribution.
+
+That split is why the shipped content is SRD-only. The SRD carries one archetype per
+class, so there is no Battle Master tab and Channel Divinity covers only the Life domain
+and the Oath of Devotion. Anything beyond that is loaded at runtime from a data pack,
+which is not part of this repository and not covered by either licence.
