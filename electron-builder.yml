@@ -17,13 +17,14 @@ linux:
   target:
     - AppImage
     - deb
+  # Must be the icon *set*, not build/icon.png. Given a single png, electron-builder
+  # ships exactly that one file, at its own size — 1024x1024, which the hicolor theme
+  # does not define a directory for, so the desktop never finds it and the installed
+  # app has no icon. build/icons holds the standard sizes, rendered from icon.svg.
+  icon: build/icons
   category: Utility
   synopsis: A tiling digital DM screen for tabletop RPGs
   maintainer: contact@travus.dev
-  desktop:
-    entry:
-      Name: Digital DM Screen
-      Categories: Utility;Game;
 
 win:
   target:

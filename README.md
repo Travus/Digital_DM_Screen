@@ -134,12 +134,14 @@ runs an install script — worth a glance after any dependency change.
 a renderer error — useful for checking the UI still draws without a desktop
 session.
 
-The app icon is committed as `build/icon.png`. After editing `build/icon.svg`,
-regenerate it with:
+The app icon is committed twice: `build/icon.png` at 1024×1024, which Windows
+converts to an `.ico`, and `build/icons/*.png`, the size set the Linux packages
+install into `hicolor`. Linux needs the set because electron-builder ships a
+lone png at whatever size it already is, and nothing looks for icons in a
+`1024x1024` directory. After editing `build/icon.svg`, regenerate both with:
 
 ```sh
-docker compose run --rm --entrypoint bash smoke -lc \
-  "rsvg-convert -w 1024 -h 1024 build/icon.svg -o build/icon.png"
+docker compose run --rm --entrypoint bash smoke -lc scripts/gen-icons.sh
 ```
 
 ### Running it while developing

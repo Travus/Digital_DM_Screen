@@ -85,6 +85,20 @@ before blaming the build. Don't kill it — ask.
 from a previous run looks identical to a fresh one. Key on the process exiting,
 or compare timestamps.
 
+**The Linux icon must be a set, not one png.** Handed a single png,
+electron-builder does not resize it — it installs that one file into
+`hicolor/<its own size>/apps/`. `build/icon.png` is 1024x1024, and hicolor
+defines no `1024x1024` directory, so the lookup found nothing and the installed
+`.deb` showed a blank icon. `linux.icon` therefore points at `build/icons/`,
+which holds the sizes hicolor actually indexes; `scripts/gen-icons.sh` renders
+them from `icon.svg`. `build/icon.png` stays as-is — Windows converts it to
+`.ico`, where one large source is correct.
+
+**Don't set `Categories` under `linux.desktop.entry`.** The entry is merged
+first, then `Categories` is overwritten unconditionally from `linux.category`,
+so anything set there is silently discarded. `linux.category` is the only knob;
+to ship more than one category, put them all in it.
+
 ## Pinned dependencies
 
 Deliberate, with reasons; see `//pinned` in `package.json`.

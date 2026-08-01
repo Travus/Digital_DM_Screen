@@ -42,5 +42,6 @@ $RECYCLE.BIN/
 
 # Deliberately tracked, and easy to lose to a broader rule later:
 #   build/icon.svg, build/icon.png  packaging reads the PNG at build time
+#   build/icons/*.png               the Linux icon set, made by scripts/gen-icons.sh
 #   docs/*.png                      README screenshots
 #   examples/*.dmscreen             the starter layout
