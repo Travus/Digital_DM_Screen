@@ -3,25 +3,9 @@
  * abbreviated where a full sentence adds nothing at the table.
  */
 
-export interface RuleItem {
-  term: string
-  text: string
-}
+import type { RuleItem, RuleSection, RuleTable } from '../../../shared/types'
 
-export interface RuleTable {
-  caption?: string
-  head: string[]
-  rows: string[][]
-}
-
-export interface RuleSection {
-  id: string
-  title: string
-  /** Rendered as a definition list. */
-  items?: RuleItem[]
-  tables?: RuleTable[]
-  note?: string
-}
+export type { RuleItem, RuleSection, RuleTable }
 
 export const RULE_SECTIONS: RuleSection[] = [
   {

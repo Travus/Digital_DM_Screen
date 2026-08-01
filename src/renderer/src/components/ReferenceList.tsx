@@ -1,15 +1,7 @@
+import type { ReferenceEntry } from '../../../shared/types'
 import { ConditionText } from './ConditionText'
 
-export interface ReferenceEntry {
-  id: string
-  name: string
-  summary: string
-  lines: string[]
-  /** Small tag beside the name — cost, source, class, whatever fits. */
-  meta?: string
-  /** Rendered under the effects in italics. */
-  note?: string
-}
+export type { ReferenceEntry }
 
 interface Props {
   entries: ReferenceEntry[]

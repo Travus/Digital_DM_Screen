@@ -6,30 +6,21 @@
  *
  * **SRD content only.** The SRD carries one archetype per class, so what ships
  * here is thin: eight metamagic options, and the channel divinities of the Life
- * domain and the Oath of Devotion. There is no Battle Master in the SRD, so
- * there is no Maneuvers tab — a data pack adds one back under the group id
- * `maneuvers`.
+ * domain and the Oath of Devotion.
+ *
+ * Tabs are whatever groups are loaded — nothing here is special-cased. A data
+ * pack can add a tab by declaring a group with an id of its own, or extend one
+ * of these by reusing its id.
  *
  * `meta` always leads with the source, then any further qualifiers, separated by
  * " · " and never parenthesised — "SRD · Cleric · Life". Packs follow the same
  * convention but cite the book an option *first* appeared in, not a reprint.
  */
 
-export interface AbilityEntry {
-  id: string
-  name: string
-  summary: string
-  lines: string[]
-  meta?: string
-  note?: string
-}
+import type { AbilityGroup, ReferenceEntry } from '../../../shared/types'
 
-export interface AbilityGroup {
-  id: string
-  title: string
-  blurb: string
-  entries: AbilityEntry[]
-}
+export type AbilityEntry = ReferenceEntry
+export type { AbilityGroup }
 
 const METAMAGIC: AbilityEntry[] = [
   {

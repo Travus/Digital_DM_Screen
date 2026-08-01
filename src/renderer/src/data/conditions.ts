@@ -11,14 +11,9 @@
  * sources defining the same name is ambiguous no matter what their ids are.
  */
 
-export interface ConditionEntry {
-  id: string
-  name: string
-  summary: string
-  lines: string[]
-  meta?: string
-  note?: string
-}
+import type { ReferenceEntry } from '../../../shared/types'
+
+export type ConditionEntry = ReferenceEntry
 
 export const CONDITIONS: ConditionEntry[] = [
   {

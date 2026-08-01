@@ -66,6 +66,60 @@ export interface OpenResult {
   doc: LayoutDoc
 }
 
+/* ---------------------------------------------------------- reference data */
+
+/**
+ * One reference card. Conditions, diseases and player abilities are all this
+ * shape — deliberately, so a data pack has one entry format to learn rather
+ * than three near-identical ones.
+ *
+ * `id` is the storage key: panel state records favourites and expansion by it.
+ * For conditions `name` is load-bearing too, since cross-reference popovers scan
+ * prose for it.
+ */
+export interface ReferenceEntry {
+  id: string
+  name: string
+  summary: string
+  lines: string[]
+  /** Small tag beside the name — cost, source, class, whatever fits. */
+  meta?: string
+  /** Rendered under the effects in italics. */
+  note?: string
+}
+
+/**
+ * A tab in the abilities module. Groups are containers: a pack declaring one
+ * whose id is already loaded merges its entries in rather than replacing it,
+ * so adding a single option doesn't mean restating the rest.
+ */
+export interface AbilityGroup {
+  id: string
+  title: string
+  blurb: string
+  entries: ReferenceEntry[]
+}
+
+export interface RuleItem {
+  term: string
+  text: string
+}
+
+export interface RuleTable {
+  caption?: string
+  head: string[]
+  rows: string[][]
+}
+
+/** Rendered as a definition list rather than cards. Also a container. */
+export interface RuleSection {
+  id: string
+  title: string
+  items?: RuleItem[]
+  tables?: RuleTable[]
+  note?: string
+}
+
 export type MenuAction =
   | 'layout:new'
   | 'layout:open'

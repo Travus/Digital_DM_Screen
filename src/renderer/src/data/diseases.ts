@@ -4,14 +4,9 @@
  * abilities data.
  */
 
-export interface DiseaseEntry {
-  id: string
-  name: string
-  summary: string
-  lines: string[]
-  meta?: string
-  note?: string
-}
+import type { ReferenceEntry } from '../../../shared/types'
+
+export type DiseaseEntry = ReferenceEntry
 
 export const DISEASES: DiseaseEntry[] = [
   {
