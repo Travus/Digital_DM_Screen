@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  DataSnapshot,
   LayoutDoc,
   MenuAction,
   OpenResult,
@@ -52,6 +53,22 @@ const api = {
     ipcRenderer.on('menu:action', listener)
     return () => {
       ipcRenderer.off('menu:action', listener)
+    }
+  },
+
+  /**
+   * Reference data, read synchronously at preload so the renderer's data store
+   * is populated before the first render. Main loads it before the window opens,
+   * so this only reads an object already in memory.
+   */
+  initialData: ipcRenderer.sendSync('data:snapshot') as DataSnapshot,
+
+  /** Subscribe to pack/toggle changes. Returns an unsubscribe function. */
+  onDataChanged: (handler: (snapshot: DataSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: DataSnapshot): void => handler(snapshot)
+    ipcRenderer.on('data:changed', listener)
+    return () => {
+      ipcRenderer.off('data:changed', listener)
     }
   }
 }

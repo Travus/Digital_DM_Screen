@@ -11,6 +11,7 @@ import {
   removeRecent,
   writeSession
 } from './userStore'
+import { currentSnapshot, loadPacks } from './packStore'
 import { buildMenu } from './menu'
 
 const LAYOUT_FILTERS = [
@@ -298,6 +299,16 @@ ipcMain.handle('window:toggleFullScreen', (): boolean => {
   return next
 })
 
+/**
+ * The one synchronous channel. Everything else is `handle`, but the renderer
+ * needs this before its first paint: with an async gate there is a window where
+ * no conditions are loaded, and every reference card renders through code that
+ * assumes there are some. Cheap — the snapshot is already in memory.
+ */
+ipcMain.on('data:snapshot', (event) => {
+  event.returnValue = currentSnapshot()
+})
+
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
@@ -320,6 +331,9 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // Before the window exists, so the renderer can take the snapshot
+    // synchronously at preload and never render a half-loaded state.
+    await loadPacks()
     await refreshMenu()
     createWindow()
 

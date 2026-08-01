@@ -120,6 +120,67 @@ export interface RuleSection {
   note?: string
 }
 
+/* ----------------------------------------------------------------- packs */
+
+export const DATAPACK_FORMAT_VERSION = 1
+
+/**
+ * The datasets a source can contribute. Stored per dataset even though the UI
+ * offers two switches, so finer control is a UI change rather than a migration.
+ */
+export type Dataset = 'conditions' | 'rules' | 'abilities' | 'diseases' | 'names'
+
+export const DATASETS: Dataset[] = ['conditions', 'rules', 'abilities', 'diseases', 'names']
+
+/**
+ * A pack adds content on top of whatever is already loaded; it never replaces a
+ * source wholesale. Every section is optional.
+ *
+ * Entry ids are namespaced by the pack's own `id`, so two packs defining
+ * `mm-careful` cannot collide — use the bundled-content switches to drop
+ * duplicates rather than expecting one to win.
+ */
+export interface DataPack {
+  formatVersion: number
+  id: string
+  name: string
+  description?: string
+  conditions?: ReferenceEntry[]
+  rules?: RuleSection[]
+  abilityGroups?: AbilityGroup[]
+  diseases?: ReferenceEntry[]
+}
+
+/** A pack as recorded in the index: where it lives, and what it turned out to be. */
+export interface DataPackRef {
+  id: string
+  name: string
+  /**
+   * Referenced rather than copied, so editing the file and reloading shows the
+   * change. A moved file therefore empties whatever it provided — reported, not
+   * swallowed.
+   */
+  path: string
+}
+
+/** A pack that failed to load, kept so the UI can say why rather than go quiet. */
+export interface DataPackError {
+  path: string
+  reason: string
+}
+
+/**
+ * Everything the renderer needs to build its reference data, handed over once at
+ * startup and again whenever it changes.
+ */
+export interface DataSnapshot {
+  packs: DataPack[]
+  /** Parallel to `packs`, in load order. */
+  refs: DataPackRef[]
+  failed: DataPackError[]
+  enabled: Record<Dataset, boolean>
+}
+
 export type MenuAction =
   | 'layout:new'
   | 'layout:open'
