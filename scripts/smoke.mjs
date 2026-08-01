@@ -97,7 +97,7 @@ const shots = [
     layout: null,
     click: [
       '.picker-card[data-module-id="abilities"]',
-      '.tabs .tab:nth-of-type(2)',
+      '.tabs .tab:nth-of-type(1)',
       '.card .star'
     ].join('\n')
   },
@@ -106,11 +106,11 @@ const shots = [
     layout: null,
     click: ['.picker-card[data-module-id="diseases"]', '.card .star'].join('\n')
   },
-  // Channel Divinity is the longest list, and shows the source labelling.
+  // The second tab — proves tab switching, and shows the source labelling.
   {
     name: 'abilities-cd',
     layout: null,
-    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(3)'].join('\n')
+    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(2)'].join('\n')
   },
   {
     name: 'names',

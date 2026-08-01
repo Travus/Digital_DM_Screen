@@ -66,7 +66,7 @@ function DiseasesSettings({ settings, setSettings }: ModuleProps<State, Settings
         Expand everything by default
       </label>
       <p className="note">
-        The six PHB diseases, the three from the DMG, and Bluerot from GOS.
+        The six a <em>contagion</em> can inflict, and the three with their own write-ups.
       </p>
     </div>
   )
@@ -76,7 +76,7 @@ export const diseasesModule = defineModule<State, Settings>({
   id: 'diseases',
   name: 'Diseases',
   icon: '🧫',
-  blurb: 'Cackle fever, sewer plague, sight rot and bluerot, with saves and cures.',
+  blurb: 'Cackle fever, sewer plague, sight rot and the rest, with saves and cures.',
   category: 'Reference',
   defaultState: () => ({ query: '', expanded: [], favourites: [] }),
   defaultSettings: () => ({ showSummaries: true, startExpanded: false }),

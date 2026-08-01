@@ -135,7 +135,7 @@ export const abilitiesModule = defineModule<State, Settings>({
   id: 'abilities',
   name: 'Player Abilities',
   icon: '✨',
-  blurb: 'Metamagic, battle master maneuvers and channel divinity. Star the ones your table uses.',
+  blurb: 'Metamagic and channel divinity. Star the ones your table uses.',
   category: 'Reference',
   defaultState: () => ({ activeGroup: 'metamagic', query: '', expanded: [], favourites: [] }),
   defaultSettings: () => ({ showSummaries: true, startExpanded: false, hidden: [] }),

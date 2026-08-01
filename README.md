@@ -47,8 +47,8 @@ There is a ready-made layout in [`examples/starter.dmscreen`](examples/starter.d
 |---|---|---|
 | 🩸 | **Conditions** | Every status condition and its full effects, searchable. Conditions named inside another condition's text are hoverable — Paralyzed tells you what Incapacitated means without leaving the panel. |
 | 📖 | **Rules Reference** | Actions, special attacks, cover, vision, DCs, travel, improvised damage, objects, resting. Choose which tabs a panel shows. |
-| ✨ | **Player Abilities** | Metamagic, battle master maneuvers and channel divinity, one tab each — PHB plus TCE, XGE, MOT, GGR and SCAG, each labelled with the book it came from. Star the options your players actually took and they pin to the top. |
-| 🧫 | **Diseases** | The six PHB diseases, the three from the DMG, and bluerot from GOS. |
+| ✨ | **Player Abilities** | Metamagic and channel divinity, one tab each, labelled with where each option came from. Star the options your players actually took and they pin to the top. |
+| 🧫 | **Diseases** | The six a *contagion* can inflict, and the three with their own write-ups — saves, symptoms and cures. |
 | 🛡️ | **Party Tracker** | Your party, with columns *you* define — number, text, checkbox, current/max meter, or **symbols**. Add, rename, reorder and retype columns in the panel's settings; drag the divider at the right edge of any header to resize a column, double-click it to reset. |
 | ⚔️ | **Initiative Tracker** | Turn order, round counter, HP with damage/heal entry, conditions per combatant. *+ Party* pulls everyone straight out of a Party Tracker panel, and keeps their AC and HP in sync with it afterwards. Optionally hides enemy HP. |
 | 📊 | **Counters & Tracks** | Resource counters (torches, rations, charges) and segmented progress tracks for things closing in. |
