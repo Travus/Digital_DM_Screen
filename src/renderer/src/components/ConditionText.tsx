@@ -5,11 +5,24 @@ function escape(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Longest first so "Incapacitated" wins over any shorter overlapping name. */
-const PATTERN = new RegExp(
-  `\\b(${[...CONDITION_NAMES].sort((a, b) => b.length - a.length).map(escape).join('|')})\\b`,
-  'gi'
-)
+/**
+ * Longest first so "Incapacitated" wins over any shorter overlapping name.
+ *
+ * Null when there is nothing to match. An empty list would otherwise compile to
+ * `/\b()\b/gi`, which matches the empty string at the first word boundary without
+ * advancing `lastIndex` — the loop below then spins forever and takes the whole
+ * renderer with it. That is reachable: turn bundled conditions off and every card
+ * in the app renders through here.
+ */
+function buildPattern(names: string[]): RegExp | null {
+  const usable = names.filter((name) => name.trim().length > 0)
+  if (usable.length === 0) return null
+
+  const alternation = [...usable].sort((a, b) => b.length - a.length).map(escape).join('|')
+  return new RegExp(`\\b(${alternation})\\b`, 'gi')
+}
+
+const PATTERN = buildPattern(CONDITION_NAMES)
 
 const BY_LOWER = new Map(CONDITIONS.map((condition) => [condition.name.toLowerCase(), condition]))
 
@@ -19,12 +32,22 @@ const BY_LOWER = new Map(CONDITIONS.map((condition) => [condition.name.toLowerCa
  * incapacitated means.
  */
 export function ConditionText({ text, exclude }: { text: string; exclude?: string }): JSX.Element {
+  if (!PATTERN) return <>{text}</>
+
   const parts: ReactNode[] = []
   let cursor = 0
   let match: RegExpExecArray | null
 
   PATTERN.lastIndex = 0
   while ((match = PATTERN.exec(text)) !== null) {
+    // `exec` only advances lastIndex past a match with length. Skipping a
+    // zero-length one without nudging it would re-match the same position
+    // forever, so hold the invariant here rather than trusting the pattern.
+    if (match[0].length === 0) {
+      PATTERN.lastIndex += 1
+      continue
+    }
+
     const condition = BY_LOWER.get(match[0].toLowerCase())
     // Don't link a condition to itself — you're already reading it.
     if (!condition || condition.name.toLowerCase() === exclude?.toLowerCase()) continue
