@@ -99,6 +99,46 @@ first, then `Categories` is overwritten unconditionally from `linux.category`,
 so anything set there is silently discarded. `linux.category` is the only knob;
 to ship more than one category, put them all in it.
 
+## Data packs
+
+Shipped reference data is **SRD only** — that is what makes the repo licensable
+(MIT for code, CC BY 4.0 for the text). Everything else loads at runtime from a
+`.dmpack.json`, and lives outside this repo.
+
+- **`resolve()` in `src/renderer/src/data/resolve.ts` is the whole merge.** It is
+  **total**: it collects problems into `warnings` and never throws. The only UI
+  for removing a bad pack is the native menu, so a renderer that died on load
+  would leave no way out.
+- **Containers extend, entries don't.** An `AbilityGroup` or `RuleSection` whose
+  id matches one already loaded merges its contents in — that is how a pack adds
+  one manoeuvre without restating twenty-two. So **container ids are never
+  namespaced**; matching is the point, and `defaultState()` names them by literal.
+- **Entry ids are namespaced `source:id`.** Two sources both defining
+  `mm-careful` would otherwise share a favourites key and a React key — starring
+  one would star both. `migrateIds()` reads pre-namespace state as `bundled:`.
+- **Conditions collide on *name*, not id.** The name is what the cross-reference
+  popover scans prose for, and what the initiative tracker persists against
+  combatants.
+- **The snapshot crosses to the renderer synchronously**, via the one `sendSync`
+  channel in an otherwise all-`handle` bridge. See the next entry for why.
+- Data lives in **`dataStore`, not `useAppStore`** — everything in the latter
+  funnels through `mutate()`, which sets `dirty` and rides into the autosaved
+  session. Loading a pack must not mark a layout unsaved.
+
+**An empty condition list used to hang the renderer.** The cross-reference
+scanner built `/\b(a|b|c)\b/gi` from the loaded condition names; with none, that
+becomes `/\b()\b/gi`, which matches the empty string at the first word boundary
+without advancing `lastIndex`. Every reference card renders through that loop, so
+switching SRD Content off froze the app rather than showing an empty panel.
+`buildPattern()` returns null for an empty list, and the loop nudges `lastIndex`
+past any zero-length match. The `conditions-empty` smoke shot exists to catch a
+regression — it would time out at 60 s, not fail quietly.
+
+**Distinguish "hidden" from "not loaded".** Both leave a reference module with
+nothing to show, but "re-enable it in this panel's settings" is actively wrong
+when the cause is a switch in the Data menu. Every reference module checks the
+unfiltered set first.
+
 ## Pinned dependencies
 
 Deliberate, with reasons; see `//pinned` in `package.json`.

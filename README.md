@@ -47,7 +47,7 @@ There is a ready-made layout in [`examples/starter.dmscreen`](examples/starter.d
 |---|---|---|
 | 🩸 | **Conditions** | Every status condition and its full effects, searchable. Conditions named inside another condition's text are hoverable — Paralyzed tells you what Incapacitated means without leaving the panel. |
 | 📖 | **Rules Reference** | Actions, special attacks, cover, vision, DCs, travel, improvised damage, objects, resting. Choose which tabs a panel shows. |
-| ✨ | **Player Abilities** | Metamagic and channel divinity, one tab each, labelled with where each option came from. Star the options your players actually took and they pin to the top. |
+| ✨ | **Player Abilities** | Metamagic and channel divinity, one tab each, labelled with where each option came from. Star the options your players actually took and they pin to the top. A [data pack](#data-packs) adds more tabs. |
 | 🧫 | **Diseases** | The six a *contagion* can inflict, and the three with their own write-ups — saves, symptoms and cures. |
 | 🛡️ | **Party Tracker** | Your party, with columns *you* define — number, text, checkbox, current/max meter, or **symbols**. Add, rename, reorder and retype columns in the panel's settings; drag the divider at the right edge of any header to resize a column, double-click it to reset. |
 | ⚔️ | **Initiative Tracker** | Turn order, round counter, HP with damage/heal entry, conditions per combatant. *+ Party* pulls everyone straight out of a Party Tracker panel, and keeps their AC and HP in sync with it afterwards. Optionally hides enemy HP. |
@@ -80,6 +80,42 @@ palette in the panel's settings, or paste any character you like. Repeating the
 same glyph is fine — three ⭐ makes a three-charge tracker, and each toggles
 independently.
 
+## Data packs
+
+The reference modules ship **SRD content only**, which is what lets the app be
+licensed honestly. The SRD carries one archetype per class, so Player Abilities
+has Metamagic and Channel Divinity and nothing else out of the box.
+
+Anything more loads at runtime. **Data → Import Data Pack…** (`Ctrl+I`) takes a
+`.dmpack.json` holding conditions, rules, ability groups and diseases:
+
+```json
+{
+  "formatVersion": 1,
+  "id": "my-homebrew",
+  "name": "My homebrew",
+  "abilityGroups": [
+    { "id": "maneuvers", "title": "Maneuvers", "blurb": "…", "entries": [ … ] }
+  ]
+}
+```
+
+Worth knowing:
+
+- **Packs add; they never replace.** Entry ids are namespaced per pack, so two
+  packs defining the same id both load. Use the switches to drop duplicates.
+- **A group id that matches an existing tab extends it**, so adding one option
+  doesn't mean restating the rest. A new id becomes a new tab — give it a title.
+- **Data → SRD Content** and **Name Pools** switch off the built-in data. Load a
+  superset pack, switch SRD Content off, and every card shows your labels.
+- **Packs are referenced by path, not copied.** Edit the file and choose *Reload
+  Data Packs*. Move it and the app says so rather than going quiet — the sidebar
+  carries a one-line summary of what is actually loaded.
+- Condition **names** must be unique across everything loaded; they are what the
+  cross-reference popovers scan for.
+
+`examples/smoke-pack.dmpack.json` is a tiny working example.
+
 ## Keyboard
 
 | Key | Action |
@@ -90,6 +126,7 @@ independently.
 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | New / open / save / save as |
 | `F2` | Rename the layout |
 | `Ctrl+L` | Lock or unlock the layout |
+| `Ctrl+I` | Import a data pack |
 
 ## Building
 
