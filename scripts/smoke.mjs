@@ -22,6 +22,7 @@ const configHome = join(root, 'release', 'smoke', 'config')
 const userData = join(configHome, 'digital-dm-screen')
 
 const starter = join(root, 'examples', 'starter.dmscreen')
+const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
 
 const shots = [
   { name: 'starter', layout: starter },
@@ -121,12 +122,55 @@ const shots = [
       '.btn[title*="quirk"]',
       '.npc-card .btn.primary'
     ].join('\n')
+  },
+
+  /* --------------------------------------------------------------- data packs */
+
+  // The important one. With no conditions loaded, the cross-reference scanner
+  // used to build an empty-alternation regex and hang the renderer — every card
+  // in the app renders through it, so this shot would time out rather than fail
+  // quietly. Keep it.
+  {
+    name: 'conditions-empty',
+    layout: starter,
+    data: { refs: [], enabled: { conditions: false, rules: false, abilities: false, diseases: false } }
+  },
+  // Says "no data loaded" and points at the Data menu, rather than blaming the
+  // panel's own settings, which have nothing to fix.
+  {
+    name: 'abilities-empty',
+    layout: null,
+    data: { refs: [], enabled: { abilities: false } },
+    click: '.picker-card[data-module-id="abilities"]'
+  },
+  // Both pack behaviours in one frame: the tab bar shows "Fixture Tricks", a tab
+  // the pack created, while Metamagic shows the pack's entry merged in among the
+  // bundled ones rather than replacing them.
+  {
+    name: 'pack-loaded',
+    layout: null,
+    data: { refs: [{ id: 'smoke-fixture', name: 'Smoke Fixture', path: fixturePack }] },
+    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(1)'].join('\n')
+  },
+  // A pack whose file has moved. The app must still render, and say so.
+  {
+    name: 'pack-broken',
+    layout: starter,
+    data: { refs: [{ id: 'gone', name: 'Missing Pack', path: '/nonexistent/gone.dmpack.json' }] },
+    click: '.topbar .btn[title="Recent layouts"]'
   }
 ]
 
-async function seedSession(layoutPath, mutate) {
+async function seedSession(layoutPath, mutate, data) {
   await rm(userData, { recursive: true, force: true })
   await mkdir(userData, { recursive: true })
+
+  // Packs and the bundled-content switches live in userData, so a shot can set
+  // up any data state without needing the menu.
+  if (data) {
+    await writeFile(join(userData, 'datapacks.json'), JSON.stringify(data, null, 2))
+  }
+
   if (!layoutPath) return
   const doc = JSON.parse(await readFile(layoutPath, 'utf8'))
   // Lets a shot start from a state that can't be reached by clicking alone.
@@ -183,7 +227,7 @@ let failed = false
 for (const shot of shots) {
   const shotPath = join(outDir, `${shot.name}.png`)
   await rm(shotPath, { force: true })
-  await seedSession(shot.layout, shot.mutate)
+  await seedSession(shot.layout, shot.mutate, shot.data)
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {

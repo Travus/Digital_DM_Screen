@@ -1,0 +1,59 @@
+{
+  "formatVersion": 1,
+  "id": "smoke-fixture",
+  "name": "Smoke Fixture",
+  "description": "Invented content used by the headless render check. Exercises both pack behaviours: extending a group the app already ships, and creating one it does not.",
+  "conditions": [
+    {
+      "id": "becalmed",
+      "name": "Becalmed",
+      "meta": "Fixture",
+      "summary": "Cannot act on the first round of combat.",
+      "lines": [
+        "The creature is incapacitated until the end of its first turn.",
+        "Ends early if it takes damage."
+      ]
+    }
+  ],
+  "diseases": [
+    {
+      "id": "lantern-rot",
+      "name": "Lantern Rot",
+      "meta": "Fixture",
+      "summary": "A faint glow, then a dimming of the senses.",
+      "lines": [
+        "The creature's skin glows faintly for 1d4 days.",
+        "It has disadvantage on Perception checks until cured."
+      ],
+      "note": "Invented for the smoke check. Not a real disease."
+    }
+  ],
+  "abilityGroups": [
+    {
+      "id": "metamagic",
+      "entries": [
+        {
+          "id": "mm-fixture",
+          "name": "Borrowed Spell",
+          "meta": "Fixture · 2 sorcery points",
+          "summary": "Extends a tab the app already ships.",
+          "lines": ["Proves that a group id matching a bundled one merges rather than replaces."]
+        }
+      ]
+    },
+    {
+      "id": "fixture-tricks",
+      "title": "Fixture Tricks",
+      "blurb": "A tab that exists only because this pack declares it.",
+      "entries": [
+        {
+          "id": "ft-new-tab",
+          "name": "New Tab Trick",
+          "meta": "Fixture",
+          "summary": "Proves a pack can create a tab of its own.",
+          "lines": ["A group id the app has never heard of becomes its own tab."]
+        }
+      ]
+    }
+  ]
+}
