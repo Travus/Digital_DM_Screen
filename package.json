@@ -1,0 +1,41 @@
+{
+  "name": "digital-dm-screen",
+  "version": "0.1.0",
+  "description": "A tiling digital DM screen for tabletop RPGs",
+  "main": "./out/main/index.js",
+  "author": "Travus",
+  "license": "MIT",
+  "private": true,
+  "//homepage": "Required by the .deb target. Point this at the real repo when there is one.",
+  "homepage": "https://github.com/Travus/digital-dm-screen",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "build": "npm run typecheck && electron-vite build",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:all": "npm run build && electron-builder --linux --win",
+    "dist:dir": "npm run build && electron-builder --dir"
+  },
+  "//pinned": {
+    "vite": "Held at 7.x — electron-vite 5 peers on vite ^5 || ^6 || ^7.",
+    "@vitejs/plugin-react": "Held at 5.x — 6.x requires vite 8, which electron-vite 5 rejects.",
+    "zustand": "Held at 4.x — v5 dropped the useStore(selector, equalityFn) overload the initiative/party sync uses.",
+    "react": "Held at 18.x — nothing here needs 19, and the upgrade buys no fixes we care about.",
+    "typescript": "Held at 5.x — 7.x is the native rewrite; not worth the risk for this project yet."
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0",
+    "zustand": "^4.5.7"
+  }
+}

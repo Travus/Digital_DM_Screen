@@ -1,0 +1,208 @@
+/**
+ * Headless smoke check. Seeds a session from a layout file, launches the built
+ * app on a virtual display, screenshots it, and fails loudly on a renderer
+ * crash or console error.
+ *
+ *   docker compose run --rm smoke
+ *
+ * Screenshots land in ./release/smoke/.
+ */
+import { spawn } from 'node:child_process'
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const outDir = join(root, 'release', 'smoke')
+const configHome = join(root, 'release', 'smoke', 'config')
+
+// Must match the "name" field in package.json — that is what app.getName()
+// returns for an unpackaged run, and it decides the userData directory.
+const userData = join(configHome, 'digital-dm-screen')
+
+const starter = join(root, 'examples', 'starter.dmscreen')
+
+const shots = [
+  { name: 'starter', layout: starter },
+  { name: 'empty', layout: null },
+  // Drives one control through the real UI before capturing.
+  { name: 'maximized', layout: starter, click: '.panel .icon-btn[title^="Fullscreen"]' },
+  { name: 'light-theme', layout: starter, click: '.topbar .icon-btn[title*="light theme"]' },
+  // `:has` picks the party panel specifically — it is the one with a resizable
+  // table. Fullscreen it first so the settings drawer has room to show fully.
+  {
+    name: 'party-settings',
+    layout: starter,
+    click: [
+      '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]',
+      '.panel:has(.table.resizable) .icon-btn[title="Panel settings"]'
+    ].join('\n')
+  },
+  // Regression: selecting the second starter table used to do nothing, because
+  // the module's defaults were rebuilt (with fresh ids) on every render.
+  {
+    name: 'tables-second-tab',
+    layout: null,
+    click: ['.picker-card[data-module-id="tables"]', '.tabs .tab:nth-of-type(2)'].join('\n')
+  },
+  // Party panel fullscreened: row actions pinned right, numbers centred.
+  {
+    name: 'party-wide',
+    layout: starter,
+    click: '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]'
+  },
+  // Searching auto-expands every match; can't be reached by clicking, so seed it.
+  {
+    name: 'conditions-search',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.state.query = 'saving throw'
+    }
+  },
+  {
+    name: 'timers',
+    layout: null,
+    click: ['.picker-card[data-module-id="timers"]', '.timer .btn.primary'].join('\n'),
+    // Dwell so the capture shows the clock has actually moved, not just started.
+    settle: 3000
+  },
+  // Add a countdown, then focus its readout to show it editing in place.
+  {
+    name: 'timer-editing',
+    layout: null,
+    click: [
+      '.picker-card[data-module-id="timers"]',
+      '.toolbar .btn:nth-of-type(2)',
+      '.tracker-grid .timer:nth-of-type(2) .timer-readout.editable'
+    ].join('\n')
+  },
+  // Locked layout: splitter grips gone, structural menu items gone.
+  {
+    name: 'locked',
+    layout: starter,
+    click: ['.topbar .icon-btn[title*="Lock the layout"]', '.panel .icon-btn[title="Panel menu"]'].join('\n')
+  },
+  // Hovering a condition named inside another condition's text pops it out.
+  {
+    name: 'condition-popover',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.state.query = 'paralyzed'
+    },
+    click: '.condition-ref'
+  },
+  {
+    name: 'abilities',
+    layout: null,
+    click: [
+      '.picker-card[data-module-id="abilities"]',
+      '.tabs .tab:nth-of-type(2)',
+      '.card .star'
+    ].join('\n')
+  },
+  {
+    name: 'diseases',
+    layout: null,
+    click: ['.picker-card[data-module-id="diseases"]', '.card .star'].join('\n')
+  },
+  // Channel Divinity is the longest list, and shows the source labelling.
+  {
+    name: 'abilities-cd',
+    layout: null,
+    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(3)'].join('\n')
+  },
+  {
+    name: 'names',
+    layout: null,
+    click: [
+      '.picker-card[data-module-id="names"]',
+      '.toolbar .btn.primary',
+      '.btn[title*="quirk"]',
+      '.npc-card .btn.primary'
+    ].join('\n')
+  }
+]
+
+async function seedSession(layoutPath, mutate) {
+  await rm(userData, { recursive: true, force: true })
+  await mkdir(userData, { recursive: true })
+  if (!layoutPath) return
+  const doc = JSON.parse(await readFile(layoutPath, 'utf8'))
+  // Lets a shot start from a state that can't be reached by clicking alone.
+  mutate?.(doc)
+  await writeFile(
+    join(userData, 'session.json'),
+    JSON.stringify({ doc, filePath: layoutPath, dirty: false }, null, 2)
+  )
+  await writeFile(
+    join(userData, 'recents.json'),
+    JSON.stringify([{ path: layoutPath, name: doc.name, openedAt: new Date().toISOString() }], null, 2)
+  )
+}
+
+function run(shotPath, click, settle) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(
+      'xvfb-run',
+      ['-a', '--server-args=-screen 0 1600x1000x24', 'node_modules/.bin/electron', '--no-sandbox', '.'],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: configHome,
+          DMSCREEN_SMOKE_SHOT: shotPath,
+          ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
+          ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
+          ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      }
+    )
+
+    let output = ''
+    child.stdout.on('data', (chunk) => (output += chunk))
+    child.stderr.on('data', (chunk) => (output += chunk))
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error(`Timed out.\n${output}`))
+    }, 60_000)
+
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      if (code !== 0) return reject(new Error(`Electron exited with ${code}.\n${output}`))
+      resolvePromise(output)
+    })
+  })
+}
+
+await mkdir(outDir, { recursive: true })
+
+let failed = false
+for (const shot of shots) {
+  const shotPath = join(outDir, `${shot.name}.png`)
+  await rm(shotPath, { force: true })
+  await seedSession(shot.layout, shot.mutate)
+
+  process.stdout.write(`▸ ${shot.name} … `)
+  try {
+    const output = await run(shotPath, shot.click, shot.settle)
+
+    if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
+
+    // The renderer forwards console errors to stdout via the main process.
+    const problems = output
+      .split('\n')
+      .filter((line) => /\[renderer:(error)\]|Uncaught|ERR_FILE_NOT_FOUND/.test(line))
+    if (problems.length) throw new Error(`renderer reported problems:\n${problems.join('\n')}`)
+
+    console.log(`ok → ${shotPath}`)
+  } catch (error) {
+    failed = true
+    console.log('FAILED')
+    console.error(String(error.message ?? error))
+  }
+}
+
+process.exit(failed ? 1 : 0)

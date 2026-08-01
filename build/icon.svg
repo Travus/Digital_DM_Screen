@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#12141a"/>
+  <!-- Shield outline -->
+  <path d="M256 56 96 112v152c0 106 68 178 160 192 92-14 160-86 160-192V112L256 56Z"
+        fill="#171a22" stroke="#d4a24c" stroke-width="18" stroke-linejoin="round"/>
+  <!-- Tiled panes: one tall pane on the left, two stacked on the right -->
+  <g fill="#d4a24c">
+    <rect x="146" y="168" width="86" height="164" rx="10" opacity="0.95"/>
+    <rect x="248" y="168" width="118" height="72" rx="10" opacity="0.7"/>
+    <rect x="248" y="260" width="118" height="72" rx="10" opacity="0.45"/>
+  </g>
+</svg>

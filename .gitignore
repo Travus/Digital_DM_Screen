@@ -1,0 +1,46 @@
+# Dependencies — installed into a Docker volume, never onto the host.
+node_modules/
+
+# Build output.
+# out/     electron-vite bundles (main, preload, renderer)
+# release/ installers, plus release/smoke/*.png from the headless render check
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# Logs and crash dumps
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local environment and secrets. Nothing here uses them yet, but a stray .env
+# should never become committable by accident.
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Deliberately tracked, and easy to lose to a broader rule later:
+#   build/icon.svg, build/icon.png  packaging reads the PNG at build time
+#   docs/*.png                      README screenshots
+#   examples/*.dmscreen             the starter layout

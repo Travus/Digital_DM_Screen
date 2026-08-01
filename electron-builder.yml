@@ -1,0 +1,44 @@
+appId: dev.travus.dmscreen
+productName: Digital DM Screen
+copyright: Copyright © 2026
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**
+  - package.json
+
+# No native modules — safe to cross-build Windows targets from Linux/Wine.
+npmRebuild: false
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  synopsis: A tiling digital DM screen for tabletop RPGs
+  maintainer: contact@travus.dev
+  desktop:
+    entry:
+      Name: Digital DM Screen
+      Categories: Utility;Game;
+
+win:
+  target:
+    - nsis
+    - portable
+
+# Named per target — a shared win.artifactName would label the portable build
+# "setup" as well.
+nsis:
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Digital DM Screen
+
+portable:
+  artifactName: ${productName}-${version}-${arch}-portable.${ext}

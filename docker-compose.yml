@@ -1,0 +1,47 @@
+# Toolchain lives entirely in Docker — nothing needs to be installed on the host.
+#
+#   docker compose run --rm build npm install       # first time / after dep changes
+#   docker compose run --rm build npm run typecheck
+#   docker compose run --rm build npm run dist:all  # Windows + Linux installers -> ./release
+#
+# node_modules is a named volume so Linux-only binaries never land on the host
+# filesystem; ./release is a bind mount so the finished installers do.
+
+services:
+  build:
+    # Includes Node + Wine, which electron-builder uses to produce the NSIS installer.
+    image: electronuserland/builder:wine
+    working_dir: /project
+    volumes:
+      - .:/project
+      - node_modules:/project/node_modules
+      - electron_cache:/root/.cache/electron
+      - builder_cache:/root/.cache/electron-builder
+    environment:
+      ELECTRON_CACHE: /root/.cache/electron
+      ELECTRON_BUILDER_CACHE: /root/.cache/electron-builder
+      # electron-builder refuses to write to a mounted volume without this on some hosts
+      USE_HARD_LINKS: "false"
+    command: bash
+    stdin_open: true
+    tty: true
+
+  # Headless render check: launches the built app on a virtual display and
+  # screenshots it into ./release/smoke/.
+  smoke:
+    build:
+      context: .
+      dockerfile: docker/smoke.Dockerfile
+    working_dir: /project
+    volumes:
+      - .:/project
+      - node_modules:/project/node_modules
+      - electron_cache:/root/.cache/electron
+    environment:
+      ELECTRON_CACHE: /root/.cache/electron
+    command: node scripts/smoke.mjs
+
+volumes:
+  node_modules:
+  electron_cache:
+  builder_cache:
