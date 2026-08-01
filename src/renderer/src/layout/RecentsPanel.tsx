@@ -1,3 +1,4 @@
+import { useDataStore } from '../state/dataStore'
 import { useAppStore } from '../state/store'
 
 function relativeTime(iso: string): string {
@@ -63,6 +64,36 @@ export function RecentsPanel(): JSX.Element {
           Clear list
         </button>
       )}
+
+      <DataStatus />
     </aside>
+  )
+}
+
+/**
+ * One line so the reference data is never silently wrong. Without it, a pack
+ * that failed to load or a switch left off just looks like a panel gone thin,
+ * with nothing on screen to suggest why.
+ */
+function DataStatus(): JSX.Element {
+  const packs = useDataStore((state) => state.packs)
+  const enabled = useDataStore((state) => state.enabled)
+  const warnings = useDataStore((state) => state.warnings)
+
+  const srdOn = enabled.conditions && enabled.rules && enabled.abilities && enabled.diseases
+  const parts = [
+    srdOn ? 'SRD' : 'SRD off',
+    packs.length === 1 ? '1 pack' : packs.length ? `${packs.length} packs` : 'no packs'
+  ]
+
+  return (
+    <div className="data-status">
+      <span className="data-status-line">Data: {parts.join(' · ')}</span>
+      {warnings.length > 0 && (
+        <span className="data-status-warn" title={warnings.join('\n')}>
+          ⚠ {warnings.length === 1 ? '1 issue' : `${warnings.length} issues`}
+        </span>
+      )}
+    </div>
   )
 }

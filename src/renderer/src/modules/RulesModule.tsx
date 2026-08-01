@@ -1,4 +1,4 @@
-import { useDataStore } from '../state/dataStore'
+import { NO_DATA_HINT, useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -14,6 +14,10 @@ function Rules({ state, setState, settings }: ModuleProps<State, Settings>): JSX
   const allSections = useDataStore((store) => store.rules)
   const sections = allSections.filter((section) => !settings.hidden.includes(section.id))
   const active = sections.find((section) => section.id === state.activeSection) ?? sections[0]
+
+  if (!allSections.length) {
+    return <p className="empty">No rules data is loaded. {NO_DATA_HINT}</p>
+  }
 
   if (!active) {
     return <p className="empty">Every section is hidden. Re-enable one in this panel’s settings.</p>

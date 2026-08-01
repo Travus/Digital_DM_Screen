@@ -1,7 +1,21 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
-import type { MenuAction, RecentEntry } from '../shared/types'
+import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
+
+/**
+ * Data commands run in the main process rather than being dispatched to the
+ * renderer: packs are read and indexed there, so a round trip would buy nothing
+ * and `MenuAction` would grow for no reason.
+ */
+export interface DataActions {
+  importPack: () => void
+  reloadPacks: () => void
+  removePack: (id: string) => void
+  setEnabled: (datasets: Dataset[], value: boolean) => void
+}
+
+const SRD_DATASETS: Dataset[] = ['conditions', 'rules', 'abilities', 'diseases']
 
 /**
  * Builds the application menu. Everything that touches the layout is forwarded
@@ -11,8 +25,33 @@ export type MenuDispatch = (action: MenuAction, payload?: string) => void
  * Note: no Escape accelerator here — a menu accelerator would swallow Escape
  * app-wide, including inside text fields. The renderer owns that key.
  */
-export function buildMenu(recents: RecentEntry[], dispatch: MenuDispatch): void {
+export function buildMenu(
+  recents: RecentEntry[],
+  data: DataSnapshot,
+  dispatch: MenuDispatch,
+  dataActions: DataActions
+): void {
   const send = (action: MenuAction) => () => dispatch(action)
+
+  // Failed packs are listed too — a pack whose file moved would otherwise just
+  // look like a dataset that quietly went thin.
+  const packItems: MenuItemConstructorOptions[] =
+    data.refs.length || data.failed.length
+      ? [
+          ...data.refs.map((ref) => ({
+            label: ref.name,
+            sublabel: ref.path,
+            submenu: [{ label: 'Remove', click: () => dataActions.removePack(ref.id) }]
+          })),
+          ...data.failed.map((failure) => ({
+            label: `⚠ ${failure.path}`,
+            sublabel: failure.reason,
+            enabled: false
+          }))
+        ]
+      : [{ label: 'No data packs', enabled: false }]
+
+  const srdOn = SRD_DATASETS.every((dataset) => data.enabled[dataset])
 
   const recentItems: MenuItemConstructorOptions[] = recents.length
     ? [
@@ -55,6 +94,37 @@ export function buildMenu(recents: RecentEntry[], dispatch: MenuDispatch): void 
         },
         { type: 'separator' },
         { label: 'Close Panel', accelerator: 'CmdOrCtrl+W', click: send('panel:close') }
+      ]
+    },
+    {
+      label: '&Data',
+      submenu: [
+        {
+          label: 'Import Data Pack…',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => dataActions.importPack()
+        },
+        {
+          label: 'Reload Data Packs',
+          sublabel: 'Packs are read from disk each time',
+          click: () => dataActions.reloadPacks()
+        },
+        { type: 'separator' },
+        { label: 'Data Packs', submenu: packItems },
+        { type: 'separator' },
+        {
+          label: 'SRD Content',
+          type: 'checkbox',
+          checked: srdOn,
+          sublabel: 'Conditions, rules, abilities and diseases',
+          click: () => dataActions.setEnabled(SRD_DATASETS, !srdOn)
+        },
+        {
+          label: 'Name Pools',
+          type: 'checkbox',
+          checked: data.enabled.names,
+          click: () => dataActions.setEnabled(['names'], !data.enabled.names)
+        }
       ]
     },
     {

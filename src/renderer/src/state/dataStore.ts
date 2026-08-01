@@ -30,6 +30,13 @@ function fromSnapshot(snapshot: DataSnapshot): Omit<DataState, 'apply'> {
   }
 }
 
+/**
+ * Tail of the message a reference module shows when its dataset is empty. Names
+ * the Data menu, because that is the only place the cause can be fixed — the
+ * panel's own settings cannot bring content back.
+ */
+export const NO_DATA_HINT = 'Switch SRD Content back on in the Data menu, or import a data pack.'
+
 export const useDataStore = create<DataState>((set) => ({
   ...fromSnapshot(window.dmscreen.initialData),
   apply: (snapshot) => set(fromSnapshot(snapshot))

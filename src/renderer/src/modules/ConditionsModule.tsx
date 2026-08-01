@@ -1,6 +1,6 @@
 import { ReferenceList } from '../components/ReferenceList'
 import { migrateIds } from '../data/resolve'
-import { useDataStore } from '../state/dataStore'
+import { NO_DATA_HINT, useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -15,6 +15,11 @@ interface Settings {
 
 function Conditions({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
   const entries = useDataStore((store) => store.conditions)
+
+  // "No condition matches" beside an empty search box reads as a broken filter.
+  if (!entries.length) {
+    return <p className="empty">No condition data is loaded. {NO_DATA_HINT}</p>
+  }
 
   return (
     <ReferenceList

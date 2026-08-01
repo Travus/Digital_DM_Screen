@@ -1,7 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join, basename } from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
-import type { LayoutDoc, OpenResult, RecentEntry, SessionSnapshot } from '../shared/types'
+import type {
+  DataSnapshot,
+  LayoutDoc,
+  OpenResult,
+  RecentEntry,
+  SessionSnapshot
+} from '../shared/types'
 import { parseLayoutDoc } from '../shared/layout'
 import {
   addRecent,
@@ -11,8 +17,8 @@ import {
   removeRecent,
   writeSession
 } from './userStore'
-import { currentSnapshot, loadPacks } from './packStore'
-import { buildMenu } from './menu'
+import { addPack, currentSnapshot, loadPacks, removePack, setDatasetEnabled } from './packStore'
+import { buildMenu, type DataActions } from './menu'
 
 const LAYOUT_FILTERS = [
   { name: 'DM Screen Layout', extensions: ['dmscreen', 'json'] },
@@ -48,9 +54,62 @@ async function writeLayoutFile(path: string, doc: LayoutDoc): Promise<void> {
   await writeFile(path, JSON.stringify({ ...doc, updatedAt: new Date().toISOString() }, null, 2), 'utf8')
 }
 
+/** Pushes fresh data to the renderer and rebuilds the menu around it. */
+async function applySnapshot(snapshot: DataSnapshot): Promise<void> {
+  mainWindow?.webContents.send('data:changed', snapshot)
+  await refreshMenu()
+}
+
+const DATAPACK_FILTERS = [
+  { name: 'DM Screen Data Pack', extensions: ['dmpack.json', 'dmpack', 'json'] },
+  { name: 'All Files', extensions: ['*'] }
+]
+
+const dataActions: DataActions = {
+  importPack: () => {
+    void (async () => {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import data pack',
+        properties: ['openFile'],
+        filters: DATAPACK_FILTERS
+      })
+      const path = result.filePaths[0]
+      if (result.canceled || !path) return
+
+      const snapshot = await addPack(path)
+      if (!snapshot) {
+        // Adjacent extensions and the same dialog — picking a .dmscreen by
+        // mistake is easy, so say what happened rather than doing nothing.
+        await dialog.showMessageBox(mainWindow!, {
+          type: 'error',
+          message: `${basename(path)} is not a valid data pack.`,
+          detail: 'A data pack is a JSON file with a formatVersion, an id and a name.'
+        })
+        return
+      }
+      await applySnapshot(snapshot)
+    })()
+  },
+
+  reloadPacks: () => {
+    void loadPacks().then(applySnapshot)
+  },
+
+  removePack: (id) => {
+    void removePack(id).then(applySnapshot)
+  },
+
+  setEnabled: (datasets, value) => {
+    void setDatasetEnabled(datasets, value).then(applySnapshot)
+  }
+}
+
 async function refreshMenu(): Promise<void> {
-  buildMenu(await listRecents(), (action, payload) =>
-    mainWindow?.webContents.send('menu:action', action, payload)
+  buildMenu(
+    await listRecents(),
+    currentSnapshot(),
+    (action, payload) => mainWindow?.webContents.send('menu:action', action, payload),
+    dataActions
   )
 }
 

@@ -1,6 +1,6 @@
 import { ReferenceList } from '../components/ReferenceList'
 import { migrateIds } from '../data/resolve'
-import { useDataStore } from '../state/dataStore'
+import { NO_DATA_HINT, useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -21,6 +21,12 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
   const allGroups = useDataStore((store) => store.abilityGroups)
   const groups = allGroups.filter((group) => !settings.hidden.includes(group.id))
   const active = groups.find((group) => group.id === state.activeGroup) ?? groups[0]
+
+  // Two different problems with the same symptom, and pointing at the wrong one
+  // sends you hunting through panel settings that have nothing to fix.
+  if (!allGroups.length) {
+    return <p className="empty">No ability data is loaded. {NO_DATA_HINT}</p>
+  }
 
   if (!active) {
     return <p className="empty">Every tab is hidden. Re-enable one in this panel’s settings.</p>

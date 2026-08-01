@@ -65,7 +65,7 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
   const style = nameStyles.find((entry) => entry.id === state.styleId) ?? nameStyles[0]
 
   if (!style) {
-    return <p className="empty">No name pools are loaded.</p>
+    return <p className="empty">No name pools are loaded. Switch them back on in the Data menu.</p>
   }
 
   const isPlace = style.kind === 'place'

@@ -1,6 +1,6 @@
 import { ReferenceList } from '../components/ReferenceList'
 import { migrateIds } from '../data/resolve'
-import { useDataStore } from '../state/dataStore'
+import { NO_DATA_HINT, useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -16,6 +16,10 @@ interface Settings {
 
 function Diseases({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
   const entries = useDataStore((store) => store.diseases)
+
+  if (!entries.length) {
+    return <p className="empty">No disease data is loaded. {NO_DATA_HINT}</p>
+  }
 
   const toggle = (key: 'expanded' | 'favourites', id: string): void =>
     setState((prev) => {

@@ -1858,6 +1858,25 @@ code {
   text-overflow: ellipsis;
 }
 
+/* Pinned to the bottom of the sidebar: which reference data is actually live. */
+.data-status {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.data-status-warn {
+  color: var(--warn, #d4a24c);
+  cursor: help;
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------------------ modal */
 
 .modal-backdrop {
