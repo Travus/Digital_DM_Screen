@@ -1,54 +1,36 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { CONDITIONS, CONDITION_NAMES, type ConditionEntry } from '../data/conditions'
-
-function escape(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/**
- * Longest first so "Incapacitated" wins over any shorter overlapping name.
- *
- * Null when there is nothing to match. An empty list would otherwise compile to
- * `/\b()\b/gi`, which matches the empty string at the first word boundary without
- * advancing `lastIndex` — the loop below then spins forever and takes the whole
- * renderer with it. That is reachable: turn bundled conditions off and every card
- * in the app renders through here.
- */
-function buildPattern(names: string[]): RegExp | null {
-  const usable = names.filter((name) => name.trim().length > 0)
-  if (usable.length === 0) return null
-
-  const alternation = [...usable].sort((a, b) => b.length - a.length).map(escape).join('|')
-  return new RegExp(`\\b(${alternation})\\b`, 'gi')
-}
-
-const PATTERN = buildPattern(CONDITION_NAMES)
-
-const BY_LOWER = new Map(CONDITIONS.map((condition) => [condition.name.toLowerCase(), condition]))
+import type { ReferenceEntry } from '../../../shared/types'
+import { useDataStore } from '../state/dataStore'
 
 /**
  * Renders text with any condition it mentions turned into a hover target, so
  * "Paralyzed makes you incapacitated" doesn't send you hunting for what
  * incapacitated means.
+ *
+ * The pattern and lookup come pre-built from the data store — this renders once
+ * per bullet line, so rebuilding a regex here would do it hundreds of times a
+ * paint.
  */
 export function ConditionText({ text, exclude }: { text: string; exclude?: string }): JSX.Element {
-  if (!PATTERN) return <>{text}</>
+  const { pattern, byLower } = useDataStore((state) => state.conditionIndex)
+
+  if (!pattern) return <>{text}</>
 
   const parts: ReactNode[] = []
   let cursor = 0
   let match: RegExpExecArray | null
 
-  PATTERN.lastIndex = 0
-  while ((match = PATTERN.exec(text)) !== null) {
+  pattern.lastIndex = 0
+  while ((match = pattern.exec(text)) !== null) {
     // `exec` only advances lastIndex past a match with length. Skipping a
     // zero-length one without nudging it would re-match the same position
     // forever, so hold the invariant here rather than trusting the pattern.
     if (match[0].length === 0) {
-      PATTERN.lastIndex += 1
+      pattern.lastIndex += 1
       continue
     }
 
-    const condition = BY_LOWER.get(match[0].toLowerCase())
+    const condition = byLower.get(match[0].toLowerCase())
     // Don't link a condition to itself — you're already reading it.
     if (!condition || condition.name.toLowerCase() === exclude?.toLowerCase()) continue
 
@@ -72,7 +54,7 @@ export function ConditionText({ text, exclude }: { text: string; exclude?: strin
 
 function ConditionRef({ name, label }: { name: string; label: string }): JSX.Element {
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
-  const condition = BY_LOWER.get(name.toLowerCase())
+  const condition = useDataStore((state) => state.conditionIndex.byLower.get(name.toLowerCase()))
   if (!condition) return <>{label}</>
 
   const show = (element: HTMLElement): void => setAnchor(element.getBoundingClientRect())
@@ -102,7 +84,7 @@ function ConditionPopover({
   condition,
   anchor
 }: {
-  condition: ConditionEntry
+  condition: ReferenceEntry
   anchor: DOMRect
 }): JSX.Element {
   // Fixed positioning so the card escapes the panel's own scroll container;
@@ -122,8 +104,8 @@ function ConditionPopover({
         <span className="condition-pop-summary">{condition.summary}</span>
       )}
       <span className="condition-pop-list">
-        {condition.lines.map((line) => (
-          <span key={line} className="condition-pop-item">
+        {condition.lines.map((line, index) => (
+          <span key={index} className="condition-pop-item">
             {line}
           </span>
         ))}

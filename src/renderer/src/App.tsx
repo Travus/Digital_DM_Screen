@@ -3,6 +3,7 @@ import type { MenuAction } from '../../shared/types'
 import { LayoutView } from './layout/LayoutView'
 import { RecentsPanel } from './layout/RecentsPanel'
 import { TopBar } from './layout/TopBar'
+import { useDataStore } from './state/dataStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
 
 /** How long the layout must sit still before we stash it in userData. */
@@ -20,6 +21,9 @@ export function App(): JSX.Element {
   const [restored, setRestored] = useState(false)
 
   useEffect(() => applyTheme(theme), [theme])
+
+  /* Reference data changes in the main process — importing a pack, or a toggle. */
+  useEffect(() => window.dmscreen.onDataChanged(useDataStore.getState().apply), [])
 
   /* Restore the previous session, then start tracking recents. */
   useEffect(() => {

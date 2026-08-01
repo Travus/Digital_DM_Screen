@@ -1,4 +1,4 @@
-import { RULE_SECTIONS } from '../data/rules'
+import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -11,7 +11,8 @@ interface Settings {
 }
 
 function Rules({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
-  const sections = RULE_SECTIONS.filter((section) => !settings.hidden.includes(section.id))
+  const allSections = useDataStore((store) => store.rules)
+  const sections = allSections.filter((section) => !settings.hidden.includes(section.id))
   const active = sections.find((section) => section.id === state.activeSection) ?? sections[0]
 
   if (!active) {
@@ -34,8 +35,8 @@ function Rules({ state, setState, settings }: ModuleProps<State, Settings>): JSX
 
       {active.items && (
         <dl className="deflist">
-          {active.items.map((item) => (
-            <div key={item.term} className="defrow">
+          {active.items.map((item, index) => (
+            <div key={index} className="defrow">
               <dt>{item.term}</dt>
               <dd>{item.text}</dd>
             </div>
@@ -56,8 +57,8 @@ function Rules({ state, setState, settings }: ModuleProps<State, Settings>): JSX
                 </tr>
               </thead>
               <tbody>
-                {table.rows.map((row) => (
-                  <tr key={row.join('|')}>
+                {table.rows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
                     {row.map((cell, index) => (
                       <td key={index}>{cell}</td>
                     ))}
@@ -75,6 +76,8 @@ function Rules({ state, setState, settings }: ModuleProps<State, Settings>): JSX
 }
 
 function RulesSettings({ settings, setSettings }: ModuleProps<State, Settings>): JSX.Element {
+  const allSections = useDataStore((store) => store.rules)
+
   const toggle = (id: string): void =>
     setSettings((prev) => ({
       hidden: prev.hidden.includes(id)
@@ -85,7 +88,7 @@ function RulesSettings({ settings, setSettings }: ModuleProps<State, Settings>):
   return (
     <div className="stack tight">
       <p className="note">Choose which reference tabs this panel shows.</p>
-      {RULE_SECTIONS.map((section) => (
+      {allSections.map((section) => (
         <label key={section.id} className="check">
           <input
             type="checkbox"

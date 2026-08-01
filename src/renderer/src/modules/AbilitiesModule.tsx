@@ -1,5 +1,5 @@
-import { ReferenceList, type ReferenceEntry } from '../components/ReferenceList'
-import { ABILITY_GROUPS } from '../data/abilities'
+import { ReferenceList } from '../components/ReferenceList'
+import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -16,22 +16,9 @@ interface Settings {
   hidden: string[]
 }
 
-const ENTRIES: Record<string, ReferenceEntry[]> = Object.fromEntries(
-  ABILITY_GROUPS.map((group) => [
-    group.id,
-    group.entries.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      summary: entry.summary,
-      lines: entry.lines,
-      meta: entry.meta,
-      note: entry.note,
-    }))
-  ])
-)
-
 function Abilities({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
-  const groups = ABILITY_GROUPS.filter((group) => !settings.hidden.includes(group.id))
+  const allGroups = useDataStore((store) => store.abilityGroups)
+  const groups = allGroups.filter((group) => !settings.hidden.includes(group.id))
   const active = groups.find((group) => group.id === state.activeGroup) ?? groups[0]
 
   if (!active) {
@@ -43,9 +30,7 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
       [key]: prev[key].includes(id) ? prev[key].filter((entry) => entry !== id) : [...prev[key], id]
     }))
 
-  // `?? []` because groups and entries stop sharing one source once data is
-  // loaded at runtime, and they can disagree for a render.
-  const entries = ENTRIES[active.id] ?? []
+  const entries = active.entries
   const favouriteCount = entries.filter((entry) => state.favourites.includes(entry.id)).length
 
   return (
@@ -89,6 +74,8 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
 }
 
 function AbilitiesSettings({ settings, setSettings }: ModuleProps<State, Settings>): JSX.Element {
+  const allGroups = useDataStore((store) => store.abilityGroups)
+
   const toggleHidden = (id: string): void =>
     setSettings((prev) => ({
       hidden: prev.hidden.includes(id)
@@ -117,7 +104,7 @@ function AbilitiesSettings({ settings, setSettings }: ModuleProps<State, Setting
 
       <div className="settings-section">
         <h4>Tabs</h4>
-        {ABILITY_GROUPS.map((group) => (
+        {allGroups.map((group) => (
           <label key={group.id} className="check">
             <input
               type="checkbox"

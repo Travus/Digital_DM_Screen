@@ -90,8 +90,10 @@ export function ReferenceList({
         {open && (
           <>
             <ul className="bullets">
-              {entry.lines.map((line) => (
-                <li key={line}>
+              {/* Index keys: the list is static per entry, and pack content
+                  can legitimately repeat a line. */}
+              {entry.lines.map((line, index) => (
+                <li key={index}>
                   <ConditionText text={line} exclude={entry.name} />
                 </li>
               ))}

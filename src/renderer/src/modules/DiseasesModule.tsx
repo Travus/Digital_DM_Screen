@@ -1,5 +1,5 @@
-import { ReferenceList, type ReferenceEntry } from '../components/ReferenceList'
-import { DISEASES } from '../data/diseases'
+import { ReferenceList } from '../components/ReferenceList'
+import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -13,16 +13,9 @@ interface Settings {
   startExpanded: boolean
 }
 
-const ENTRIES: ReferenceEntry[] = DISEASES.map((disease) => ({
-  id: disease.id,
-  name: disease.name,
-  summary: disease.summary,
-  lines: disease.lines,
-  meta: disease.meta,
-  note: disease.note
-}))
-
 function Diseases({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
+  const entries = useDataStore((store) => store.diseases)
+
   const toggle = (key: 'expanded' | 'favourites', id: string): void =>
     setState((prev) => ({
       [key]: prev[key].includes(id) ? prev[key].filter((entry) => entry !== id) : [...prev[key], id]
@@ -30,7 +23,7 @@ function Diseases({ state, setState, settings }: ModuleProps<State, Settings>): 
 
   return (
     <ReferenceList
-      entries={ENTRIES}
+      entries={entries}
       query={state.query}
       onQueryChange={(query) => setState({ query })}
       expanded={state.expanded}

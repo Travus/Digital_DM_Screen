@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { uid } from '../../../shared/layout'
 import { NumberInput } from '../components/NumberInput'
-import { CONDITION_NAMES } from '../data/conditions'
+import { useDataStore } from '../state/dataStore'
 import { rollDie } from '../lib/dice'
 import {
   applyStatToParty,
@@ -274,6 +274,7 @@ function CombatantRow({
   onRemove: () => void
 }): JSX.Element {
   const [delta, setDelta] = useState('')
+  const conditionNames = useDataStore((store) => store.conditionNames)
 
   // The party panel wins for any column it actually provides.
   const ac = linked?.ac ?? combatant.ac
@@ -428,7 +429,7 @@ function CombatantRow({
           }}
         >
           <option value="">+ condition</option>
-          {CONDITION_NAMES.filter((name) => !combatant.conditions.includes(name)).map((name) => (
+          {conditionNames.filter((name) => !combatant.conditions.includes(name)).map((name) => (
             <option key={name} value={name}>
               {name}
             </option>

@@ -1,13 +1,7 @@
 import { uid } from '../../../shared/layout'
 import { randomOf } from '../lib/dice'
-import {
-  NAME_STYLES,
-  PLACE_DETAILS,
-  PLACE_HOOKS,
-  TRAITS,
-  WANTS,
-  type NameStyle
-} from '../data/names'
+import { PLACE_DETAILS, PLACE_HOOKS, TRAITS, WANTS, type NameStyle } from '../data/names'
+import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 /** A kept entry: a bare name has no lines, a fleshed-out one has two. */
@@ -29,9 +23,15 @@ interface Settings {
   count: number
 }
 
-/** Undefined only when there are no styles at all — see the guard in `Names`. */
+/**
+ * Read imperatively rather than through the hook: the callers below run from
+ * event handlers, and the component takes its own reactive copy for rendering.
+ *
+ * Undefined only when there are no styles at all — see the guard in `Names`.
+ */
 function styleFor(styleId: string): NameStyle | undefined {
-  return NAME_STYLES.find((entry) => entry.id === styleId) ?? NAME_STYLES[0]
+  const styles = useDataStore.getState().nameStyles
+  return styles.find((entry) => entry.id === styleId) ?? styles[0]
 }
 
 function generate(styleId: string, count: number): string[] {
@@ -61,7 +61,8 @@ function detailsFor(styleId: string): string[] {
 }
 
 function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
-  const style = styleFor(state.styleId)
+  const nameStyles = useDataStore((store) => store.nameStyles)
+  const style = nameStyles.find((entry) => entry.id === state.styleId) ?? nameStyles[0]
 
   if (!style) {
     return <p className="empty">No name pools are loaded.</p>
@@ -94,7 +95,7 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
     <div className="stack">
       <div className="toolbar wrap">
         <select className="input" value={state.styleId} onChange={(event) => roll(event.target.value)}>
-          {NAME_STYLES.map((entry) => (
+          {nameStyles.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.label}
             </option>

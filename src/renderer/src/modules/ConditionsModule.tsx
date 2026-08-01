@@ -1,5 +1,5 @@
-import { ReferenceList, type ReferenceEntry } from '../components/ReferenceList'
-import { CONDITIONS } from '../data/conditions'
+import { ReferenceList } from '../components/ReferenceList'
+import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -12,13 +12,12 @@ interface Settings {
   startExpanded: boolean
 }
 
-// ConditionEntry is field-identical to ReferenceEntry — nothing to map.
-const ENTRIES: ReferenceEntry[] = CONDITIONS
-
 function Conditions({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
+  const entries = useDataStore((store) => store.conditions)
+
   return (
     <ReferenceList
-      entries={ENTRIES}
+      entries={entries}
       query={state.query}
       onQueryChange={(query) => setState({ query })}
       expanded={state.expanded}
