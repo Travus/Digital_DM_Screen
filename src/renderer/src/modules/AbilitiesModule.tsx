@@ -43,9 +43,10 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
       [key]: prev[key].includes(id) ? prev[key].filter((entry) => entry !== id) : [...prev[key], id]
     }))
 
-  const favouriteCount = ENTRIES[active.id].filter((entry) =>
-    state.favourites.includes(entry.id)
-  ).length
+  // `?? []` because groups and entries stop sharing one source once data is
+  // loaded at runtime, and they can disagree for a render.
+  const entries = ENTRIES[active.id] ?? []
+  const favouriteCount = entries.filter((entry) => state.favourites.includes(entry.id)).length
 
   return (
     <div className="stack">
@@ -64,7 +65,7 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
       <p className="note">{active.blurb}</p>
 
       <ReferenceList
-        entries={ENTRIES[active.id]}
+        entries={entries}
         query={state.query}
         onQueryChange={(query) => setState({ query })}
         expanded={state.expanded}

@@ -1,6 +1,13 @@
 import { uid } from '../../../shared/layout'
 import { randomOf } from '../lib/dice'
-import { NAME_STYLES, PLACE_DETAILS, PLACE_HOOKS, TRAITS, WANTS } from '../data/names'
+import {
+  NAME_STYLES,
+  PLACE_DETAILS,
+  PLACE_HOOKS,
+  TRAITS,
+  WANTS,
+  type NameStyle
+} from '../data/names'
 import { defineModule, type ModuleProps } from './types'
 
 /** A kept entry: a bare name has no lines, a fleshed-out one has two. */
@@ -22,12 +29,15 @@ interface Settings {
   count: number
 }
 
-function styleFor(styleId: string) {
+/** Undefined only when there are no styles at all — see the guard in `Names`. */
+function styleFor(styleId: string): NameStyle | undefined {
   return NAME_STYLES.find((entry) => entry.id === styleId) ?? NAME_STYLES[0]
 }
 
 function generate(styleId: string, count: number): string[] {
   const style = styleFor(styleId)
+  if (!style) return []
+
   const names = new Set<string>()
 
   // Bounded so a small syllable pool can't spin forever chasing unique names.
@@ -42,13 +52,21 @@ function generate(styleId: string, count: number): string[] {
 
 /** People get a quirk and a motive; places get a detail and a hook. */
 function detailsFor(styleId: string): string[] {
-  return styleFor(styleId).kind === 'place'
+  const style = styleFor(styleId)
+  if (!style) return []
+
+  return style.kind === 'place'
     ? [randomOf(PLACE_DETAILS), randomOf(PLACE_HOOKS)]
     : [randomOf(TRAITS), randomOf(WANTS)]
 }
 
 function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
   const style = styleFor(state.styleId)
+
+  if (!style) {
+    return <p className="empty">No name pools are loaded.</p>
+  }
+
   const isPlace = style.kind === 'place'
 
   const roll = (styleId = state.styleId): void =>
