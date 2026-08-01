@@ -1,4 +1,5 @@
 import { ReferenceList } from '../components/ReferenceList'
+import { migrateIds } from '../data/resolve'
 import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
@@ -26,12 +27,20 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
   }
 
   const toggle = (key: 'expanded' | 'favourites', id: string): void =>
-    setState((prev) => ({
-      [key]: prev[key].includes(id) ? prev[key].filter((entry) => entry !== id) : [...prev[key], id]
-    }))
+    setState((prev) => {
+      const current = migrateIds(prev[key])
+      return {
+        [key]: current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]
+      }
+    })
+
+  // Stars are user investment, so ids saved before sources were namespaced are
+  // read as the bundled ones rather than dropped.
+  const expanded = migrateIds(state.expanded)
+  const favourites = migrateIds(state.favourites)
 
   const entries = active.entries
-  const favouriteCount = entries.filter((entry) => state.favourites.includes(entry.id)).length
+  const favouriteCount = entries.filter((entry) => favourites.includes(entry.id)).length
 
   return (
     <div className="stack">
@@ -53,12 +62,12 @@ function Abilities({ state, setState, settings }: ModuleProps<State, Settings>):
         entries={entries}
         query={state.query}
         onQueryChange={(query) => setState({ query })}
-        expanded={state.expanded}
+        expanded={expanded}
         onToggleExpanded={(id) => toggle('expanded', id)}
         onResetExpanded={() => setState({ expanded: [] })}
         startExpanded={settings.startExpanded}
         showSummaries={settings.showSummaries}
-        favourites={state.favourites}
+        favourites={favourites}
         onToggleFavourite={(id) => toggle('favourites', id)}
         searchPlaceholder={`Filter ${active.title.toLowerCase()}…`}
         emptyLabel="Nothing matches"

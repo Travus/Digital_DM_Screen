@@ -1,4 +1,5 @@
 import { ReferenceList } from '../components/ReferenceList'
+import { migrateIds } from '../data/resolve'
 import { useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
@@ -20,13 +21,19 @@ function Conditions({ state, setState, settings }: ModuleProps<State, Settings>)
       entries={entries}
       query={state.query}
       onQueryChange={(query) => setState({ query })}
-      expanded={state.expanded}
+      // Expansion used to be keyed by name and is now keyed by a qualified id,
+      // so state saved before that simply stops matching. It is only which cards
+      // are open, so it is left to fall away rather than special-cased.
+      expanded={migrateIds(state.expanded)}
       onToggleExpanded={(id) =>
-        setState((prev) => ({
-          expanded: prev.expanded.includes(id)
-            ? prev.expanded.filter((entry) => entry !== id)
-            : [...prev.expanded, id]
-        }))
+        setState((prev) => {
+          const current = migrateIds(prev.expanded)
+          return {
+            expanded: current.includes(id)
+              ? current.filter((entry) => entry !== id)
+              : [...current, id]
+          }
+        })
       }
       onResetExpanded={() => setState({ expanded: [] })}
       startExpanded={settings.startExpanded}

@@ -35,6 +35,24 @@ import { RULE_SECTIONS } from './rules'
 
 export const BUNDLED_SOURCE_ID = 'bundled'
 
+/**
+ * Entry ids are qualified by the source that supplied them, so the same id in
+ * two sources cannot collide. Without this, starring the bundled "Careful Spell"
+ * would also star a pack's copy — they share a favourites key and a React key.
+ *
+ * Container ids (ability groups, rule sections) are deliberately *not* qualified:
+ * matching ids across sources is exactly how a pack extends a tab, and
+ * `defaultState()` refers to them by literal.
+ */
+export function qualify(sourceId: string, id: string): string {
+  return `${sourceId}:${id}`
+}
+
+/** Brings ids persisted before qualification into the current scheme. */
+export function migrateIds(ids: string[]): string[] {
+  return ids.map((id) => (id.includes(':') ? id : qualify(BUNDLED_SOURCE_ID, id)))
+}
+
 export interface ConditionIndex {
   /** Null when nothing is loaded — see `buildPattern`. */
   pattern: RegExp | null
@@ -95,7 +113,7 @@ function collectEntries(
         continue
       }
       seen.add(entry.id)
-      out.push(entry)
+      out.push({ ...entry, id: qualify(sourceId, entry.id) })
     }
   }
 
@@ -111,9 +129,15 @@ function collectAbilityGroups(
 
   for (const { sourceId, groups } of chunks) {
     for (const group of groups) {
+      // Group ids stay bare — that is what lets a pack extend an existing tab.
+      const qualified = group.entries.map((entry) => ({
+        ...entry,
+        id: qualify(sourceId, entry.id)
+      }))
+
       const existing = byId.get(group.id)
       if (!existing) {
-        byId.set(group.id, { ...group, entries: [...group.entries] })
+        byId.set(group.id, { ...group, entries: qualified })
         order.push(group.id)
         continue
       }
@@ -123,7 +147,7 @@ function collectAbilityGroups(
       existing.blurb ||= group.blurb
 
       const seen = new Set(existing.entries.map((entry) => entry.id))
-      for (const entry of group.entries) {
+      for (const entry of qualified) {
         if (seen.has(entry.id)) {
           warnings.push(`${sourceId}: duplicate ability id "${entry.id}" in group "${group.id}"`)
           continue
