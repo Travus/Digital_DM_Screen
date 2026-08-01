@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { CONDITIONS, CONDITION_NAMES } from '../data/conditions'
+import { CONDITIONS, CONDITION_NAMES, type ConditionEntry } from '../data/conditions'
 
 function escape(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -102,7 +102,7 @@ function ConditionPopover({
   condition,
   anchor
 }: {
-  condition: (typeof CONDITIONS)[number]
+  condition: ConditionEntry
   anchor: DOMRect
 }): JSX.Element {
   // Fixed positioning so the card escapes the panel's own scroll container;
@@ -118,13 +118,13 @@ function ConditionPopover({
     <span className="condition-pop" style={{ left, width: POPOVER_WIDTH, ...vertical }}>
       <span className="condition-pop-title">{condition.name}</span>
       {/* For a one-effect condition the summary just restates the bullet. */}
-      {condition.effects.length > 1 && (
+      {condition.lines.length > 1 && (
         <span className="condition-pop-summary">{condition.summary}</span>
       )}
       <span className="condition-pop-list">
-        {condition.effects.map((effect) => (
-          <span key={effect} className="condition-pop-item">
-            {effect}
+        {condition.lines.map((line) => (
+          <span key={line} className="condition-pop-item">
+            {line}
           </span>
         ))}
       </span>

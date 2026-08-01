@@ -12,13 +12,8 @@ interface Settings {
   startExpanded: boolean
 }
 
-const ENTRIES: ReferenceEntry[] = CONDITIONS.map((condition) => ({
-  id: condition.name,
-  name: condition.name,
-  summary: condition.summary,
-  lines: condition.effects,
-  note: condition.note
-}))
+// ConditionEntry is field-identical to ReferenceEntry — nothing to map.
+const ENTRIES: ReferenceEntry[] = CONDITIONS
 
 function Conditions({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
   return (

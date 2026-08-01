@@ -2,42 +2,59 @@
  * The 2014 conditions. Effect text follows the published rules, split into one
  * bullet per distinct effect so a line can be scanned mid-turn rather than read.
  * `note` carries adjacent rules that aren't part of the condition itself.
+ *
+ * Same shape as `DiseaseEntry` and `AbilityEntry` on purpose — one leaf shape
+ * across every reference data set, so a data pack has one thing to learn.
+ *
+ * `name` is the load-bearing field, not `id`: cross-reference popovers scan
+ * prose for it, and the initiative tracker persists it against combatants. Two
+ * sources defining the same name is ambiguous no matter what their ids are.
  */
 
 export interface ConditionEntry {
+  id: string
   name: string
   summary: string
-  effects: string[]
+  lines: string[]
+  meta?: string
   note?: string
 }
 
 export const CONDITIONS: ConditionEntry[] = [
   {
+    id: 'blinded',
     name: 'Blinded',
+    meta: 'SRD',
     summary: "Can't see. Attacks against it have advantage; its own have disadvantage.",
-    effects: [
+    lines: [
       "Can't see, and automatically fails any ability check that requires sight.",
       'Attack rolls against the creature have advantage.',
       "The creature's attack rolls have disadvantage."
     ]
   },
   {
+    id: 'charmed',
     name: 'Charmed',
+    meta: 'SRD',
     summary: "Can't attack the charmer, who gains social advantage.",
-    effects: [
+    lines: [
       "Can't attack the charmer, or target the charmer with harmful abilities or magical effects.",
       'The charmer has advantage on any ability check to interact socially with the creature.'
     ]
   },
   {
+    id: 'deafened',
     name: 'Deafened',
+    meta: 'SRD',
     summary: "Can't hear. Auto-fails ability checks needing hearing.",
-    effects: ["Can't hear, and automatically fails any ability check that requires hearing."]
+    lines: ["Can't hear, and automatically fails any ability check that requires hearing."]
   },
   {
+    id: 'exhaustion',
     name: 'Exhaustion',
+    meta: 'SRD',
     summary: 'Six cumulative levels. Level 6 is death.',
-    effects: [
+    lines: [
       'Level 1 — Disadvantage on ability checks.',
       'Level 2 — Speed halved.',
       'Level 3 — Disadvantage on attack rolls and saving throws.',
@@ -50,31 +67,39 @@ export const CONDITIONS: ConditionEntry[] = [
     note: 'All exhaustion effects end once the level is reduced below 1.'
   },
   {
+    id: 'frightened',
     name: 'Frightened',
+    meta: 'SRD',
     summary: 'Disadvantage while it can see the source; can’t approach it.',
-    effects: [
+    lines: [
       'Disadvantage on ability checks and attack rolls while the source of its fear is within line of sight.',
       "Can't willingly move closer to the source of its fear."
     ]
   },
   {
+    id: 'grappled',
     name: 'Grappled',
+    meta: 'SRD',
     summary: 'Speed 0. Ends if the grappler is incapacitated.',
-    effects: [
+    lines: [
       "Speed becomes 0, and it can't benefit from any bonus to its speed.",
       'Ends if the grappler is incapacitated.',
       'Ends if an effect removes the grappled creature from the reach of the grappler or grappling effect — thunderwave, for instance.'
     ]
   },
   {
+    id: 'incapacitated',
     name: 'Incapacitated',
+    meta: 'SRD',
     summary: "Can't take actions or reactions.",
-    effects: ["Can't take actions or reactions."]
+    lines: ["Can't take actions or reactions."]
   },
   {
+    id: 'invisible',
     name: 'Invisible',
+    meta: 'SRD',
     summary: 'Heavily obscured. Attacks against it have disadvantage; its own have advantage.',
-    effects: [
+    lines: [
       'Impossible to see without the aid of magic or a special sense.',
       'Counts as heavily obscured for the purpose of hiding.',
       'Its location can still be detected by any noise it makes or any tracks it leaves.',
@@ -83,9 +108,11 @@ export const CONDITIONS: ConditionEntry[] = [
     ]
   },
   {
+    id: 'paralyzed',
     name: 'Paralyzed',
+    meta: 'SRD',
     summary: 'Incapacitated, auto-fails STR/DEX saves, melee hits are crits.',
-    effects: [
+    lines: [
       "Incapacitated, and can't move or speak.",
       'Automatically fails Strength and Dexterity saving throws.',
       'Attack rolls against the creature have advantage.',
@@ -93,9 +120,11 @@ export const CONDITIONS: ConditionEntry[] = [
     ]
   },
   {
+    id: 'petrified',
     name: 'Petrified',
+    meta: 'SRD',
     summary: 'Turned to stone. Resistant to all damage, immune to poison and disease.',
-    effects: [
+    lines: [
       'Transformed into a solid inanimate substance — usually stone — along with any nonmagical object it is wearing or carrying.',
       'Its weight increases by a factor of ten, and it ceases aging.',
       "Incapacitated, can't move or speak, and is unaware of its surroundings.",
@@ -106,14 +135,18 @@ export const CONDITIONS: ConditionEntry[] = [
     ]
   },
   {
+    id: 'poisoned',
     name: 'Poisoned',
+    meta: 'SRD',
     summary: 'Disadvantage on attack rolls and ability checks.',
-    effects: ['Disadvantage on attack rolls and ability checks.']
+    lines: ['Disadvantage on attack rolls and ability checks.']
   },
   {
+    id: 'prone',
     name: 'Prone',
+    meta: 'SRD',
     summary: 'Crawl or stand. Melee attackers have advantage; ranged have disadvantage.',
-    effects: [
+    lines: [
       'Its only movement option is to crawl, unless it stands up and thereby ends the condition.',
       'Disadvantage on attack rolls.',
       'Attack rolls against it have advantage if the attacker is within 5 feet, and disadvantage otherwise.'
@@ -121,9 +154,11 @@ export const CONDITIONS: ConditionEntry[] = [
     note: 'Standing up costs an amount of movement equal to half the creature’s speed. Dropping prone is free.'
   },
   {
+    id: 'restrained',
     name: 'Restrained',
+    meta: 'SRD',
     summary: 'Speed 0. Attacks against it have advantage; DEX saves at disadvantage.',
-    effects: [
+    lines: [
       "Speed becomes 0, and it can't benefit from any bonus to its speed.",
       'Attack rolls against the creature have advantage.',
       "The creature's attack rolls have disadvantage.",
@@ -131,18 +166,22 @@ export const CONDITIONS: ConditionEntry[] = [
     ]
   },
   {
+    id: 'stunned',
     name: 'Stunned',
+    meta: 'SRD',
     summary: 'Incapacitated, auto-fails STR/DEX saves, attackers have advantage.',
-    effects: [
+    lines: [
       "Incapacitated, can't move, and can speak only falteringly.",
       'Automatically fails Strength and Dexterity saving throws.',
       'Attack rolls against the creature have advantage.'
     ]
   },
   {
+    id: 'unconscious',
     name: 'Unconscious',
+    meta: 'SRD',
     summary: 'Incapacitated and prone. Melee hits within 5 ft are crits.',
-    effects: [
+    lines: [
       "Incapacitated, can't move or speak, and is unaware of its surroundings.",
       'Drops whatever it is holding and falls prone.',
       'Automatically fails Strength and Dexterity saving throws.',
