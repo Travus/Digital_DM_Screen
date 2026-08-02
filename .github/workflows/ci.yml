@@ -1,0 +1,103 @@
+# Gates every PR and every push to main.
+#
+# `check` runs on the runner directly: lint, formatting and typecheck are
+# host-independent, and pulling the ~2GB builder image to check text would cost
+# minutes for nothing. CLAUDE.md's "never run node on the host" rule is about
+# Travus's Windows machine — a runner is destroyed when the job ends. What does
+# carry over is that anything users *install* comes out of the builder image,
+# which is why `smoke` and the packaging build stay in Docker.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Nothing here writes to the repo. The release workflow escalates on its own.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the node in electronuserland/builder:wine, so the two lanes
+          # cannot disagree about what compiles.
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        # Linting has no use for a 100MB Electron binary; the package's types
+        # still install, which is all typecheck needs.
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      # Run separately rather than via `npm run check`, so a failure names itself
+      # in the job log without anyone opening it.
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    env:
+      # The compose file points these at named volumes, which do not survive a
+      # runner. Redirect them under the bind-mounted workspace so actions/cache
+      # can see them. These -e flags override the compose values.
+      CACHE_ENV: >-
+        -e npm_config_cache=/project/.cache/npm
+        -e ELECTRON_CACHE=/project/.cache/electron
+        -e ELECTRON_BUILDER_CACHE=/project/.cache/electron-builder
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          # The lockfile hash changes exactly when the Electron version does,
+          # which is the only thing in here worth re-downloading for.
+          key: dmscreen-${{ hashFiles('package-lock.json') }}
+          restore-keys: dmscreen-
+
+      - name: Build the smoke image
+        run: docker compose build smoke
+
+      # -T is mandatory: the build service sets stdin_open/tty, and without it
+      # every invocation dies on the missing TTY.
+      - name: Install and bundle
+        run: |
+          docker compose run --rm -T $CACHE_ENV build npm ci
+          docker compose run --rm -T $CACHE_ENV build npm run build
+
+      - name: Render check
+        run: docker compose run --rm -T smoke
+
+      # CLAUDE.md says to verify UI changes by looking at them. This is what
+      # makes that possible on someone else's machine.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: release/smoke/*.png
+          if-no-files-found: error

@@ -1,0 +1,43 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+    groups:
+      # One PR for the routine churn. Majors stay individual so they get read
+      # rather than skimmed as part of a batch.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+    # Majors of these are held deliberately — see //pinned in package.json for
+    # the reason behind each. Everything else must still open a PR, Electron
+    # above all: it ships Chromium to the user, so an out-of-support Electron
+    # means shipping unpatched browser CVEs.
+    #
+    # Note these are ceilings, not freezes: the caret ranges in package.json
+    # still take patch and minor releases, so a security fix inside the current
+    # major arrives without anyone deciding anything.
+    ignore:
+      - dependency-name: 'vite'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@vitejs/plugin-react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'zustand'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+
+      # React and its three travelling companions move together or not at all —
+      # a react-dom@19 PR against react@18 is noise, not an upgrade.
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-dom'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react-dom'
+        update-types: ['version-update:semver-major']

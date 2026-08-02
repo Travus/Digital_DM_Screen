@@ -1,0 +1,63 @@
+# Supply-chain checks. Weekly rather than per-PR: nothing here changes when only
+# src/ moves, so running it on every push would be noise that teaches you to
+# ignore it.
+#
+# Trap: scheduled workflows only fire on the default branch, and GitHub disables
+# them after 60 days without a commit. If this stops running, that is why.
+name: Audit
+
+on:
+  schedule:
+    # Mondays, 07:00 UTC.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/audit-*.mjs'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Reads package-lock.json only, so no install is needed — which is also
+      # why the script was changed to stop looking at node_modules.
+      - name: Lockfile check
+        run: node scripts/audit-deps.mjs
+
+      - name: Vulnerability report
+        # npm audit exits non-zero the moment it finds anything at any severity.
+        # This step is the readable report, not the gate, so its exit code is
+        # dropped deliberately — the gate is the step below.
+        run: |
+          npm audit --json > audit.json || true
+          node scripts/audit-summary.mjs < audit.json
+
+      - name: Vulnerability gate
+        # critical, not high. There is no `dependencies` block in this project —
+        # everything is a devDependency, and electron-builder ships only out/**
+        # plus package.json. A high-severity advisory in a bundler or dev server
+        # cannot reach a user, so gating at `high` would produce failures you
+        # learn to click past, which is the decoration CLAUDE.md warns about.
+        # Anything that genuinely ships (react, zustand) is bundled into out/,
+        # and a critical there is worth stopping for.
+        run: npm audit --audit-level=critical

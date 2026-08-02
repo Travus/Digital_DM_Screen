@@ -1,0 +1,75 @@
+# Proves the installers still build. Separate from ci.yml purely so the two
+# triggers can differ: every push to main, but only PRs that touch something
+# packaging actually reads.
+#
+# A cheaper `dist:dir` on every PR was considered and rejected — it costs an
+# Electron download to prove only what `build` and `smoke` already prove, and
+# never touches Wine, NSIS or the hicolor icon set, which is where every
+# packaging failure in CLAUDE.md actually happened.
+#
+# Do NOT make this a required status check. It is paths-filtered, and a skipped
+# check never reports, which would block every unrelated PR forever.
+name: Package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'electron-builder.yml'
+      - 'build/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    env:
+      CACHE_ENV: >-
+        -e npm_config_cache=/project/.cache/npm
+        -e ELECTRON_CACHE=/project/.cache/electron
+        -e ELECTRON_BUILDER_CACHE=/project/.cache/electron-builder
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: dmscreen-${{ hashFiles('package-lock.json') }}
+          restore-keys: dmscreen-
+
+      # Windows targets cross-build through Wine, which is the whole reason this
+      # runs in the builder image rather than on the runner.
+      - name: Build installers
+        run: |
+          docker compose run --rm -T $CACHE_ENV build npm ci
+          docker compose run --rm -T $CACHE_ENV build npm run dist:all
+
+      # Two traps from CLAUDE.md cannot fire here, and it is worth knowing why:
+      # the runner's release/ starts empty, so a stale artifact cannot pose as a
+      # fresh one, and nothing can be holding the portable exe open.
+      - name: Check all four installers exist
+        run: |
+          shopt -s nullglob
+          assets=(release/*.exe release/*.AppImage release/*.deb)
+          printf '%s\n' "${assets[@]}"
+          if [ "${#assets[@]}" -ne 4 ]; then
+            printf 'expected 4 installers, got %d\n' "${#assets[@]}"
+            exit 1
+          fi

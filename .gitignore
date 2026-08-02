@@ -9,6 +9,10 @@ dist/
 release/
 *.tsbuildinfo
 
+# npm/Electron/electron-builder caches, redirected here so CI can restore them
+# with actions/cache. Locally these live in Docker volumes and this stays empty.
+.cache/
+
 # Logs and crash dumps
 *.log
 npm-debug.log*
