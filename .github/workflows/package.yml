@@ -1,6 +1,11 @@
-# Proves the installers still build. Separate from ci.yml purely so the two
-# triggers can differ: every push to main, but only PRs that touch something
-# packaging actually reads.
+# Proves the installers still build. Separate from ci.yml purely so the triggers
+# can differ: only PRs that touch something packaging actually reads.
+#
+# Deliberately not run on push to main. The ruleset requires a PR, so anything
+# reaching main was built here minutes earlier, and the thing that actually stops
+# broken packaging shipping is release.yml — it rebuilds from the tag, runs smoke,
+# and gates on all four installers existing, into a *draft*. A break cannot reach
+# anyone, so re-building every merge bought only "find out sooner".
 #
 # A cheaper `dist:dir` on every PR was considered and rejected — it costs an
 # Electron download to prove only what `build` and `smoke` already prove, and
@@ -12,8 +17,6 @@
 name: Package
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -56,8 +59,9 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: dmscreen-${{ hashFiles('package-lock.json') }}
-          restore-keys: dmscreen-
+          # Separate namespace from the smoke job's — see the note in ci.yml.
+          key: dmscreen-package-${{ hashFiles('package-lock.json') }}
+          restore-keys: dmscreen-package-
 
       # Windows targets cross-build through Wine, which is the whole reason this
       # runs in the builder image rather than on the runner.
@@ -65,6 +69,13 @@ jobs:
         run: |
           docker compose run --rm -T $CACHE_ENV build npm ci
           docker compose run --rm -T $CACHE_ENV build npm run dist:all
+
+      # The cache silently degraded to npm-only once, and nothing said so — it
+      # took comparing byte counts against setup-node's cache to notice. Printing
+      # the contents makes the next regression announce itself instead.
+      - name: What actually got cached
+        if: always()
+        run: du -sh .cache/* 2>/dev/null || echo '.cache is empty — the -e overrides are not landing'
 
       # Two traps from CLAUDE.md cannot fire here, and it is worth knowing why:
       # the runner's release/ starts empty, so a stale artifact cannot pose as a
