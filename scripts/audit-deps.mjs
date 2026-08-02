@@ -12,10 +12,9 @@
  * grows a `postinstall` is what an npm supply-chain attack actually looks like,
  * and it is invisible in a diff of package.json.
  *
- * Everything is read from the lockfile rather than from node_modules. The
- * earlier version stat'd `node_modules/<pkg>/package.json` and skipped anything
- * missing, so running it without an install printed a clean bill of health for a
- * tree it had never looked at.
+ * Read the lockfile, never node_modules. A check that stats installed packages
+ * reports a clean tree when nothing is installed — which is exactly the state CI
+ * runs it in.
  */
 import { readFile } from 'node:fs/promises'
 
