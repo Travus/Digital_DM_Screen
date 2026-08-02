@@ -76,10 +76,22 @@ fallback is not enough; it must be scoped.
 key application-wide, including inside text fields. Panel fullscreen exits via
 a `keydown` listener in `App.tsx`.
 
-**The portable exe locks itself while running.** If the user has
-`release/…-portable.exe` open, `dist:win` fails with a bare "Error - aborting
-creation process" from NSIS. Check for a running `Digital DM Screen` process
-before blaming the build. Don't kill it — ask.
+**The portable exe locks itself while running.** If `release/…-portable.exe` is
+open, `dist:win` fails with a bare "Error - aborting creation process" from NSIS,
+with nothing pointing at the cause. Worse, the Linux targets and the NSIS
+installer may build fine first, so you get a half-fresh `release/` — the portable
+silently stays at its old build under an unchanged filename.
+
+Gate the build on the check rather than just printing it; a check whose result
+you ignore is decoration:
+
+```powershell
+if (Get-Process 'Digital DM Screen*' -EA SilentlyContinue) { "close the app first" }
+else { docker compose run --rm build npm run dist:all }
+```
+
+**Closing it is pre-authorised** — Travus asked for it to be force-closed rather
+than being prompted every time.
 
 **Don't key build-completion checks on a filename existing.** A stale artifact
 from a previous run looks identical to a fresh one. Key on the process exiting,
