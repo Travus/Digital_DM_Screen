@@ -76,8 +76,14 @@ jobs:
           path: .cache
           # The lockfile hash changes exactly when the Electron version does,
           # which is the only thing in here worth re-downloading for.
-          key: dmscreen-${{ hashFiles('package-lock.json') }}
-          restore-keys: dmscreen-
+          #
+          # Namespaced per job, and that matters: cache keys are immutable, so
+          # when smoke and package shared one, whichever finished first saved and
+          # the other logged "not saving cache" forever. They need different
+          # things — smoke the Electron npm binary, package the platform dists —
+          # so the shared key froze at whatever the first run happened to hold.
+          key: dmscreen-smoke-${{ hashFiles('package-lock.json') }}
+          restore-keys: dmscreen-smoke-
 
       - name: Build the smoke image
         run: docker compose build smoke
@@ -91,6 +97,11 @@ jobs:
 
       - name: Render check
         run: docker compose run --rm -T smoke
+
+      # See the note in package.yml — the cache degraded silently once already.
+      - name: What actually got cached
+        if: always()
+        run: du -sh .cache/* 2>/dev/null || echo '.cache is empty — the -e overrides are not landing'
 
       # CLAUDE.md says to verify UI changes by looking at them. This is what
       # makes that possible on someone else's machine.

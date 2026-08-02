@@ -63,8 +63,11 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .cache
-          key: dmscreen-${{ hashFiles('package-lock.json') }}
-          restore-keys: dmscreen-
+          # Shares the packaging job's namespace deliberately: this job does the
+          # same work — smoke, then dist:all — so it wants the same contents, and
+          # a third 350MB cache would buy nothing.
+          key: dmscreen-package-${{ hashFiles('package-lock.json') }}
+          restore-keys: dmscreen-package-
 
       - name: Install
         run: docker compose run --rm -T $CACHE_ENV build npm ci
