@@ -5,6 +5,15 @@ import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
 import { ModulePicker } from './ModulePicker'
 
+/**
+ * `ModuleProps.setState` lets a module pass either a patch or a function
+ * deriving one from the previous state. The host has erased that module's own
+ * state type by this point, so it sees the callback as a plain bag-to-bag
+ * function — narrowing `unknown` with `typeof === 'function'` only gets as far
+ * as `Function`, which is not callable without this.
+ */
+type StatePatchFn = (previous: Record<string, unknown>) => Record<string, unknown>
+
 export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const panel = useAppStore((state) => state.doc.panels[node.panelId])
   const maximized = useAppStore((state) => state.maximizedNodeId === node.id)
@@ -53,8 +62,11 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   if (module && defaultsRef.current?.moduleId !== module.id) {
     defaultsRef.current = {
       moduleId: module.id,
-      state: module.defaultState(),
-      settings: module.defaultSettings()
+      // `AnyModule` is deliberately ModuleDefinition<any, any> — the registry is
+      // heterogeneous — so these come back untyped. This is the boundary where
+      // that stops: the host only ever treats them as bags of keys.
+      state: module.defaultState() as Record<string, unknown>,
+      settings: module.defaultSettings() as Record<string, unknown>
     }
   }
   const defaults = module ? defaultsRef.current : null
@@ -79,7 +91,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         ...base.state,
         ...useAppStore.getState().doc.panels[node.panelId]?.state
       }
-      const next = typeof patch === 'function' ? patch(current) : patch
+      const next = typeof patch === 'function' ? (patch as StatePatchFn)(current) : patch
       updatePanelState(node.panelId, next as Record<string, unknown>)
     },
     [node.panelId, updatePanelState]
@@ -93,7 +105,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         ...base.settings,
         ...useAppStore.getState().doc.panels[node.panelId]?.settings
       }
-      const next = typeof patch === 'function' ? patch(current) : patch
+      const next = typeof patch === 'function' ? (patch as StatePatchFn)(current) : patch
       updatePanelSettings(node.panelId, next as Record<string, unknown>)
     },
     [node.panelId, updatePanelSettings]

@@ -294,7 +294,11 @@ function Party({ state, setState, settings }: ModuleProps<State, Settings>): JSX
                   <td>
                     <input
                       className="cell-input dim"
-                      value={String(character.values[PLAYER_KEY] ?? '')}
+                      value={
+                        typeof character.values[PLAYER_KEY] === 'string'
+                          ? character.values[PLAYER_KEY]
+                          : ''
+                      }
                       placeholder="Player"
                       onChange={(event) => setValue(character.id, PLAYER_KEY, event.target.value)}
                     />

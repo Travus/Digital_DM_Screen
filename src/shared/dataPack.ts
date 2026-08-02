@@ -85,7 +85,7 @@ function parseRuleTable(value: unknown): RuleTable | null {
   return {
     caption: typeof value.caption === 'string' ? value.caption : undefined,
     head: value.head,
-    rows: value.rows as string[][]
+    rows: value.rows
   }
 }
 

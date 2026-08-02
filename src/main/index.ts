@@ -153,14 +153,16 @@ function installSmokeHook(window: BrowserWindow): void {
         for (const selector of selectors) {
           // Focus as well as click, so hover/focus-revealed UI (the condition
           // cross-reference popovers) can be captured too.
-          const found = await window.webContents.executeJavaScript(
+          // executeJavaScript resolves as `any`; the script below returns a
+          // boolean and nothing else can change that, so name the type here.
+          const found = (await window.webContents.executeJavaScript(
             `(() => {
               const el = document.querySelector(${JSON.stringify(selector)})
               el?.focus?.()
               el?.click?.()
               return !!el
             })()`
-          )
+          )) as boolean
           if (!found) console.log(`[renderer:error] no element matched ${selector}`)
           await wait(500)
         }
