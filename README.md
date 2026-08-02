@@ -106,8 +106,9 @@ Worth knowing:
   packs defining the same id both load. Use the switches to drop duplicates.
 - **A group id that matches an existing tab extends it**, so adding one option
   doesn't mean restating the rest. A new id becomes a new tab — give it a title.
-- **Data → SRD Content** and **Name Pools** switch off the built-in data. Load a
-  superset pack, switch SRD Content off, and every card shows your labels.
+- **Data → Bundled SRD Content** and **Bundled Name Pools** switch off the built-in
+  data. Load a superset pack, switch the SRD content off, and every card shows your
+  own labels.
 - **Packs are referenced by path, not copied.** Edit the file and choose *Reload
   Data Packs*. Move it and the app says so rather than going quiet — the sidebar
   carries a one-line summary of what is actually loaded.

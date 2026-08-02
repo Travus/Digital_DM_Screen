@@ -3,7 +3,7 @@
  * userData, read tolerantly, written via temp + rename.
  *
  * Packs are referenced by path rather than copied in, so editing a pack file and
- * choosing *Reload Data Packs* shows the change. The cost is that a moved file
+ * choosing *Reload Data Packs from Disk* shows the change. The cost is that a moved file
  * empties whatever it provided; that lands in `failed` so the UI can say so,
  * rather than the panel quietly going thin.
  */

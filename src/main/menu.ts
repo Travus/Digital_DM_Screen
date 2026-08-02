@@ -1,4 +1,5 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
+import { basename } from 'node:path'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
@@ -33,19 +34,21 @@ export function buildMenu(
 ): void {
   const send = (action: MenuAction) => () => dispatch(action)
 
-  // Failed packs are listed too — a pack whose file moved would otherwise just
+  // No sublabels anywhere in this menu: Windows renders them but sizes the menu
+  // off the label alone, so anything longer than the label is cut mid-word. The
+  // full path of a broken pack lives in the sidebar's warning tooltip instead.
+  //
+  // Failed packs are still listed — a pack whose file moved would otherwise just
   // look like a dataset that quietly went thin.
   const packItems: MenuItemConstructorOptions[] =
     data.refs.length || data.failed.length
       ? [
           ...data.refs.map((ref) => ({
             label: ref.name,
-            sublabel: ref.path,
             submenu: [{ label: 'Remove', click: () => dataActions.removePack(ref.id) }]
           })),
           ...data.failed.map((failure) => ({
-            label: `⚠ ${failure.path}`,
-            sublabel: failure.reason,
+            label: `⚠ ${basename(failure.path)} — ${failure.reason}`,
             enabled: false
           }))
         ]
@@ -104,23 +107,18 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+I',
           click: () => dataActions.importPack()
         },
-        {
-          label: 'Reload Data Packs',
-          sublabel: 'Packs are read from disk each time',
-          click: () => dataActions.reloadPacks()
-        },
+        { label: 'Reload Data Packs from Disk', click: () => dataActions.reloadPacks() },
         { type: 'separator' },
         { label: 'Data Packs', submenu: packItems },
         { type: 'separator' },
         {
-          label: 'SRD Content',
+          label: 'Bundled SRD Content',
           type: 'checkbox',
           checked: srdOn,
-          sublabel: 'Conditions, rules, abilities and diseases',
           click: () => dataActions.setEnabled(SRD_DATASETS, !srdOn)
         },
         {
-          label: 'Name Pools',
+          label: 'Bundled Name Pools',
           type: 'checkbox',
           checked: data.enabled.names,
           click: () => dataActions.setEnabled(['names'], !data.enabled.names)
