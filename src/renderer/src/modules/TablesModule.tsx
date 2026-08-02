@@ -55,7 +55,8 @@ const starterTables = (): RandomTable[] => [
 ]
 
 function Tables({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
-  const active = state.tables.find((table) => table.id === state.activeId) ?? state.tables[0] ?? null
+  const active =
+    state.tables.find((table) => table.id === state.activeId) ?? state.tables[0] ?? null
 
   const setTables = (updater: (tables: RandomTable[]) => RandomTable[]): void =>
     setState((prev) => ({ tables: updater(prev.tables) }))
@@ -64,10 +65,10 @@ function Tables({ state, setState, settings }: ModuleProps<State, Settings>): JS
     const usable = table.entries.filter((entry) => entry.trim())
     if (usable.length === 0) return
     setState((prev) => ({
-      results: [
-        { id: uid('r'), table: table.name, text: randomOf(usable) },
-        ...prev.results
-      ].slice(0, settings.resultLimit)
+      results: [{ id: uid('r'), table: table.name, text: randomOf(usable) }, ...prev.results].slice(
+        0,
+        settings.resultLimit
+      )
     }))
   }
 

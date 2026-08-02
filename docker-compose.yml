@@ -21,7 +21,7 @@ services:
       ELECTRON_CACHE: /root/.cache/electron
       ELECTRON_BUILDER_CACHE: /root/.cache/electron-builder
       # electron-builder refuses to write to a mounted volume without this on some hosts
-      USE_HARD_LINKS: "false"
+      USE_HARD_LINKS: 'false'
     command: bash
     stdin_open: true
     tty: true

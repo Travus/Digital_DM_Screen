@@ -36,7 +36,11 @@ export function ConditionText({ text, exclude }: { text: string; exclude?: strin
 
     if (match.index > cursor) parts.push(text.slice(cursor, match.index))
     parts.push(
-      <ConditionRef key={`${match.index}-${condition.name}`} name={condition.name} label={match[0]} />
+      <ConditionRef
+        key={`${match.index}-${condition.name}`}
+        name={condition.name}
+        label={match[0]}
+      />
     )
     cursor = match.index + match[0].length
   }

@@ -22,7 +22,24 @@ export const NAME_STYLES: NameStyle[] = [
     label: 'Human',
     kind: 'person',
     middleChance: 0.35,
-    prefix: ['Al', 'Ber', 'Cor', 'Dav', 'Ed', 'Gar', 'Hal', 'Jor', 'Kal', 'Mar', 'Rob', 'Ser', 'Tho', 'Wil', 'Ren', 'Hen'],
+    prefix: [
+      'Al',
+      'Ber',
+      'Cor',
+      'Dav',
+      'Ed',
+      'Gar',
+      'Hal',
+      'Jor',
+      'Kal',
+      'Mar',
+      'Rob',
+      'Ser',
+      'Tho',
+      'Wil',
+      'Ren',
+      'Hen'
+    ],
     middle: ['an', 'ar', 'en', 'ic', 'il', 'or', 'ov', 'er'],
     suffix: ['ric', 'wyn', 'den', 'mund', 'bert', 'gar', 'tha', 'lin', 'mir', 'son', 'ley', 'ton']
   },
@@ -31,7 +48,20 @@ export const NAME_STYLES: NameStyle[] = [
     label: 'Elf',
     kind: 'person',
     middleChance: 0.6,
-    prefix: ['Ael', 'Cael', 'Elar', 'Fael', 'Ily', 'Lath', 'Myr', 'Nael', 'Riel', 'Sylv', 'Thal', 'Vael'],
+    prefix: [
+      'Ael',
+      'Cael',
+      'Elar',
+      'Fael',
+      'Ily',
+      'Lath',
+      'Myr',
+      'Nael',
+      'Riel',
+      'Sylv',
+      'Thal',
+      'Vael'
+    ],
     middle: ['an', 'ari', 'ele', 'ith', 'ora', 'yal', 'ien', 'eth'],
     suffix: ['wen', 'dir', 'rian', 'thil', 'las', 'nor', 'mira', 'sae', 'wyn', 'aeth']
   },
@@ -40,7 +70,20 @@ export const NAME_STYLES: NameStyle[] = [
     label: 'Dwarf',
     kind: 'person',
     middleChance: 0.2,
-    prefix: ['Bal', 'Bru', 'Dur', 'Gim', 'Grun', 'Hild', 'Kor', 'Mor', 'Thra', 'Ulf', 'Vond', 'Dwal'],
+    prefix: [
+      'Bal',
+      'Bru',
+      'Dur',
+      'Gim',
+      'Grun',
+      'Hild',
+      'Kor',
+      'Mor',
+      'Thra',
+      'Ulf',
+      'Vond',
+      'Dwal'
+    ],
     middle: ['ar', 'or', 'un', 'ga', 'ri'],
     suffix: ['din', 'grim', 'nar', 'bek', 'dur', 'thra', 'moir', 'hild', 'fist', 'stone', 'forge']
   },
@@ -49,7 +92,20 @@ export const NAME_STYLES: NameStyle[] = [
     label: 'Orc & Half-Orc',
     kind: 'person',
     middleChance: 0.25,
-    prefix: ['Bog', 'Dru', 'Gor', 'Grash', 'Karg', 'Mog', 'Nar', 'Rok', 'Shag', 'Thok', 'Uruk', 'Zug'],
+    prefix: [
+      'Bog',
+      'Dru',
+      'Gor',
+      'Grash',
+      'Karg',
+      'Mog',
+      'Nar',
+      'Rok',
+      'Shag',
+      'Thok',
+      'Uruk',
+      'Zug'
+    ],
     middle: ['ag', 'ur', 'og', 'ma', 'ka'],
     suffix: ['nak', 'gash', 'thar', 'rok', 'dush', 'zug', 'grim', 'tusk', 'maw', 'skar']
   },
@@ -67,18 +123,72 @@ export const NAME_STYLES: NameStyle[] = [
     label: 'Tavern',
     kind: 'place',
     middleChance: 1,
-    prefix: ['The Rusty', 'The Gilded', 'The Drunken', 'The Weeping', 'The Laughing', 'The Silver', 'The Broken', 'The Hungry', 'The Salted', 'The Crooked', 'The Wandering', 'The Sleeping'],
+    prefix: [
+      'The Rusty',
+      'The Gilded',
+      'The Drunken',
+      'The Weeping',
+      'The Laughing',
+      'The Silver',
+      'The Broken',
+      'The Hungry',
+      'The Salted',
+      'The Crooked',
+      'The Wandering',
+      'The Sleeping'
+    ],
     middle: [''],
-    suffix: ['Flagon', 'Griffon', 'Dragon', 'Anchor', 'Lantern', 'Boar', 'Barrel', 'Maiden', 'Kettle', 'Stag', 'Crow', 'Wheel', 'Hound', 'Pony']
+    suffix: [
+      'Flagon',
+      'Griffon',
+      'Dragon',
+      'Anchor',
+      'Lantern',
+      'Boar',
+      'Barrel',
+      'Maiden',
+      'Kettle',
+      'Stag',
+      'Crow',
+      'Wheel',
+      'Hound',
+      'Pony'
+    ]
   },
   {
     id: 'shop',
     label: 'Shop & Guild',
     kind: 'place',
     middleChance: 1,
-    prefix: ['Ashen', 'Copper', 'Ember', 'Hollow', 'Ironwood', 'Moonlit', 'Nine', 'Quill &', 'Thorn &', 'Velvet', 'Whetstone', 'Amber'],
+    prefix: [
+      'Ashen',
+      'Copper',
+      'Ember',
+      'Hollow',
+      'Ironwood',
+      'Moonlit',
+      'Nine',
+      'Quill &',
+      'Thorn &',
+      'Velvet',
+      'Whetstone',
+      'Amber'
+    ],
     middle: [''],
-    suffix: ['Curios', 'Apothecary', 'Armoury', 'Emporium', 'Bindery', 'Ledger', 'Forge', 'Reliquary', 'Provisions', 'Cartography', 'Alchemy', 'Trading House']
+    suffix: [
+      'Curios',
+      'Apothecary',
+      'Armoury',
+      'Emporium',
+      'Bindery',
+      'Ledger',
+      'Forge',
+      'Reliquary',
+      'Provisions',
+      'Cartography',
+      'Alchemy',
+      'Trading House'
+    ]
   }
 ]
 

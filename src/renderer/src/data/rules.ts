@@ -85,13 +85,19 @@ export const RULE_SECTIONS: RuleSection[] = [
     id: 'cover',
     title: 'Cover & Vision',
     items: [
-      { term: 'Half cover', text: '+2 to AC and Dexterity saving throws. At least half the body is blocked.' },
+      {
+        term: 'Half cover',
+        text: '+2 to AC and Dexterity saving throws. At least half the body is blocked.'
+      },
       { term: 'Three-quarters cover', text: '+5 to AC and Dexterity saving throws.' },
       {
         term: 'Total cover',
         text: 'Can’t be targeted directly by an attack or spell, though areas of effect can still reach it.'
       },
-      { term: 'Lightly obscured (dim light, patchy fog)', text: 'Disadvantage on Wisdom (Perception) checks that rely on sight.' },
+      {
+        term: 'Lightly obscured (dim light, patchy fog)',
+        text: 'Disadvantage on Wisdom (Perception) checks that rely on sight.'
+      },
       {
         term: 'Heavily obscured (darkness, opaque fog)',
         text: 'You effectively suffer the blinded condition when trying to see into it.'

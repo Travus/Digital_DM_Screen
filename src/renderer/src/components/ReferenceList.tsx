@@ -49,9 +49,7 @@ export function ReferenceList({
     : entries
 
   // Favourites float to the top, otherwise the source order is kept.
-  const pinned = favourites?.length
-    ? matches.filter((entry) => favourites.includes(entry.id))
-    : []
+  const pinned = favourites?.length ? matches.filter((entry) => favourites.includes(entry.id)) : []
   const rest = pinned.length ? matches.filter((entry) => !favourites?.includes(entry.id)) : matches
 
   const isOpen = (id: string): boolean => {

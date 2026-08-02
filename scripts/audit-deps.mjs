@@ -37,7 +37,8 @@ const offRegistry = entries.filter(
   (entry) => entry.resolved && !entry.resolved.startsWith('https://registry.npmjs.org/')
 )
 console.log(`\n--- resolved outside registry.npmjs.org: ${offRegistry.length}`)
-for (const entry of offRegistry) console.log(`  ${entry.name}@${entry.version} -> ${entry.resolved}`)
+for (const entry of offRegistry)
+  console.log(`  ${entry.name}@${entry.version} -> ${entry.resolved}`)
 
 const noIntegrity = entries.filter((entry) => entry.resolved && !entry.hasIntegrity)
 console.log(`\n--- missing integrity hash: ${noIntegrity.length}`)

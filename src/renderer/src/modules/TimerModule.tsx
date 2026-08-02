@@ -137,7 +137,9 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
     setState((prev) => ({ timers: updater(prev.timers) }))
 
   const patch = (id: string, changes: Partial<Timer>): void =>
-    setTimers((timers) => timers.map((timer) => (timer.id === id ? { ...timer, ...changes } : timer)))
+    setTimers((timers) =>
+      timers.map((timer) => (timer.id === id ? { ...timer, ...changes } : timer))
+    )
 
   const toggle = (timer: Timer): void => {
     if (timer.startedAt === null) {
@@ -200,14 +202,18 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
                 <button
                   className="icon-btn danger"
                   title="Delete timer"
-                  onClick={() => setTimers((timers) => timers.filter((entry) => entry.id !== timer.id))}
+                  onClick={() =>
+                    setTimers((timers) => timers.filter((entry) => entry.id !== timer.id))
+                  }
                 >
                   ✕
                 </button>
               </div>
 
               {running ? (
-                <div className="timer-readout running">{formatClock(value, settings.showHours)}</div>
+                <div className="timer-readout running">
+                  {formatClock(value, settings.showHours)}
+                </div>
               ) : (
                 <ClockInput
                   valueMs={value}
@@ -247,7 +253,9 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
                 {running ? (
                   <span className="note">Pause to set the clock.</span>
                 ) : (
-                  <span className="note">{timer.mode === 'down' ? 'Counts down' : 'Counts up'}</span>
+                  <span className="note">
+                    {timer.mode === 'down' ? 'Counts down' : 'Counts up'}
+                  </span>
                 )}
 
                 {finished && <span className="note warn">Time.</span>}
@@ -259,8 +267,8 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
 
       {state.timers.length === 0 && (
         <p className="empty">
-          Count up to time the session or a player’s turn, or count down for a held breath, a burning
-          fuse, or a five-minute break.
+          Count up to time the session or a player’s turn, or count down for a held breath, a
+          burning fuse, or a five-minute break.
         </p>
       )}
     </div>

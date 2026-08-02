@@ -112,7 +112,9 @@ function asMeter(value: unknown): Meter {
 }
 
 function asIdList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : []
 }
 
 function toNumber(value: unknown): number {
@@ -147,7 +149,11 @@ function Party({ state, setState, settings }: ModuleProps<State, Settings>): JSX
       { key: NAME_KEY, label: 'Character', width: widthOf(NAME_KEY, NAME_KEY, 'Character') }
     ]
     if (settings.showPlayerColumn) {
-      list.push({ key: PLAYER_KEY, label: 'Player', width: widthOf(PLAYER_KEY, PLAYER_KEY, 'Player') })
+      list.push({
+        key: PLAYER_KEY,
+        label: 'Player',
+        width: widthOf(PLAYER_KEY, PLAYER_KEY, 'Player')
+      })
     }
     for (const field of state.fields) {
       list.push({
@@ -180,7 +186,9 @@ function Party({ state, setState, settings }: ModuleProps<State, Settings>): JSX
       {
         id: uid('pc'),
         name: '',
-        values: Object.fromEntries(state.fields.map((field) => [field.id, defaultValue(field.type)]))
+        values: Object.fromEntries(
+          state.fields.map((field) => [field.id, defaultValue(field.type)])
+        )
       }
     ])
 
@@ -194,7 +202,11 @@ function Party({ state, setState, settings }: ModuleProps<State, Settings>): JSX
       return next
     })
 
-  const beginResize = (key: string, width: number, event: React.PointerEvent<HTMLSpanElement>): void => {
+  const beginResize = (
+    key: string,
+    width: number,
+    event: React.PointerEvent<HTMLSpanElement>
+  ): void => {
     event.preventDefault()
     event.stopPropagation()
     resizeRef.current = { key, startX: event.clientX, startWidth: width }
@@ -328,7 +340,9 @@ function Party({ state, setState, settings }: ModuleProps<State, Settings>): JSX
       </div>
 
       {state.characters.length === 0 && (
-        <p className="empty">No party members yet. Add one, then define what you track in settings.</p>
+        <p className="empty">
+          No party members yet. Add one, then define what you track in settings.
+        </p>
       )}
 
       <div className="toolbar">
@@ -377,9 +391,7 @@ function CellEditor({
               className={`symbol ${lit ? 'lit' : 'dim'}`}
               title={lit ? 'Click to dim' : 'Click to light up'}
               onClick={() =>
-                onChange(
-                  lit ? [...active].filter((id) => id !== slot.id) : [...active, slot.id]
-                )
+                onChange(lit ? [...active].filter((id) => id !== slot.id) : [...active, slot.id])
               }
             >
               <span className={isPlainGlyph(slot.char) ? 'glyph' : 'emoji'}>{slot.char}</span>
@@ -391,9 +403,7 @@ function CellEditor({
   }
 
   if (field.type === 'number') {
-    return (
-      <NumberInput className="cell-input num" value={toNumber(value)} onChange={onChange} />
-    )
+    return <NumberInput className="cell-input num" value={toNumber(value)} onChange={onChange} />
   }
 
   if (field.type === 'meter') {
@@ -510,7 +520,12 @@ function SymbolEditor({
   )
 }
 
-function PartySettings({ state, setState, settings, setSettings }: ModuleProps<State, Settings>): JSX.Element {
+function PartySettings({
+  state,
+  setState,
+  settings,
+  setSettings
+}: ModuleProps<State, Settings>): JSX.Element {
   const setFields = (updater: (fields: PartyField[]) => PartyField[]): void =>
     setState((prev) => ({ fields: updater(prev.fields) }))
 

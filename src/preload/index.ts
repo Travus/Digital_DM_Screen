@@ -19,13 +19,16 @@ export interface AppInfo {
 
 const api = {
   /** Opens a layout. With no path, shows the system file picker. */
-  openLayout: (path?: string): Promise<OpenResult | null> => ipcRenderer.invoke('layout:open', path),
+  openLayout: (path?: string): Promise<OpenResult | null> =>
+    ipcRenderer.invoke('layout:open', path),
   saveLayout: (filePath: string, doc: LayoutDoc): Promise<string | null> =>
     ipcRenderer.invoke('layout:save', filePath, doc),
-  saveLayoutAs: (doc: LayoutDoc): Promise<string | null> => ipcRenderer.invoke('layout:saveAs', doc),
+  saveLayoutAs: (doc: LayoutDoc): Promise<string | null> =>
+    ipcRenderer.invoke('layout:saveAs', doc),
 
   listRecents: (): Promise<RecentEntry[]> => ipcRenderer.invoke('recents:list'),
-  removeRecent: (path: string): Promise<RecentEntry[]> => ipcRenderer.invoke('recents:remove', path),
+  removeRecent: (path: string): Promise<RecentEntry[]> =>
+    ipcRenderer.invoke('recents:remove', path),
   clearRecents: (): Promise<RecentEntry[]> => ipcRenderer.invoke('recents:clear'),
 
   readSession: (): Promise<SessionSnapshot | null> => ipcRenderer.invoke('session:read'),

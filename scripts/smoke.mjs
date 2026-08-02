@@ -82,7 +82,10 @@ const shots = [
   {
     name: 'locked',
     layout: starter,
-    click: ['.topbar .icon-btn[title*="Lock the layout"]', '.panel .icon-btn[title="Panel menu"]'].join('\n')
+    click: [
+      '.topbar .icon-btn[title*="Lock the layout"]',
+      '.panel .icon-btn[title="Panel menu"]'
+    ].join('\n')
   },
   // Hovering a condition named inside another condition's text pops it out.
   {
@@ -133,7 +136,10 @@ const shots = [
   {
     name: 'conditions-empty',
     layout: starter,
-    data: { refs: [], enabled: { conditions: false, rules: false, abilities: false, diseases: false } }
+    data: {
+      refs: [],
+      enabled: { conditions: false, rules: false, abilities: false, diseases: false }
+    }
   },
   // Says "no data loaded" and points at the Data menu, rather than blaming the
   // panel's own settings, which have nothing to fix.
@@ -181,7 +187,11 @@ async function seedSession(layoutPath, mutate, data) {
   )
   await writeFile(
     join(userData, 'recents.json'),
-    JSON.stringify([{ path: layoutPath, name: doc.name, openedAt: new Date().toISOString() }], null, 2)
+    JSON.stringify(
+      [{ path: layoutPath, name: doc.name, openedAt: new Date().toISOString() }],
+      null,
+      2
+    )
   )
 }
 
@@ -189,7 +199,13 @@ function run(shotPath, click, settle) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
-      ['-a', '--server-args=-screen 0 1600x1000x24', 'node_modules/.bin/electron', '--no-sandbox', '.'],
+      [
+        '-a',
+        '--server-args=-screen 0 1600x1000x24',
+        'node_modules/.bin/electron',
+        '--no-sandbox',
+        '.'
+      ],
       {
         cwd: root,
         env: {

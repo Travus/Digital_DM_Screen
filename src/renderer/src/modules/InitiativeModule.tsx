@@ -160,7 +160,12 @@ function Initiative({ state, setState, settings }: ModuleProps<State, Settings>)
       const active = prev.combatants[prev.turnIndex]
       const sorted = [...prev.combatants].sort((a, b) => b.initiative - a.initiative)
       // Keep the spotlight on whoever's turn it actually is after reordering.
-      const turnIndex = active ? Math.max(0, sorted.findIndex((entry) => entry.id === active.id)) : 0
+      const turnIndex = active
+        ? Math.max(
+            0,
+            sorted.findIndex((entry) => entry.id === active.id)
+          )
+        : 0
       return { combatants: sorted, turnIndex }
     })
 
@@ -176,7 +181,10 @@ function Initiative({ state, setState, settings }: ModuleProps<State, Settings>)
     if (members.length === 0) return
     setCombatants((combatants) => {
       const taken = new Set(combatants.map((entry) => entry.name.trim().toLowerCase()))
-      return [...combatants, ...members.filter((member) => !taken.has(member.name.trim().toLowerCase()))]
+      return [
+        ...combatants,
+        ...members.filter((member) => !taken.has(member.name.trim().toLowerCase()))
+      ]
     })
   }
 
@@ -197,7 +205,11 @@ function Initiative({ state, setState, settings }: ModuleProps<State, Settings>)
           <span className="round-label">Round</span>
           <span className="round-value">{state.round}</span>
         </div>
-        <button className="btn primary" onClick={() => advance(1)} disabled={!state.combatants.length}>
+        <button
+          className="btn primary"
+          onClick={() => advance(1)}
+          disabled={!state.combatants.length}
+        >
           Next turn ▸
         </button>
         <button className="btn" onClick={() => advance(-1)} disabled={!state.combatants.length}>
@@ -207,13 +219,25 @@ function Initiative({ state, setState, settings }: ModuleProps<State, Settings>)
         <button className="btn" onClick={sortByInitiative}>
           Sort
         </button>
-        <button className="btn" onClick={rollAllInitiative} title="Roll d20 initiative for non-player combatants">
+        <button
+          className="btn"
+          onClick={rollAllInitiative}
+          title="Roll d20 initiative for non-player combatants"
+        >
           Roll NPCs
         </button>
-        <button className="btn" onClick={importParty} title="Add every named character from Party Tracker panels">
+        <button
+          className="btn"
+          onClick={importParty}
+          title="Add every named character from Party Tracker panels"
+        >
           + Party
         </button>
-        <button className="btn" onClick={() => setState({ round: 1, turnIndex: 0 })} title="Back to round 1">
+        <button
+          className="btn"
+          onClick={() => setState({ round: 1, turnIndex: 0 })}
+          title="Back to round 1"
+        >
           Reset
         </button>
       </div>
@@ -238,10 +262,15 @@ function Initiative({ state, setState, settings }: ModuleProps<State, Settings>)
         ))}
       </div>
 
-      {state.combatants.length === 0 && <p className="empty">Nothing in the initiative order yet.</p>}
+      {state.combatants.length === 0 && (
+        <p className="empty">Nothing in the initiative order yet.</p>
+      )}
 
       <div className="toolbar">
-        <button className="btn primary" onClick={() => setCombatants((list) => [...list, makeCombatant()])}>
+        <button
+          className="btn primary"
+          onClick={() => setCombatants((list) => [...list, makeCombatant()])}
+        >
           + Add combatant
         </button>
         <button
@@ -343,7 +372,11 @@ function CombatantRow({
         {settings.showAc && (
           <label className="mini-field" title="Armour Class">
             <span>AC</span>
-            <NumberInput className="cell-input num" value={ac} onChange={(next) => onPatch({ ac: next })} />
+            <NumberInput
+              className="cell-input num"
+              value={ac}
+              onChange={(next) => onPatch({ ac: next })}
+            />
           </label>
         )}
 
@@ -381,7 +414,11 @@ function CombatantRow({
               applyDelta(null)
             }}
           />
-          <button className="icon-btn danger" title="Apply as damage" onClick={() => applyDelta(-1)}>
+          <button
+            className="icon-btn danger"
+            title="Apply as damage"
+            onClick={() => applyDelta(-1)}
+          >
             −
           </button>
           <button className="icon-btn good" title="Apply as healing" onClick={() => applyDelta(1)}>
@@ -414,7 +451,9 @@ function CombatantRow({
             key={condition}
             className="chip"
             title="Click to remove"
-            onClick={() => onPatch({ conditions: combatant.conditions.filter((entry) => entry !== condition) })}
+            onClick={() =>
+              onPatch({ conditions: combatant.conditions.filter((entry) => entry !== condition) })
+            }
           >
             {condition} ✕
           </button>
@@ -429,11 +468,13 @@ function CombatantRow({
           }}
         >
           <option value="">+ condition</option>
-          {conditionNames.filter((name) => !combatant.conditions.includes(name)).map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+          {conditionNames
+            .filter((name) => !combatant.conditions.includes(name))
+            .map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
         </select>
 
         {settings.showNotes && (

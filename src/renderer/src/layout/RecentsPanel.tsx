@@ -33,8 +33,8 @@ export function RecentsPanel(): JSX.Element {
 
       {recents.length === 0 ? (
         <p className="empty">
-          Layouts you save or open show up here. They are stored per file, so a layout you share with
-          a friend carries every panel and its contents with it.
+          Layouts you save or open show up here. They are stored per file, so a layout you share
+          with a friend carries every panel and its contents with it.
         </p>
       ) : (
         <ul className="recent-list">

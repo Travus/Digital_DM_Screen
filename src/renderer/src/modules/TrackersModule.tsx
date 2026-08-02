@@ -70,7 +70,10 @@ function Trackers({ state, setState, settings }: ModuleProps<State, Settings>): 
         </button>
       </div>
 
-      <div className="tracker-grid" style={{ gridTemplateColumns: `repeat(${settings.columns}, minmax(0, 1fr))` }}>
+      <div
+        className="tracker-grid"
+        style={{ gridTemplateColumns: `repeat(${settings.columns}, minmax(0, 1fr))` }}
+      >
         {state.trackers.map((tracker) => (
           <div key={tracker.id} className="tracker">
             {state.editing ? (
@@ -151,7 +154,9 @@ function Trackers({ state, setState, settings }: ModuleProps<State, Settings>): 
                     <button
                       className="counter-btn"
                       onClick={() =>
-                        patch(tracker.id, { value: clamp(tracker.value - tracker.step, tracker.max) })
+                        patch(tracker.id, {
+                          value: clamp(tracker.value - tracker.step, tracker.max)
+                        })
                       }
                     >
                       −
@@ -160,7 +165,9 @@ function Trackers({ state, setState, settings }: ModuleProps<State, Settings>): 
                     <button
                       className="counter-btn"
                       onClick={() =>
-                        patch(tracker.id, { value: clamp(tracker.value + tracker.step, tracker.max) })
+                        patch(tracker.id, {
+                          value: clamp(tracker.value + tracker.step, tracker.max)
+                        })
                       }
                     >
                       +

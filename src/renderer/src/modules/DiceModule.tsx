@@ -33,7 +33,10 @@ function Dice({ state, setState, settings }: ModuleProps<State, Settings>): JSX.
     }
     setState((prev) => ({
       invalid: false,
-      history: [{ ...result, id: uid('roll'), label }, ...prev.history].slice(0, settings.historyLimit)
+      history: [{ ...result, id: uid('roll'), label }, ...prev.history].slice(
+        0,
+        settings.historyLimit
+      )
     }))
   }
 
@@ -129,10 +132,10 @@ function DiceSettings({ settings, setSettings }: ModuleProps<State, Settings>): 
         Show individual die results
       </label>
       <p className="note">
-        Supports <code>NdM</code> and flat modifiers, combined freely —{' '}
-        <code>2d6 + 1d4 - 1</code>. Also <code>kh</code>/<code>kl</code> to keep the highest or
-        lowest dice and <code>dh</code>/<code>dl</code> to drop them: <code>4d6dl1</code> and{' '}
-        <code>4d6kh3</code> are the same roll. Up to 1000 dice at a time.
+        Supports <code>NdM</code> and flat modifiers, combined freely — <code>2d6 + 1d4 - 1</code>.
+        Also <code>kh</code>/<code>kl</code> to keep the highest or lowest dice and <code>dh</code>/
+        <code>dl</code> to drop them: <code>4d6dl1</code> and <code>4d6kh3</code> are the same roll.
+        Up to 1000 dice at a time.
       </p>
     </div>
   )

@@ -173,7 +173,11 @@ export function toggleSplitDirection(root: LayoutNode, splitId: string): LayoutN
 export function equaliseSplit(root: LayoutNode, splitId: string): LayoutNode {
   const split = findNode(root, splitId)
   if (!split || split.type !== 'split') return root
-  return setSplitSizes(root, splitId, split.children.map(() => 1))
+  return setSplitSizes(
+    root,
+    splitId,
+    split.children.map(() => 1)
+  )
 }
 
 /** Drop any panel payloads no longer referenced by the tree. */
@@ -205,7 +209,8 @@ function validateNode(value: unknown, panelIds: Set<string>): value is LayoutNod
     if (value.direction !== 'row' && value.direction !== 'column') return false
     if (!Array.isArray(value.children) || value.children.length === 0) return false
     if (!Array.isArray(value.sizes) || value.sizes.length !== value.children.length) return false
-    if (!value.sizes.every((size) => typeof size === 'number' && Number.isFinite(size))) return false
+    if (!value.sizes.every((size) => typeof size === 'number' && Number.isFinite(size)))
+      return false
     return value.children.every((child) => validateNode(child, panelIds))
   }
 

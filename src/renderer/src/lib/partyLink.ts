@@ -44,11 +44,15 @@ export function isPartyPanel(panel: PanelData): boolean {
 }
 
 export function findAcField(panel: PanelData): PartyField | undefined {
-  return fieldsOf(panel).find((field) => field.type === 'number' && AC_LABEL.test(field.label.trim()))
+  return fieldsOf(panel).find(
+    (field) => field.type === 'number' && AC_LABEL.test(field.label.trim())
+  )
 }
 
 export function findHpField(panel: PanelData): PartyField | undefined {
-  return fieldsOf(panel).find((field) => field.type === 'meter' && HP_LABEL.test(field.label.trim()))
+  return fieldsOf(panel).find(
+    (field) => field.type === 'meter' && HP_LABEL.test(field.label.trim())
+  )
 }
 
 export function findCharacter(

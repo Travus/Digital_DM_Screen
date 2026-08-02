@@ -32,7 +32,9 @@ export const SYMBOL_GROUPS: { label: string; symbols: string[]; plain?: boolean 
  * `SYMBOL_GROUPS[0].symbols`, which would have silently misclassified every glyph
  * the moment a group was reordered or another added above it.
  */
-const PLAIN = new Set(SYMBOL_GROUPS.filter((group) => group.plain).flatMap((group) => group.symbols))
+const PLAIN = new Set(
+  SYMBOL_GROUPS.filter((group) => group.plain).flatMap((group) => group.symbols)
+)
 
 export function isPlainGlyph(symbol: string): boolean {
   return PLAIN.has(symbol)

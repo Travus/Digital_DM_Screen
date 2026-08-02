@@ -92,7 +92,11 @@ export function buildMenu(
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: send('layout:save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: send('layout:saveAs') },
         { label: 'Rename…', accelerator: 'F2', click: send('layout:rename') },
-        { label: 'Lock / Unlock Layout', accelerator: 'CmdOrCtrl+L', click: send('layout:toggleLock') },
+        {
+          label: 'Lock / Unlock Layout',
+          accelerator: 'CmdOrCtrl+L',
+          click: send('layout:toggleLock')
+        },
         { type: 'separator' },
         { role: 'quit', label: 'Quit' }
       ]

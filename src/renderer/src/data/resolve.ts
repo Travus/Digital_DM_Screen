@@ -86,7 +86,10 @@ export function buildPattern(names: string[]): RegExp | null {
   const usable = names.filter((name) => name.trim().length > 0)
   if (usable.length === 0) return null
 
-  const alternation = [...usable].sort((a, b) => b.length - a.length).map(escape).join('|')
+  const alternation = [...usable]
+    .sort((a, b) => b.length - a.length)
+    .map(escape)
+    .join('|')
   return new RegExp(`\\b(${alternation})\\b`, 'gi')
 }
 
@@ -204,7 +207,8 @@ function warnOnDuplicateNames(conditions: ReferenceEntry[], warnings: string[]):
   const seen = new Set<string>()
   for (const condition of conditions) {
     const key = condition.name.toLowerCase()
-    if (seen.has(key)) warnings.push(`more than one source defines the condition "${condition.name}"`)
+    if (seen.has(key))
+      warnings.push(`more than one source defines the condition "${condition.name}"`)
     seen.add(key)
   }
 }

@@ -51,7 +51,11 @@ async function readLayoutFile(path: string): Promise<LayoutDoc> {
 }
 
 async function writeLayoutFile(path: string, doc: LayoutDoc): Promise<void> {
-  await writeFile(path, JSON.stringify({ ...doc, updatedAt: new Date().toISOString() }, null, 2), 'utf8')
+  await writeFile(
+    path,
+    JSON.stringify({ ...doc, updatedAt: new Date().toISOString() }, null, 2),
+    'utf8'
+  )
 }
 
 /** Pushes fresh data to the renderer and rebuilds the menu around it. */
@@ -282,21 +286,24 @@ ipcMain.handle('layout:open', async (_event, path?: string): Promise<OpenResult 
   }
 })
 
-ipcMain.handle('layout:save', async (_event, filePath: string, doc: LayoutDoc): Promise<string | null> => {
-  try {
-    await writeLayoutFile(filePath, doc)
-    await addRecent(filePath, doc.name)
-    await refreshMenu()
-    return filePath
-  } catch (error) {
-    await dialog.showMessageBox(mainWindow!, {
-      type: 'error',
-      title: 'Could not save layout',
-      message: (error as Error).message
-    })
-    return null
+ipcMain.handle(
+  'layout:save',
+  async (_event, filePath: string, doc: LayoutDoc): Promise<string | null> => {
+    try {
+      await writeLayoutFile(filePath, doc)
+      await addRecent(filePath, doc.name)
+      await refreshMenu()
+      return filePath
+    } catch (error) {
+      await dialog.showMessageBox(mainWindow!, {
+        type: 'error',
+        title: 'Could not save layout',
+        message: (error as Error).message
+      })
+      return null
+    }
   }
-})
+)
 
 ipcMain.handle('layout:saveAs', async (_event, doc: LayoutDoc): Promise<string | null> => {
   const result = await dialog.showSaveDialog(mainWindow!, {

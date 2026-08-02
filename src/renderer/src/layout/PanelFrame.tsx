@@ -162,7 +162,12 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
               { label: 'Change module…', onSelect: () => setPicking(true) },
               { label: 'Rename panel…', onSelect: () => setRenaming(true) },
               ...(panel.title
-                ? [{ label: 'Reset panel name', onSelect: () => setPanelTitle(node.panelId, undefined) }]
+                ? [
+                    {
+                      label: 'Reset panel name',
+                      onSelect: () => setPanelTitle(node.panelId, undefined)
+                    }
+                  ]
                 : []),
               // Everything structural disappears while the layout is locked.
               ...(locked
@@ -173,8 +178,14 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                     { label: 'Split down', onSelect: () => splitPanel(node.id, 'column') },
                     ...(parentSplitId
                       ? [
-                          { label: 'Flip surrounding split', onSelect: () => flipSplit(parentSplitId) },
-                          { label: 'Even out surrounding split', onSelect: () => equalise(parentSplitId) }
+                          {
+                            label: 'Flip surrounding split',
+                            onSelect: () => flipSplit(parentSplitId)
+                          },
+                          {
+                            label: 'Even out surrounding split',
+                            onSelect: () => equalise(parentSplitId)
+                          }
                         ]
                       : []),
                     { separator: true },
@@ -189,7 +200,11 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         <div className="panel-settings">
           <div className="panel-settings-head">
             <h3>{module.name} settings</h3>
-            <button className="icon-btn" title="Close settings" onClick={() => setSettingsOpen(false)}>
+            <button
+              className="icon-btn"
+              title="Close settings"
+              onClick={() => setSettingsOpen(false)}
+            >
               ✕
             </button>
           </div>
@@ -261,7 +276,11 @@ function PanelMenu({
 
   return (
     <div className="menu-anchor" ref={ref}>
-      <button className={`icon-btn ${open ? 'on' : ''}`} title="Panel menu" onClick={() => onOpenChange(!open)}>
+      <button
+        className={`icon-btn ${open ? 'on' : ''}`}
+        title="Panel menu"
+        onClick={() => onOpenChange(!open)}
+      >
         ⋯
       </button>
       {open && (

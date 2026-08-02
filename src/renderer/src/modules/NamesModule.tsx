@@ -81,13 +81,20 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
     const chosen = name ?? generate(state.styleId, 1)[0]
     if (!chosen) return
     setState({
-      detailed: { id: uid('npc'), name: chosen, style: style.label, lines: detailsFor(state.styleId) }
+      detailed: {
+        id: uid('npc'),
+        name: chosen,
+        style: style.label,
+        lines: detailsFor(state.styleId)
+      }
     })
   }
 
   const keep = (entry: KeptEntry): void =>
     setState((prev) =>
-      prev.kept.some((existing) => existing.name === entry.name && existing.lines.join() === entry.lines.join())
+      prev.kept.some(
+        (existing) => existing.name === entry.name && existing.lines.join() === entry.lines.join()
+      )
         ? prev
         : { kept: [entry, ...prev.kept] }
     )
@@ -98,7 +105,11 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
   return (
     <div className="stack">
       <div className="toolbar wrap">
-        <select className="input" value={state.styleId} onChange={(event) => roll(event.target.value)}>
+        <select
+          className="input"
+          value={state.styleId}
+          onChange={(event) => roll(event.target.value)}
+        >
           {nameStyles.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.label}
@@ -111,7 +122,11 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
         <button
           className="btn"
           onClick={() => fleshOut()}
-          title={isPlace ? 'A name plus a telling detail and a hook' : 'A name plus a quirk and a motivation'}
+          title={
+            isPlace
+              ? 'A name plus a telling detail and a hook'
+              : 'A name plus a quirk and a motivation'
+          }
         >
           {isPlace ? 'Whole place' : 'Whole NPC'}
         </button>
@@ -122,7 +137,11 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
           <div className="npc-head">
             <span className="npc-name">{state.detailed.name}</span>
             <div className="toolbar">
-              <button className="btn" onClick={() => fleshOut(state.detailed?.name)} title="Same name, new details">
+              <button
+                className="btn"
+                onClick={() => fleshOut(state.detailed?.name)}
+                title="Same name, new details"
+              >
                 Reroll
               </button>
               <button className="btn primary" onClick={() => keep(state.detailed as KeptEntry)}>
@@ -218,7 +237,8 @@ export const namesModule = defineModule<State, Settings>({
   id: 'names',
   name: 'Name Generator',
   icon: '🎭',
-  blurb: 'Names for people, taverns and shops, with a quirk and a motive when you need the whole character.',
+  blurb:
+    'Names for people, taverns and shops, with a quirk and a motive when you need the whole character.',
   category: 'Tools',
   defaultState: () => ({ styleId: 'human', names: [], detailed: null, kept: [] }),
   defaultSettings: () => ({ count: 12 }),

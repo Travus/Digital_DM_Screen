@@ -102,7 +102,13 @@ export const useAppStore = create<AppState>((set, get) => {
     /* ------------------------------------------------------------ files */
 
     newLayout: () => {
-      set({ doc: createEmptyDoc(), filePath: null, dirty: false, maximizedNodeId: null, activeNodeId: null })
+      set({
+        doc: createEmptyDoc(),
+        filePath: null,
+        dirty: false,
+        maximizedNodeId: null,
+        activeNodeId: null
+      })
     },
 
     openLayout: async (path) => {
@@ -171,7 +177,11 @@ export const useAppStore = create<AppState>((set, get) => {
       if (!next) {
         // Closing the last panel leaves an empty one rather than a blank screen.
         const panelId = uid('panel')
-        mutate((d) => ({ ...d, root: makePanelNode(panelId), panels: { [panelId]: makePanelData() } }))
+        mutate((d) => ({
+          ...d,
+          root: makePanelNode(panelId),
+          panels: { [panelId]: makePanelData() }
+        }))
       } else {
         mutateTree(() => next)
       }
@@ -233,7 +243,10 @@ export const useAppStore = create<AppState>((set, get) => {
         if (!panel) return doc
         return {
           ...doc,
-          panels: { ...doc.panels, [panelId]: { ...panel, settings: { ...panel.settings, ...patch } } }
+          panels: {
+            ...doc.panels,
+            [panelId]: { ...panel, settings: { ...panel.settings, ...patch } }
+          }
         }
       }),
 
