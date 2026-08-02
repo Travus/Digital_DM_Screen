@@ -21,6 +21,11 @@ on:
       - 'build/**'
       - 'package.json'
       - 'package-lock.json'
+      # The build runs *inside* these. A changed base image or compose service
+      # can break packaging without touching a single file electron-builder
+      # reads, so they belong here as much as the config does.
+      - 'docker-compose.yml'
+      - 'docker/**'
       - '.github/workflows/**'
 
 permissions:
