@@ -156,17 +156,55 @@ finished installers land in the working tree.
 ### Other commands
 
 ```sh
-docker compose run --rm build npm run typecheck  # tsc over main, preload and renderer
+docker compose run --rm build npm run check      # format + lint + typecheck, the pre-push command
 docker compose run --rm build npm run build      # bundles only, no packaging
+docker compose run --rm build npm run format     # rewrite files to match Prettier
 docker compose run --rm smoke                    # headless render check → release/smoke/*.png
 
-docker compose run --rm build node scripts/audit-deps.mjs           # supply-chain check
-docker compose run --rm build sh -c 'npm audit --json | node scripts/audit-summary.mjs'
+docker compose run --rm build node scripts/audit-deps.mjs           # supply-chain gate
+docker compose run --rm build sh -c 'npm audit --json > audit.json || true; node scripts/audit-summary.mjs < audit.json'
 ```
 
-`audit-deps.mjs` reports the resolved tree, flags anything not served from
-registry.npmjs.org or missing an integrity hash, and lists every package that
-runs an install script — worth a glance after any dependency change.
+`audit-deps.mjs` **exits non-zero** if anything resolves outside
+registry.npmjs.org, if a package is missing an integrity hash, or if the set of
+packages allowed to run install scripts has changed. That last one is the point:
+a dependency bump that quietly grows a `postinstall` is what a supply-chain
+attack looks like, and it never shows up in a diff of `package.json`.
+
+The audit report is written to a file first rather than piped, because `npm
+audit` exits non-zero on any finding and a pipe would report only the formatter's
+exit code. The gate is `npm audit --audit-level=critical`, run separately.
+
+## CI
+
+Everything above runs on GitHub Actions too, on every pull request and every
+push to `main`:
+
+| Workflow | Runs | Does |
+|---|---|---|
+| `ci.yml` | every PR and push | `check` (lint, format, typecheck) and `smoke`, which uploads its screenshots as an artifact so they can be reviewed on the PR |
+| `package.yml` | pushes to `main`, and PRs touching packaging inputs | full `dist:all`, and fails unless all four installers appear |
+| `audit.yml` | weekly, on demand, and PRs touching the lockfile | the supply-chain gate above |
+| `release.yml` | pushing a `v*.*.*` tag | builds and opens a **draft** release with the installers attached |
+
+`check` runs directly on the runner; everything that produces an artifact a user
+installs runs in the same `builder:wine` image used locally.
+
+### Cutting a release
+
+```sh
+docker compose run --rm -T build npm version minor --no-git-tag-version
+git commit -am "Release v0.3.0"      # then open a PR, review, merge
+git tag -a v0.3.0 -m "v0.3.0" && git push origin v0.3.0
+```
+
+CI checks the tag against `package.json` before building anything, runs the smoke
+check, builds the installers and opens a draft release with auto-generated notes.
+Read it, edit the notes, publish. Nothing is public until you press the button.
+
+The tag is applied *after* the merge rather than by `npm version` itself: its own
+tag would point at the pre-merge commit, which a squash merge leaves off `main`
+entirely.
 
 `smoke` launches the built app on a virtual display, screenshots it, and fails on
 a renderer error — useful for checking the UI still draws without a desktop

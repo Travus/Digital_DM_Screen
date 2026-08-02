@@ -18,10 +18,14 @@ Docker. The host has no Node install and the user wants it kept that way.
 
 ```sh
 docker compose run --rm build npm install       # after dependency changes
+docker compose run --rm build npm run check     # format + lint + typecheck
 docker compose run --rm build npm run build     # typecheck + bundle
 docker compose run --rm build npm run dist:all  # installers -> ./release
 docker compose run --rm smoke                   # headless render check
 ```
+
+The rule is about *this* machine, not about ephemeral CI runners — see the CI
+section below for where it does and does not carry over.
 
 `node_modules` lives in a named volume, so Linux-only binaries never touch the
 Windows checkout. `release/` is a bind mount so installers land in the tree.
@@ -236,6 +240,48 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 
 Picker cards carry `data-module-id`, so `.picker-card[data-module-id="timers"]`
 is a stable way into any module from an empty layout.
+
+## CI
+
+Four workflows in `.github/`. Traps found while building them, all paid for once:
+
+**`docker compose run` needs `-T` in CI.** The `build` service sets
+`stdin_open`/`tty`, so without it every invocation dies on a missing TTY.
+
+**The hook rules in `eslint.config.mjs` are named one by one on purpose.**
+`eslint-plugin-react-hooks` also ships the React Compiler rules — `refs`,
+`purity`, `set-state-in-render` and ~25 more — and which preset carries them has
+moved between releases. `react-hooks/refs` forbids writing a ref during render,
+which is exactly what `PanelFrame` does deliberately. A preset must not be able
+to switch that on during a routine upgrade.
+
+**Prettier does not touch `*.md`.** It trims inside inline code spans, which
+silently rewrote this file's own `` ` · ` `` separator convention to `` `·` `` —
+in the line documenting that separator. It also restyles `*emphasis*` across the
+README for nothing. The three markdown files here are hand-wrapped and fine.
+
+**The audit report writes to a file rather than piping.** `npm audit` exits
+non-zero on any finding, and in a pipe the shell reports only the last command's
+status, so `npm audit --json | node scripts/audit-summary.mjs` silently swallowed
+it. The summary script is a formatter; the gate is a separate
+`npm audit --audit-level=critical` step. `critical` and not `high` because
+nothing here has a `dependencies` block — a dev-server advisory cannot reach a
+user, and a gate that cries wolf is decoration.
+
+**`package.yml` must never become a required status check.** It is
+`paths`-filtered, and a skipped check never reports, which would block every
+unrelated PR permanently.
+
+**The release tag goes on after the merge**, not via `npm version`. Its own tag
+points at the pre-merge commit, which a squash merge leaves off `main` — cutting
+the release from something no branch contains.
+
+**CI runners are not "the host".** The Docker rule above exists because this
+machine has no Node and should keep it that way; a runner is destroyed when the
+job ends. What does carry over is that anything a user *installs* comes out of
+`builder:wine`, because that is the only place the Wine cross-build and the
+Linux icon set are known to work. So lint and typecheck run natively in CI;
+smoke and packaging do not.
 
 ## Style
 
