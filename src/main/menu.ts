@@ -56,11 +56,24 @@ export function buildMenu(
 
   const srdOn = SRD_DATASETS.every((dataset) => data.enabled[dataset])
 
+  // Layouts are often all called "Untitled layout", so the name alone doesn't
+  // identify one. The path used to be a sublabel, but those get cut to about the
+  // widest label in the submenu — and since every layout shares a path prefix,
+  // all that survived was "D:\Users\Docum…" on every row. The filename is the
+  // part that actually differs, so it goes in the label, and only where there is
+  // something to disambiguate.
+  const nameCounts = new Map<string, number>()
+  for (const entry of recents) {
+    nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1)
+  }
+
   const recentItems: MenuItemConstructorOptions[] = recents.length
     ? [
         ...recents.map((entry) => ({
-          label: entry.name,
-          sublabel: entry.path,
+          label:
+            (nameCounts.get(entry.name) ?? 0) > 1
+              ? `${entry.name} — ${basename(entry.path)}`
+              : entry.name,
           click: () => dispatch('layout:openRecent', entry.path)
         })),
         { type: 'separator' as const },
