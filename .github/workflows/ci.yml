@@ -31,11 +31,11 @@ jobs:
     name: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Matches the node in electronuserland/builder:wine, so the two lanes
           # cannot disagree about what compiles.
@@ -67,11 +67,11 @@ jobs:
         -e ELECTRON_CACHE=/project/.cache/electron
         -e ELECTRON_BUILDER_CACHE=/project/.cache/electron-builder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .cache
           # The lockfile hash changes exactly when the Electron version does,
@@ -96,7 +96,7 @@ jobs:
       # makes that possible on someone else's machine.
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-screenshots
           path: release/smoke/*.png

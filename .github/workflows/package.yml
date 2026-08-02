@@ -44,11 +44,11 @@ jobs:
         -e ELECTRON_CACHE=/project/.cache/electron
         -e ELECTRON_BUILDER_CACHE=/project/.cache/electron-builder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .cache
           key: dmscreen-${{ hashFiles('package-lock.json') }}

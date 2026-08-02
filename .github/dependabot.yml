@@ -1,6 +1,18 @@
 version: 2
 
 updates:
+  # Nothing in the repo pins or references an action version, so a stale one
+  # never fails a build — it surfaces as a deprecation warning in a log nobody
+  # opens. Monthly is plenty: actions move slowly, and a stale one is a warning
+  # long before it is an outage.
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
   - package-ecosystem: npm
     directory: '/'
     schedule:
