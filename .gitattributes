@@ -1,0 +1,8 @@
+# Prettier is configured with endOfLine: "lf" and the checkout is on Windows.
+# Without this, git could hand it CRLF and every file would fail format:check.
+* text=auto eol=lf
+
+# Binary, so git must never try to normalise line endings in them.
+*.png binary
+*.ico binary
+*.icns binary

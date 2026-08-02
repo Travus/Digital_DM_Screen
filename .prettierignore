@@ -1,0 +1,21 @@
+node_modules
+out
+release
+.cache
+*.tsbuildinfo
+
+# Local tool settings, not ours to format.
+.claude
+
+# Prose, hand-wrapped, and Prettier actively damages it: it trims inside inline
+# code spans, which rewrote CLAUDE.md's own `· ` separator convention into `·`
+# — in the line documenting that separator. It also restyles *emphasis* to
+# _emphasis_ across README for no gain. Three files, all already tidy.
+*.md
+
+
+# npm rewrites this on every install, so formatting it just creates churn.
+package-lock.json
+
+# Generated from icon.svg by scripts/gen-icons.sh.
+build/icons
