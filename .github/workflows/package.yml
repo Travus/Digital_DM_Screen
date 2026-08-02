@@ -1,11 +1,17 @@
 # Proves the installers still build. Separate from ci.yml purely so the triggers
 # can differ: only PRs that touch something packaging actually reads.
 #
-# Deliberately not run on push to main. The ruleset requires a PR, so anything
-# reaching main was built here minutes earlier, and the thing that actually stops
-# broken packaging shipping is release.yml — it rebuilds from the tag, runs smoke,
-# and gates on all four installers existing, into a *draft*. A break cannot reach
-# anyone, so re-building every merge bought only "find out sooner".
+# The push:main half is not about re-testing — the ruleset requires a PR, so
+# anything reaching main was built here minutes earlier. It exists to populate
+# the cache. Actions caches are readable only from their own ref or the default
+# branch, so a cache saved by a PR run lives on refs/pull/N/merge and no other
+# run can ever see it. Without a main-branch run there is no shared cache, and
+# every packaging job re-downloads ~100MB of Electron dists — including the
+# release build, which is where that hurts most.
+#
+# Both halves carry the same paths filter, so merges that touch nothing
+# packaging-related still cost nothing, and the cache is refreshed exactly when
+# its key (the lockfile hash) could have changed.
 #
 # A cheaper `dist:dir` on every PR was considered and rejected — it costs an
 # Electron download to prove only what `build` and `smoke` already prove, and
@@ -16,7 +22,19 @@
 # check never reports, which would block every unrelated PR forever.
 name: Package
 
+# Kept in step by hand: GitHub's workflow parser does not support YAML anchors,
+# so the two lists cannot be shared.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'electron-builder.yml'
+      - 'build/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'docker-compose.yml'
+      - 'docker/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
     paths:
