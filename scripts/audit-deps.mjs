@@ -1,15 +1,33 @@
 /**
- * Supply-chain sanity check over package-lock.json.
+ * Supply-chain gate over package-lock.json.
  *
- *   docker compose run --rm build node scripts/audit-deps.mjs
+ *   docker compose run --rm -T build node scripts/audit-deps.mjs
  *
- * Reports the full resolved tree, flags anything not served from the public npm
- * registry, and lists every package that runs an install script — the two things
- * worth eyeballing by hand after a dependency change.
+ * Reports the resolved tree, and **exits non-zero** on the three things that
+ * should never change quietly: a package served from somewhere other than the
+ * public registry, a package with no integrity hash, and any movement in the set
+ * of packages allowed to run install scripts.
+ *
+ * That last one is the point of the whole script. A dependency bump that quietly
+ * grows a `postinstall` is what an npm supply-chain attack actually looks like,
+ * and it is invisible in a diff of package.json.
+ *
+ * Everything is read from the lockfile rather than from node_modules. The
+ * earlier version stat'd `node_modules/<pkg>/package.json` and skipped anything
+ * missing, so running it without an install printed a clean bill of health for a
+ * tree it had never looked at.
  */
 import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+
+/**
+ * Packages permitted to run install scripts, with why. Adding to this list is a
+ * deliberate act — read the script before you do.
+ */
+const INSTALL_SCRIPT_ALLOWLIST = new Set([
+  'electron-winstaller', // unpacks the Windows installer toolchain
+  'esbuild', // fetches its platform binary
+  'fsevents' // macOS file watcher; optional, never installed on Linux
+])
 
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
 
@@ -22,7 +40,8 @@ const entries = Object.entries(lock.packages)
     resolved: meta.resolved,
     dev: meta.dev === true,
     optional: meta.optional === true,
-    hasIntegrity: Boolean(meta.integrity)
+    hasIntegrity: Boolean(meta.integrity),
+    hasInstallScript: meta.hasInstallScript === true
   }))
 
 const unique = new Map()
@@ -30,34 +49,65 @@ for (const entry of entries) {
   if (!unique.has(entry.name)) unique.set(entry.name, entry)
 }
 
+const byName = (a, b) => a.name.localeCompare(b.name)
+const problems = []
+
 console.log(`packages in tree: ${entries.length} (${unique.size} distinct names)`)
 console.log(`production (shipped) dependencies: ${entries.filter((e) => !e.dev).length}`)
 
+// Should always be zero. Anything here is either a git/tarball dependency
+// someone added on purpose, or a lockfile that has been tampered with.
 const offRegistry = entries.filter(
   (entry) => entry.resolved && !entry.resolved.startsWith('https://registry.npmjs.org/')
 )
 console.log(`\n--- resolved outside registry.npmjs.org: ${offRegistry.length}`)
 for (const entry of offRegistry)
   console.log(`  ${entry.name}@${entry.version} -> ${entry.resolved}`)
+if (offRegistry.length) problems.push(`${offRegistry.length} package(s) resolved off-registry`)
 
+// Also always zero: without an integrity hash npm cannot tell whether it got
+// the bytes it asked for.
 const noIntegrity = entries.filter((entry) => entry.resolved && !entry.hasIntegrity)
 console.log(`\n--- missing integrity hash: ${noIntegrity.length}`)
 for (const entry of noIntegrity) console.log(`  ${entry.name}@${entry.version}`)
+if (noIntegrity.length) problems.push(`${noIntegrity.length} package(s) missing an integrity hash`)
 
-console.log('\n--- packages with install scripts')
-const lifecycle = ['preinstall', 'install', 'postinstall']
-for (const entry of [...unique.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-  const manifest = join(entry.path, 'package.json')
-  if (!existsSync(manifest)) continue
-  const scripts = JSON.parse(await readFile(manifest, 'utf8')).scripts ?? {}
-  const hits = lifecycle.filter((name) => scripts[name])
-  if (hits.length) {
-    console.log(`  ${entry.name}@${entry.version}`)
-    for (const hit of hits) console.log(`      ${hit}: ${scripts[hit]}`)
-  }
+const installScripts = entries.filter((entry) => entry.hasInstallScript).sort(byName)
+console.log(`\n--- packages with install scripts: ${installScripts.length}`)
+for (const entry of installScripts) {
+  const known = INSTALL_SCRIPT_ALLOWLIST.has(entry.name)
+  console.log(
+    `  ${known ? ' ' : '!'} ${entry.path}@${entry.version}${entry.optional ? ' (optional)' : ''}`
+  )
+}
+
+const unexpected = installScripts.filter((entry) => !INSTALL_SCRIPT_ALLOWLIST.has(entry.name))
+if (unexpected.length) {
+  problems.push(
+    `${unexpected.length} package(s) run install scripts without being allowlisted: ` +
+      // Paths, not names: the same package can appear at several tree positions,
+      // and "esbuild, esbuild" tells you nothing about which one moved.
+      unexpected.map((entry) => entry.path).join(', ')
+  )
+}
+
+// A package dropping its install script is not a risk, but it does mean the
+// allowlist is now describing something that no longer exists.
+const stale = [...INSTALL_SCRIPT_ALLOWLIST].filter(
+  (name) => !installScripts.some((entry) => entry.name === name)
+)
+if (stale.length) {
+  console.log(`\nnote: allowlisted but no longer running install scripts: ${stale.join(', ')}`)
 }
 
 console.log('\n--- full package list')
-for (const entry of [...unique.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+for (const entry of [...unique.values()].sort(byName)) {
   console.log(`  ${entry.name}@${entry.version}${entry.optional ? ' (optional)' : ''}`)
 }
+
+if (problems.length) {
+  console.error(`\nFAILED:`)
+  for (const problem of problems) console.error(`  - ${problem}`)
+  process.exit(1)
+}
+console.log('\nOK: nothing off-registry, nothing unhashed, install scripts unchanged.')
