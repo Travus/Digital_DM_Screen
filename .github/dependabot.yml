@@ -13,6 +13,21 @@ updates:
       actions:
         patterns: ['*']
 
+  # The toolchain image is pinned, and a pin nobody watches rots the same way the
+  # actions did. These are two separate ecosystems: `docker` reads Dockerfiles
+  # (matched on the filename containing "dockerfile", so smoke.Dockerfile counts),
+  # `docker-compose` reads the `image:` keys in compose files. One would miss half
+  # the pin and let the two drift apart.
+  - package-ecosystem: docker
+    directory: '/docker'
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker-compose
+    directory: '/'
+    schedule:
+      interval: monthly
+
   - package-ecosystem: npm
     directory: '/'
     schedule:

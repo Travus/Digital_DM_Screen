@@ -10,7 +10,11 @@
 services:
   build:
     # Includes Node + Wine, which electron-builder uses to produce the NSIS installer.
-    image: electronuserland/builder:wine
+    # Pinned rather than floating on :wine. CI pins setup-node to the node major
+    # this image ships, so an upstream bump would silently split the two lanes and
+    # surface as a confusing compile error rather than a version mismatch.
+    # Keep in step with docker/smoke.Dockerfile, which builds on top of it.
+    image: electronuserland/builder:24-wine-05.26
     working_dir: /project
     volumes:
       - .:/project
