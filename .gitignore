@@ -27,6 +27,8 @@ lerna-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea/
+# Local Claude Code settings — per-machine tool permissions, not project config.
+.claude/
 *.swp
 *.swo
 *~
