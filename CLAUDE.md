@@ -111,6 +111,31 @@ first, then `Categories` is overwritten unconditionally from `linux.category`,
 so anything set there is silently discarded. `linux.category` is the only knob;
 to ship more than one category, put them all in it.
 
+**macOS is deliberately not supported.** It was evaluated and dropped; don't add
+a `mac` target back without re-reading this. Measured against electron-builder
+26.15.3 in the `builder:wine` container, not assumed:
+
+- `--mac dmg` fails outright — `sips process failed ENOENT`, a macOS-only image
+  tool. At least that one is loud.
+- `--mac zip` *appears to succeed* and is the trap. The `.app` on disk is fine,
+  but the zip step dereferences its symlinks: the 203 MB `Electron Framework`
+  binary lands three times over — framework root, `Versions/A`, `Versions/Current`
+  — giving a 351 MB archive whose framework bundle is structurally invalid.
+
+So a macOS artifact has to be built on macOS, which means CI on a `macos-latest`
+runner. That part is cheap. What killed it is signing: an unsigned arm64 binary
+will not execute *at all* on Apple Silicon, and the free workaround — ad-hoc
+signing — leaves Gatekeeper unable to verify a downloaded copy, so macOS calls
+the app "damaged" and the user has to run `xattr -dr com.apple.quarantine` to
+open it. Managed work Macs refuse it regardless. Shipping that costs $99/yr for
+an Apple Developer ID plus notarization, which is not worth it for an audience of
+one DM and a few friends.
+
+If it ever is worth it, the code side is small: macOS needs an Edit menu or
+`Cmd+C/V/X/A/Z` are dead in every text field, the first submenu becomes the app
+menu whatever you label it, and `window-all-closed` being a no-op on darwin means
+the close handler's `preventDefault()` would strand the app windowless on Cmd+Q.
+
 ## Data packs
 
 Shipped reference data is **SRD only** — that is what makes the repo licensable
