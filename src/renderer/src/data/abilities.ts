@@ -14,7 +14,8 @@
  *
  * `meta` always leads with the source, then any further qualifiers, separated by
  * " · " and never parenthesised — "SRD · Cleric · Life". Packs follow the same
- * convention but cite the book an option *first* appeared in, not a reprint.
+ * shape but name a real book, preferring a core book or core expansion over the
+ * setting book an option happened to debut in. See CLAUDE.md.
  */
 
 import type { AbilityGroup, ReferenceEntry } from '../../../shared/types'

@@ -164,14 +164,28 @@ fabricated improvised-damage example, a missing clause in Dodge).
 - `https://www.dnd5eapi.co/api/2014/...` works and is the easiest check —
   `conditions`, `rule-sections`, `spells`. SRD content only.
 - `2014.5e.tools` returns 403 to direct fetches.
-- Non-SRD content (TCE/XGE/MOT maneuvers, domains, oaths) needs a web search.
+- Non-SRD content (TCE/XGE maneuvers, domains, oaths) needs a web search — and
+  so does "was this reprinted anywhere", which is what decides its label.
 
 **Source labelling convention:** `meta` always leads with the book, then any
 further qualifiers, separated by ` · `, never parenthesised —
-`XGE · Cleric · Forge`, `TCE · 2 sorcery points`, `DMG · Humanoids only`. Cite
-where an option *first* appeared, not a reprint (Oath of Glory is MOT, not TCE;
-Order domain is GGR, not TCE). Use short codes: PHB, DMG, XGE, TCE, MOT, GGR,
-SCAG, GOS.
+`XGE · Cleric · Forge`, `TCE · 2 sorcery points`, `DMG · Humanoids only`.
+Content that ships here is SRD only, so it reads `SRD`; the rule below is for
+data packs.
+
+**Cite the book you are most likely to own, not the one an option debuted in.**
+In order: the earliest **core book or core expansion** it appears in — PHB, MM,
+DMG, XGE, MTF, TCE, VGM — then MPMM, then wherever it actually appeared (GoS,
+SCAG, GGR, MOT, …). So Oath of Glory is `TCE`, not MOT, and the Order domain is
+`TCE`, not GGR: both were reprinted into a core expansion. Oath of the Crown
+stays `SCAG` because it never was.
+
+This reverses an earlier convention that cited first appearance. The point of
+the change is that a setting book you do not own is a worse pointer than an
+expansion you do. Mind the casing on `GoS`.
+
+Only PHB, DMG, XGE and TCE can ever match player options: MM, MTF, VGM and MPMM
+are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 
 ## The smoke harness
 
