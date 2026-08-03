@@ -22,8 +22,11 @@
     "build": "npm run typecheck && electron-vite build",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac dmg --arm64",
+    "dist:mac:adhoc": "npm run build && electron-builder --mac dmg --arm64 -c.mac.identity=- -c.mac.entitlements=build/entitlements.mac.adhoc.plist -c.mac.entitlementsInherit=build/entitlements.mac.adhoc.plist",
     "dist:all": "npm run build && electron-builder --linux --win",
-    "dist:dir": "npm run build && electron-builder --dir"
+    "dist:dir": "npm run build && electron-builder --dir",
+    "smoke:mac": "node scripts/smoke-mac.mjs"
   },
   "//pinned": {
     "vite": "Held at 7.x — electron-vite 5 peers on vite ^5 || ^6 || ^7.",

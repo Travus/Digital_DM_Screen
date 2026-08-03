@@ -33,6 +33,7 @@ export function buildMenu(
   dataActions: DataActions
 ): void {
   const send = (action: MenuAction) => () => dispatch(action)
+  const isMac = process.platform === 'darwin'
 
   // No sublabels anywhere in this menu: Windows renders them but sizes the menu
   // off the label alone, so anything longer than the label is cut mid-word. The
@@ -81,9 +82,48 @@ export function buildMenu(
       ]
     : [{ label: 'No recent layouts', enabled: false }]
 
-  const template: MenuItemConstructorOptions[] = [
+  const macAppMenu: MenuItemConstructorOptions[] = isMac
+    ? [
+        {
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' }
+          ]
+        }
+      ]
+    : []
+
+  const layoutQuitItems: MenuItemConstructorOptions[] = isMac
+    ? []
+    : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]
+  const macPasteItems: MenuItemConstructorOptions[] = isMac
+    ? [{ role: 'pasteAndMatchStyle' }]
+    : []
+  const macWindowMenu: MenuItemConstructorOptions[] = isMac ? [{ role: 'windowMenu' }] : []
+  const helpMenu: MenuItemConstructorOptions[] = [
     {
-      label: '&Layout',
+      label: isMac ? 'Help' : '&Help',
+      submenu: [
+        {
+          label: isMac ? 'About, Shortcuts & License…' : `About ${app.getName()}`,
+          click: send('app:about')
+        }
+      ]
+    }
+  ]
+
+  const template: MenuItemConstructorOptions[] = [
+    ...macAppMenu,
+    {
+      label: isMac ? 'Layout' : '&Layout',
       submenu: [
         { label: 'New Layout', accelerator: 'CmdOrCtrl+N', click: send('layout:new') },
         { label: 'Open Layout…', accelerator: 'CmdOrCtrl+O', click: send('layout:open') },
@@ -97,12 +137,26 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+L',
           click: send('layout:toggleLock')
         },
-        { type: 'separator' },
-        { role: 'quit', label: 'Quit' }
+        ...layoutQuitItems
       ]
     },
     {
-      label: '&Panel',
+      label: isMac ? 'Edit' : '&Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...macPasteItems,
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: isMac ? 'Panel' : '&Panel',
       submenu: [
         { label: 'Split Right', accelerator: 'CmdOrCtrl+\\', click: send('panel:splitRight') },
         { label: 'Split Down', accelerator: 'CmdOrCtrl+Shift+\\', click: send('panel:splitDown') },
@@ -117,7 +171,7 @@ export function buildMenu(
       ]
     },
     {
-      label: '&Data',
+      label: isMac ? 'Data' : '&Data',
       submenu: [
         {
           label: 'Import Data Pack…',
@@ -143,7 +197,7 @@ export function buildMenu(
       ]
     },
     {
-      label: '&View',
+      label: isMac ? 'View' : '&View',
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
@@ -156,10 +210,8 @@ export function buildMenu(
         { role: 'togglefullscreen', label: 'Window Fullscreen' }
       ]
     },
-    {
-      label: '&Help',
-      submenu: [{ label: `About ${app.getName()}`, click: send('app:about') }]
-    }
+    ...macWindowMenu,
+    ...helpMenu
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

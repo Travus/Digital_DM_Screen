@@ -5,6 +5,7 @@ import { RecentsPanel } from './layout/RecentsPanel'
 import { TopBar } from './layout/TopBar'
 import { useDataStore } from './state/dataStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
+import { primaryModifier } from './lib/platform'
 
 /** How long the layout must sit still before we stash it in userData. */
 const SESSION_DEBOUNCE_MS = 700
@@ -167,19 +168,19 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
         <h4 className="section-title">Shortcuts</h4>
         <dl className="deflist">
           <div className="defrow">
-            <dt>Ctrl+\ / Ctrl+Shift+\</dt>
+            <dt>{primaryModifier}+\ / {primaryModifier}+Shift+\</dt>
             <dd>Split the active panel right / down</dd>
           </div>
           <div className="defrow">
-            <dt>Ctrl+Enter</dt>
+            <dt>{primaryModifier}+Enter</dt>
             <dd>Fullscreen the active panel — Esc returns</dd>
           </div>
           <div className="defrow">
-            <dt>Ctrl+W</dt>
+            <dt>{primaryModifier}+W</dt>
             <dd>Close the active panel</dd>
           </div>
           <div className="defrow">
-            <dt>Ctrl+S / Ctrl+O / Ctrl+N</dt>
+            <dt>{primaryModifier}+S / {primaryModifier}+O / {primaryModifier}+N</dt>
             <dd>Save, open, new layout</dd>
           </div>
           <div className="defrow">
@@ -187,7 +188,7 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
             <dd>Rename the layout</dd>
           </div>
           <div className="defrow">
-            <dt>Ctrl+L</dt>
+            <dt>{primaryModifier}+L</dt>
             <dd>Lock or unlock the layout</dd>
           </div>
           <div className="defrow">

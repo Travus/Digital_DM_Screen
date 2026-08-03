@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../state/store'
+import { primaryModifier } from '../lib/platform'
 
 export function TopBar(): JSX.Element {
   const name = useAppStore((state) => state.doc.name)
@@ -65,16 +66,28 @@ export function TopBar(): JSX.Element {
       <span className="spacer" />
 
       <div className="topbar-actions">
-        <button className="btn" onClick={newLayout} title="New layout (Ctrl+N)">
+        <button className="btn" onClick={newLayout} title={`New layout (${primaryModifier}+N)`}>
           New
         </button>
-        <button className="btn" onClick={() => void openLayout()} title="Open layout (Ctrl+O)">
+        <button
+          className="btn"
+          onClick={() => void openLayout()}
+          title={`Open layout (${primaryModifier}+O)`}
+        >
           Open
         </button>
-        <button className="btn primary" onClick={() => void save()} title="Save layout (Ctrl+S)">
+        <button
+          className="btn primary"
+          onClick={() => void save()}
+          title={`Save layout (${primaryModifier}+S)`}
+        >
           Save
         </button>
-        <button className="btn" onClick={() => void saveAs()} title="Save as… (Ctrl+Shift+S)">
+        <button
+          className="btn"
+          onClick={() => void saveAs()}
+          title={`Save as… (${primaryModifier}+Shift+S)`}
+        >
           Save As
         </button>
 

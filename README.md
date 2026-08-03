@@ -7,25 +7,27 @@ panes as you want, drop a module into each one, and save the whole arrangement �
 panel settings and contents included — as a layout file you can reopen or hand to
 a friend.
 
-Runs on Windows and Linux. Built with Electron, React and TypeScript; the entire
-toolchain lives in Docker, so nothing needs installing on the host.
+Runs on Windows, Linux and Apple-silicon Macs. Built with Electron, React and
+TypeScript. Windows and Linux builds use Docker; the Mac app is built on a
+native Apple-silicon GitHub Actions runner, so nothing needs installing on the
+host.
 
 ![The starter layout](docs/screenshot.png)
 
 ## Using it
 
 **Tiling.** Every panel's `⋯` menu has *Split right* and *Split down*
-(`Ctrl+\` and `Ctrl+Shift+\`). Splits nest freely, so the classic "one tall pane
+(`Cmd/Ctrl+\` and `Cmd/Ctrl+Shift+\`). Splits nest freely, so the classic "one tall pane
 on the left, two stacked on the right" is two splits. Drag the bar between panes
 to resize; double-click it to even that row or column out. Closing a panel hands
 its space back to its neighbours.
 
 **Fullscreen.** The `⤢` button in any panel header blows it up to fill the
 window; `Esc` or the floating button at the bottom brings the tiling back.
-`Ctrl+Enter` does the same from the keyboard.
+`Cmd/Ctrl+Enter` does the same from the keyboard.
 
 **Locking.** Once a screen is arranged the way you want it, hit the padlock in
-the top bar (or `Ctrl+L`). Panes can no longer be resized, split or closed, and
+the top bar (or `Cmd/Ctrl+L`). Panes can no longer be resized, split or closed, and
 the drag handles between them disappear so there is nothing to catch by
 accident mid-session. Everything *inside* the panels carries on as normal —
 including dragging party tracker columns. The lock is saved with the layout.
@@ -88,7 +90,7 @@ The reference modules ship **SRD content only**, which is what lets the app be
 licensed honestly. The SRD carries one archetype per class, so Player Abilities
 has Metamagic and Channel Divinity and nothing else out of the box.
 
-Anything more loads at runtime. **Data → Import Data Pack…** (`Ctrl+I`) takes a
+Anything more loads at runtime. **Data → Import Data Pack…** (`Cmd/Ctrl+I`) takes a
 `.dmpack.json` holding conditions, rules, ability groups and diseases:
 
 ```json
@@ -123,17 +125,18 @@ Worth knowing:
 
 | Key | Action |
 |---|---|
-| `Ctrl+\` / `Ctrl+Shift+\` | Split the active panel right / down |
-| `Ctrl+Enter` / `Esc` | Fullscreen the active panel / return |
-| `Ctrl+W` | Close the active panel |
-| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | New / open / save / save as |
+| `Cmd/Ctrl+\` / `Cmd/Ctrl+Shift+\` | Split the active panel right / down |
+| `Cmd/Ctrl+Enter` / `Esc` | Fullscreen the active panel / return |
+| `Cmd/Ctrl+W` | Close the active panel |
+| `Cmd/Ctrl+N` / `Cmd/Ctrl+O` / `Cmd/Ctrl+S` / `Cmd/Ctrl+Shift+S` | New / open / save / save as |
 | `F2` | Rename the layout |
-| `Ctrl+L` | Lock or unlock the layout |
-| `Ctrl+I` | Import a data pack |
+| `Cmd/Ctrl+L` | Lock or unlock the layout |
+| `Cmd/Ctrl+I` | Import a data pack |
 
 ## Building
 
-Everything runs through Docker Compose — no Node, no Electron on the host.
+Windows and Linux builds run through Docker Compose — no Node or Electron on the
+host.
 
 ```sh
 docker compose run --rm build npm install       # first time, and after dependency changes
@@ -150,6 +153,31 @@ docker compose run --rm build npm run dist:all  # Windows + Linux installers →
 Use `dist:win` or `dist:linux` for one platform. Windows targets are cross-built
 from Linux through Wine, which is why the compose service uses the
 `electronuserland/builder:wine` image.
+
+### macOS (Apple Silicon)
+
+The Mac app is built on a native arm64 macOS runner. Do not add it to
+`dist:all`: Linux can create an `.app` directory that looks plausible, but it
+cannot create a trustworthy Mac bundle or disk image.
+
+Pull requests that touch packaging inputs produce a
+`macos-arm64-installer` Actions artifact. Tagged releases attach
+`Digital DM Screen-<version>-arm64.dmg` alongside the Windows and Linux files.
+Download the artifact, open the DMG, and drag the app to Applications.
+
+The current personal build is ad-hoc signed because the project has no paid
+Apple Developer ID. Gatekeeper therefore cannot verify a downloaded copy. After
+copying it to Applications, clear quarantine once and open it:
+
+```sh
+xattr -dr com.apple.quarantine '/Applications/Digital DM Screen.app'
+open -a 'Digital DM Screen'
+```
+
+This exception is deliberately confined to `dist:mac:adhoc`. `dist:mac` keeps
+electron-builder's normal identity discovery, so adding Developer ID signing
+and notarization later does not require weakening or replacing the production
+configuration.
 
 `node_modules` lives in a named volume rather than on the host, so Linux-only
 binaries never touch your Windows checkout. `release/` is a bind mount, so the
@@ -185,12 +213,13 @@ push to `main`:
 | Workflow | Runs | Does |
 |---|---|---|
 | `ci.yml` | every PR and push | `check` (lint, format, typecheck) and `smoke`, which uploads its screenshots as an artifact so they can be reviewed on the PR |
-| `package.yml` | pushes to `main`, and PRs touching packaging inputs | full `dist:all`, and fails unless all four installers appear |
+| `package.yml` | pushes to `main`, and PRs touching packaging inputs | Windows/Linux `dist:all` plus a native arm64 Mac build; launches the packaged Mac app and checks all five installers |
 | `audit.yml` | weekly, on demand, and PRs touching the lockfile | the supply-chain gate above |
 | `release.yml` | pushing a `v*.*.*` tag | builds and opens a **draft** release with the installers attached |
 
-`check` runs directly on the runner; everything that produces an artifact a user
-installs runs in the same `builder:wine` image used locally.
+`check` runs directly on the runner. Windows and Linux installers use the same
+`builder:wine` image as local builds; the Mac installer uses the native runner
+required for a valid app bundle and DMG.
 
 ### Cutting a release
 

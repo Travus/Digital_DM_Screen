@@ -31,6 +31,8 @@ let documentDirty = false
 let documentName = 'Untitled layout'
 /** Set once the user has confirmed a close, so the second close event passes. */
 let forceClose = false
+/** Set by before-quit so a confirmed close resumes Cmd+Q instead of only hiding its window. */
+let quitRequested = false
 
 function fileNameFor(name: string): string {
   const safe = name.replace(/[\\/:*?"<>|]/g, '-').trim()
@@ -183,6 +185,10 @@ function installSmokeHook(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
+  // macOS keeps the process alive after its last window closes. A newly opened
+  // window must get its own close confirmation rather than inheriting the
+  // previous window's one-shot bypass.
+  forceClose = false
   mainWindow = new BrowserWindow({
     width: 1500,
     height: 950,
@@ -218,29 +224,48 @@ function createWindow(): void {
   mainWindow.on('close', (event) => {
     if (forceClose || !documentDirty) return
     event.preventDefault()
+    const closingApp = quitRequested || process.platform !== 'darwin'
     const choice = dialog.showMessageBoxSync(mainWindow!, {
       type: 'warning',
-      buttons: ['Save and quit', 'Quit anyway', 'Cancel'],
+      buttons: [
+        closingApp ? 'Save and quit' : 'Save and close',
+        closingApp ? 'Quit anyway' : 'Close anyway',
+        'Cancel'
+      ],
       defaultId: 0,
       cancelId: 2,
       title: 'Unsaved changes',
       message: `"${documentName}" has unsaved changes.`,
       detail:
-        'Quitting anyway is safe — the current screen is restored automatically next launch. It just will not be written to the layout file.'
+        `${closingApp ? 'Quitting' : 'Closing'} anyway is safe — the current screen is restored automatically next launch. ` +
+        'It just will not be written to the layout file.'
     })
-    if (choice === 2) return
-    if (choice === 1) {
+    if (choice === 2) {
+      quitRequested = false
+      return
+    }
+
+    const finishClose = (): void => {
       forceClose = true
-      mainWindow?.close()
+      // Calling app.quit() again is intentional: the first quit was cancelled
+      // by preventDefault(), and forceClose lets this second close pass.
+      if (quitRequested) app.quit()
+      else mainWindow?.close()
+    }
+
+    if (choice === 1) {
+      finishClose()
       return
     }
     // Ask the renderer to save, then close once it reports success. A cancelled
     // save dialog reports false and the window simply stays open.
     mainWindow?.webContents.send('menu:action', 'layout:save')
     ipcMain.once('window:saveComplete', (_event, saved: boolean) => {
-      if (!saved) return
-      forceClose = true
-      mainWindow?.close()
+      if (!saved) {
+        quitRequested = false
+        return
+      }
+      finishClose()
     })
   })
 
@@ -392,6 +417,10 @@ ipcMain.handle('app:info', () => ({
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
+  app.on('before-quit', () => {
+    quitRequested = true
+  })
+
   app.on('second-instance', () => {
     if (!mainWindow) return
     if (mainWindow.isMinimized()) mainWindow.restore()

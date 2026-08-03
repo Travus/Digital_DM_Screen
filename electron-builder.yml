@@ -26,6 +26,19 @@ linux:
   synopsis: A tiling digital DM screen for tabletop RPGs
   maintainer: contact@travus.dev
 
+mac:
+  # This Mac is Apple Silicon. Build it on a native arm64 macOS runner; macOS
+  # bundles cannot be produced correctly by the Linux/Wine container.
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  # electron-builder's portable icon tool converts the committed 1024px PNG to
+  # ICNS; do not rely on a host-generated, untracked binary asset here.
+  icon: build/icon.png
+  category: public.app-category.utilities
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
 win:
   target:
     - nsis
