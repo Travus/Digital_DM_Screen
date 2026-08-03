@@ -300,6 +300,17 @@ unrelated PR permanently.
 points at the pre-merge commit, which a squash merge leaves off `main` — cutting
 the release from something no branch contains.
 
+**A tag-triggered run uses the workflow as it was at that tag.** So a bug in
+`release.yml` cannot be fixed by pushing to `main` and re-running — the tag still
+pins the broken copy. Recovering means deleting and re-cutting the tag, which the
+tag ruleset blocks by design, so it needs the ruleset disabled for a moment.
+
+**`upload-artifact` and `download-artifact` must share a major.** They are a
+matched pair; mixing them fails every download with "Artifact download failed
+after 5 retries", which reads like a network problem and is not. Nothing catches
+it before a release, because `release.yml` only runs on a tag — a Dependabot bump
+of one half passes PR CI and breaks the next release instead.
+
 **CI runners are not "the host".** The Docker rule above exists because this
 machine has no Node and should keep it that way; a runner is destroyed when the
 job ends. What does carry over is that anything a user *installs* comes out of
