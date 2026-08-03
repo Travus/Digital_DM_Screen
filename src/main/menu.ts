@@ -87,7 +87,11 @@ export function buildMenu(
         {
           label: app.name,
           submenu: [
-            { role: 'about' },
+            // Not `role: 'about'`. The native panel shows name, version and
+            // copyright only; the in-app dialog carries the SRD attribution that
+            // CC BY 4.0 requires wherever the material is used, and the app menu
+            // is where a Mac user looks for it.
+            { label: `About ${app.getName()}`, click: send('app:about') },
             { type: 'separator' },
             { role: 'services' },
             { type: 'separator' },
