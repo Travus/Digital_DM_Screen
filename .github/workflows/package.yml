@@ -128,6 +128,11 @@ jobs:
           cache: npm
 
       - name: Install and build the ad-hoc signed app
+        # electron-builder skips all signing for fork PRs by default, even when
+        # identity "-" is explicit. This job uses no signing secrets: opting in
+        # only enables the requested local ad-hoc signature.
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
         run: |
           npm ci
           npm run dist:mac:adhoc

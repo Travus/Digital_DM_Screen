@@ -168,7 +168,9 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
         <h4 className="section-title">Shortcuts</h4>
         <dl className="deflist">
           <div className="defrow">
-            <dt>{primaryModifier}+\ / {primaryModifier}+Shift+\</dt>
+            <dt>
+              {primaryModifier}+\ / {primaryModifier}+Shift+\
+            </dt>
             <dd>Split the active panel right / down</dd>
           </div>
           <div className="defrow">
@@ -180,7 +182,9 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
             <dd>Close the active panel</dd>
           </div>
           <div className="defrow">
-            <dt>{primaryModifier}+S / {primaryModifier}+O / {primaryModifier}+N</dt>
+            <dt>
+              {primaryModifier}+S / {primaryModifier}+O / {primaryModifier}+N
+            </dt>
             <dd>Save, open, new layout</dd>
           </div>
           <div className="defrow">

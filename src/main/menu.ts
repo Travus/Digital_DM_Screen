@@ -104,9 +104,7 @@ export function buildMenu(
   const layoutQuitItems: MenuItemConstructorOptions[] = isMac
     ? []
     : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]
-  const macPasteItems: MenuItemConstructorOptions[] = isMac
-    ? [{ role: 'pasteAndMatchStyle' }]
-    : []
+  const macPasteItems: MenuItemConstructorOptions[] = isMac ? [{ role: 'pasteAndMatchStyle' }] : []
   const macWindowMenu: MenuItemConstructorOptions[] = isMac ? [{ role: 'windowMenu' }] : []
   const helpMenu: MenuItemConstructorOptions[] = [
     {
