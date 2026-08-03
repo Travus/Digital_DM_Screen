@@ -31,7 +31,7 @@ interface AppState {
   sidebarOpen: boolean
 
   /* layout file operations */
-  newLayout: () => void
+  newLayout: () => Promise<void>
   openLayout: (path?: string) => Promise<void>
   save: () => Promise<boolean>
   saveAs: () => Promise<boolean>
@@ -89,6 +89,23 @@ export const useAppStore = create<AppState>((set, get) => {
     mutate((doc) => pruneOrphanPanels({ ...doc, root: fn(doc.root) }))
   }
 
+  /**
+   * Gate for anything that replaces the whole document — New, Open, and Open
+   * Recent. Without it those actions discarded unsaved work silently, with no
+   * prompt and no undo.
+   *
+   * Returns false when the caller must leave the document alone: the user
+   * cancelled, or they asked to save first and that save failed or its file
+   * dialog was dismissed.
+   */
+  const guardUnsaved = async (): Promise<boolean> => {
+    if (!get().dirty) return true
+    const choice = await window.dmscreen.confirmDiscard(get().doc.name)
+    if (choice === 'cancel') return false
+    if (choice === 'discard') return true
+    return get().save()
+  }
+
   return {
     doc: createEmptyDoc(),
     filePath: null,
@@ -101,7 +118,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     /* ------------------------------------------------------------ files */
 
-    newLayout: () => {
+    newLayout: async () => {
+      if (!(await guardUnsaved())) return
       set({
         doc: createEmptyDoc(),
         filePath: null,
@@ -112,6 +130,9 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     openLayout: async (path) => {
+      // Guard before the file picker, not after — being asked about unsaved work
+      // only once a file has been chosen is a worse order to answer in.
+      if (!(await guardUnsaved())) return
       const result = await window.dmscreen.openLayout(path)
       if (!result) return
       set({

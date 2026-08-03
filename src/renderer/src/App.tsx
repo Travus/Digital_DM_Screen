@@ -62,7 +62,7 @@ export function App(): JSX.Element {
 
       switch (action) {
         case 'layout:new':
-          store.newLayout()
+          void store.newLayout()
           break
         case 'layout:open':
           void store.openLayout()
@@ -75,7 +75,28 @@ export function App(): JSX.Element {
           break
         case 'layout:save':
           // Main may be waiting on the outcome before letting the window close.
-          void store.save().then((saved) => window.dmscreen.notifySaveComplete(saved))
+          //
+          // Flush the session before answering, rather than leaving it to the
+          // debounced write below. On "Save and quit" the app exits within
+          // milliseconds, so that timer never fires and session.json keeps the
+          // pre-save snapshot — including `dirty: true`. The layout file was
+          // always written correctly; the next launch just restored a stale flag
+          // and asked to save again.
+          void store.save().then(async (saved) => {
+            if (saved) {
+              const {
+                doc: savedDoc,
+                filePath: savedPath,
+                dirty: savedDirty
+              } = useAppStore.getState()
+              await window.dmscreen.writeSession({
+                doc: savedDoc,
+                filePath: savedPath,
+                dirty: savedDirty
+              })
+            }
+            window.dmscreen.notifySaveComplete(saved)
+          })
           break
         case 'layout:saveAs':
           void store.saveAs()
