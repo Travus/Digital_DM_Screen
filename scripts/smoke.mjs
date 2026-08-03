@@ -54,11 +54,23 @@ const shots = [
     click: '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]'
   },
   // Searching auto-expands every match; can't be reached by clicking, so seed it.
+  // The query must hit a condition *name* — the list deliberately does not search
+  // body text. This shot previously seeded "saving throw", which no name contains,
+  // so it had been quietly capturing the empty state instead.
   {
     name: 'conditions-search',
     layout: starter,
     mutate: (doc) => {
-      doc.panels.panel_ref.state.query = 'saving throw'
+      doc.panels.panel_ref.state.query = 'ned'
+    }
+  },
+  // The typo-tolerant fallback: "paralzyed" transposes two letters and matches
+  // nothing exactly, so this shot goes red if the fuzzy path ever stops working.
+  {
+    name: 'conditions-search-fuzzy',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.state.query = 'paralzyed'
     }
   },
   {

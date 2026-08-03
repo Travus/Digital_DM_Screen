@@ -1,4 +1,5 @@
 import type { ReferenceEntry } from '../../../shared/types'
+import { searchFilter } from '../lib/search'
 import { ConditionText } from './ConditionText'
 
 export type { ReferenceEntry }
@@ -44,9 +45,10 @@ export function ReferenceList({
 
   // Names only. Searching the body text meant "incapacitated" returned half the
   // list — every condition that merely mentions it — which is noise, not results.
-  const matches = needle
-    ? entries.filter((entry) => entry.name.toLowerCase().includes(needle))
-    : entries
+  //
+  // searchFilter falls back to typo-tolerant matching only when the exact pass
+  // finds nothing, so a search that works today cannot start returning extras.
+  const matches = searchFilter(query, entries, (entry) => entry.name)
 
   // Favourites float to the top, otherwise the source order is kept.
   const pinned = favourites?.length ? matches.filter((entry) => favourites.includes(entry.id)) : []

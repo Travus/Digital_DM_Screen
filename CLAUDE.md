@@ -145,6 +145,25 @@ an Edit menu or `Cmd+C/V/X/A/Z` are dead in text fields. Since
 Cmd+Q must resume `app.quit()` after confirmation; merely closing the window
 strands the process windowless. Keep close-window and quit-app paths distinct.
 
+**Search is exact-first, typo-tolerance second.** `src/renderer/src/lib/search.ts`
+is the one matcher, shared by the reference lists and the module picker. The
+fallback runs *only* when the exact substring pass finds nothing, so a search
+that works today can never start returning extra rows — and queries under four
+characters get no latitude at all, because at three almost everything is within
+one edit of anything.
+
+Two details that look like oversights and are not. The distance is measured
+against the best window *inside* the name, not the whole string: `quck` has to
+reach "Quickened Spell", and whole-string distance between those is enormous.
+And reference lists still search **names only** — body text meant "incapacitated"
+returned every condition that merely mentions it.
+
+**The `conditions-search` smoke shot seeded a query that matched nothing** —
+`saving throw`, which is in plenty of condition *bodies* and no condition *name*
+— so for a long time it captured the empty state while claiming to demonstrate
+that searching expands every match. If you seed a query in a shot, check the
+screenshot shows results.
+
 ## Data packs
 
 Shipped reference data is **SRD only** — that is what makes the repo licensable
@@ -292,4 +311,10 @@ smoke and packaging do not.
 
 Match the surrounding code. Comments explain *why*, not what — most existing
 comments mark a decision or a trap, and that is the bar. British spelling in
-user-facing text. No test suite; the smoke check and typechecking are the net.
+user-facing text.
+
+**Tests cover pure logic only.** `npm run test` is Vitest over
+`src/renderer/src/lib/*.test.ts` — functions with inputs and outputs, where a
+table of cases says something a screenshot cannot. Everything else is still the
+smoke check and typechecking. Do not reach for a component or end-to-end test
+runner; the smoke harness is that, and it works.
