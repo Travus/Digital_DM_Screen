@@ -18,6 +18,9 @@ export interface AppInfo {
 }
 
 const api = {
+  /** Available synchronously so rendered shortcut labels match the native menu. */
+  platform: process.platform,
+
   /** Opens a layout. With no path, shows the system file picker. */
   openLayout: (path?: string): Promise<OpenResult | null> =>
     ipcRenderer.invoke('layout:open', path),

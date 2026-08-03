@@ -1,4 +1,4 @@
-# Turns a tag into a draft GitHub Release with the four installers attached.
+# Turns a tag into a draft GitHub Release with all platform installers attached.
 # Draft, not published: nothing reaches anyone until the notes have been read.
 #
 # To cut a release:
@@ -30,8 +30,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  mac:
+    name: macos-arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the tag matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          pkg="v$(plutil -extract version raw package.json)"
+          lock="v$(plutil -extract version raw package-lock.json)"
+          echo "tag=$tag package.json=$pkg package-lock.json=$lock"
+          if [ "$tag" != "$pkg" ] || [ "$tag" != "$lock" ]; then
+            echo "::error::tag $tag does not match package.json ($pkg) / package-lock.json ($lock)"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Build the ad-hoc signed installer
+        run: |
+          npm ci
+          npm run dist:mac:adhoc
+
+      - name: Verify and launch the packaged app
+        run: |
+          codesign --verify --deep --strict --verbose=2 'release/mac-arm64/Digital DM Screen.app'
+          npm run smoke:mac
+
+      - name: Check the installer exists
+        run: |
+          shopt -s nullglob
+          assets=(release/*.dmg)
+          printf '%s\n' "${assets[@]}"
+          if [ "${#assets[@]}" -ne 1 ]; then
+            printf '::error::expected 1 macOS installer, got %d\n' "${#assets[@]}"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos-arm64
+          path: release/*.dmg
+          if-no-files-found: error
+
   release:
     name: release
+    needs: mac
     runs-on: ubuntu-latest
     permissions:
       # Only this job writes, and only to create the release.
@@ -82,19 +133,25 @@ jobs:
       - name: Build installers
         run: docker compose run --rm -T $CACHE_ENV build npm run dist:all
 
+      - name: Download the macOS installer
+        uses: actions/download-artifact@v8
+        with:
+          name: release-macos-arm64
+          path: release
+
       - name: Collect assets
         run: |
           shopt -s nullglob
           # Filenames contain spaces — "Digital DM Screen-0.3.0-x64-setup.exe" —
           # so the array and "${assets[@]}" are what keeps them one argument each.
           # .blockmap is excluded: it serves electron-updater, which is unused.
-          assets=(release/*.exe release/*.AppImage release/*.deb)
+          assets=(release/*.exe release/*.AppImage release/*.deb release/*.dmg)
           printf '%s\n' "${assets[@]}"
           # dist:win can produce the NSIS installer and lose the portable one,
           # leaving release/ half fresh. Counting catches that here, where it
           # would not locally: the runner's release/ starts empty.
-          if [ "${#assets[@]}" -ne 4 ]; then
-            printf '::error::expected 4 installers, got %d\n' "${#assets[@]}"
+          if [ "${#assets[@]}" -ne 5 ]; then
+            printf '::error::expected 5 installers, got %d\n' "${#assets[@]}"
             exit 1
           fi
           # Hand them to the next step without re-globbing.

@@ -3,6 +3,7 @@ import type { PanelNode } from '../../../shared/types'
 import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
+import { primaryModifier } from '../lib/platform'
 import { ModulePicker } from './ModulePicker'
 
 /**
@@ -162,7 +163,11 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
           )}
           <button
             className="icon-btn"
-            title={maximized ? 'Return to normal view (Esc)' : 'Fullscreen this panel (Ctrl+Enter)'}
+            title={
+              maximized
+                ? 'Return to normal view (Esc)'
+                : `Fullscreen this panel (${primaryModifier}+Enter)`
+            }
             onClick={() => toggleMaximize(node.id)}
           >
             {maximized ? '⤡' : '⤢'}
