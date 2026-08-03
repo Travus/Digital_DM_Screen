@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { searchFilter } from '../lib/search'
 import { MODULES, MODULE_CATEGORIES } from '../modules/registry'
 
 export function ModulePicker({
@@ -13,12 +14,17 @@ export function ModulePicker({
   const [query, setQuery] = useState('')
   const needle = query.trim().toLowerCase()
 
-  const matches = MODULES.filter(
+  // Exact matching keeps both fields — the blurb is how you find "initiative"
+  // without knowing the panel is called Initiative Tracker. Typo tolerance is
+  // deliberately name-only: blurbs are long enough that a fuzzy pass over them
+  // would match almost any query of a useful length.
+  const exact = MODULES.filter(
     (module) =>
       !needle ||
       module.name.toLowerCase().includes(needle) ||
       module.blurb.toLowerCase().includes(needle)
   )
+  const matches = exact.length > 0 ? exact : searchFilter(query, MODULES, (module) => module.name)
 
   return (
     <div className="picker">

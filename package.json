@@ -18,7 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "//check": "The one command to run before pushing. CI runs the three parts separately, so a failure names itself.",
-    "check": "npm run format:check && npm run lint && npm run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test",
     "build": "npm run typecheck && electron-vite build",
     "//publish": "--publish never on every dist target. electron-builder otherwise starts publishing the moment it detects CI and dies on a missing GH_TOKEN. Releases are cut by `gh release create` in release.yml, which uploads explicit assets to a draft; electron-builder must never touch GitHub. This only bit the macOS job, because the Linux/Windows build runs through docker compose, which does not forward CI into the container — the mac job runs natively, where it does.",
     "dist:linux": "npm run build && electron-builder --publish never --linux",
@@ -56,6 +58,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
     "vite": "^7.0.0",
+    "vitest": "^4.1.10",
     "zustand": "^4.5.7"
   }
 }

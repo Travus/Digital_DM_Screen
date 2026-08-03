@@ -54,6 +54,10 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      # Unit tests cover the pure logic in src/renderer/src/lib/ only — the sort
+      # of thing a screenshot cannot assert. Everything else is still the smoke
+      # check's job.
+      - run: npm run test
 
   smoke:
     name: smoke
