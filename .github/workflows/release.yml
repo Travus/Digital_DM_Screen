@@ -133,8 +133,14 @@ jobs:
       - name: Build installers
         run: docker compose run --rm -T $CACHE_ENV build npm run dist:all
 
+      # download-artifact and upload-artifact are a matched pair — keep their
+      # majors equal. v8 against the v7 upload fails every download with
+      # "Artifact download failed after 5 retries", and there is no v8 upload to
+      # pair it with. Nothing catches this before a release: this workflow only
+      # runs on a tag, so a Dependabot bump of one half would sail through PR CI
+      # and break the next release instead.
       - name: Download the macOS installer
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v7
         with:
           name: release-macos-arm64
           path: release
