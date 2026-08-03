@@ -66,7 +66,11 @@ export function TopBar(): JSX.Element {
       <span className="spacer" />
 
       <div className="topbar-actions">
-        <button className="btn" onClick={newLayout} title={`New layout (${primaryModifier}+N)`}>
+        <button
+          className="btn"
+          onClick={() => void newLayout()}
+          title={`New layout (${primaryModifier}+N)`}
+        >
           New
         </button>
         <button

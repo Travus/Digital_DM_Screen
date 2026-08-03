@@ -111,6 +111,20 @@ jobs:
             exit 1
           fi
 
+      # So a PR can be tried by hand rather than only read. Short retention on
+      # purpose: these are ~400MB a run and only useful while the PR is open.
+      # Releases are built fresh from the tag by release.yml, never from here.
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-windows-installers
+          path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
   package-mac:
     name: package-macos-arm64
     # The standard macos-15 runner is an Apple-silicon machine. Building on the
@@ -160,6 +174,10 @@ jobs:
           name: macos-arm64-installer
           path: release/*.dmg
           if-no-files-found: error
+          # Matches the Linux/Windows installers above — big, and only useful
+          # while the PR is open. Screenshots keep the default; they are tiny and
+          # worth having around to compare against.
+          retention-days: 7
 
       - name: Upload macOS smoke screenshot
         if: always()

@@ -40,6 +40,9 @@ const api = {
 
   setDirty: (dirty: boolean, name: string): Promise<void> =>
     ipcRenderer.invoke('window:setDirty', dirty, name),
+  /** Prompts before New or Open throws away unsaved changes. */
+  confirmDiscard: (name: string): Promise<'save' | 'discard' | 'cancel'> =>
+    ipcRenderer.invoke('window:confirmDiscard', name),
   toggleWindowFullScreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggleFullScreen'),
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),
 

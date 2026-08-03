@@ -385,6 +385,25 @@ ipcMain.handle('window:setDirty', (_event, dirty: boolean, name: string): void =
   }
 })
 
+/**
+ * Asked before New or Open replaces the document. Deliberately the same shape
+ * as the close confirmation — three ways out, cancel last — so the two prompts
+ * are answered the same way rather than being subtly different dialogs.
+ */
+ipcMain.handle('window:confirmDiscard', (_event, name: string): 'save' | 'discard' | 'cancel' => {
+  const choice = dialog.showMessageBoxSync(mainWindow!, {
+    type: 'warning',
+    buttons: ['Save and continue', 'Discard changes', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Unsaved changes',
+    message: `"${name}" has unsaved changes.`,
+    detail: 'Discarding loses them for good — this layout has not been written to a file.'
+  })
+  if (choice === 0) return 'save'
+  return choice === 1 ? 'discard' : 'cancel'
+})
+
 ipcMain.handle('window:toggleFullScreen', (): boolean => {
   if (!mainWindow) return false
   const next = !mainWindow.isFullScreen()
