@@ -133,17 +133,20 @@ jobs:
       - name: Build installers
         run: docker compose run --rm -T $CACHE_ENV build npm run dist:all
 
-      # download-artifact and upload-artifact are a matched pair — keep their
-      # majors equal. v8 against the v7 upload fails every download with
-      # "Artifact download failed after 5 retries", and there is no v8 upload to
-      # pair it with. Nothing catches this before a release: this workflow only
-      # runs on a tag, so a Dependabot bump of one half would sail through PR CI
-      # and break the next release instead.
+      # NOT into release/. The compose services run as root, so every file and
+      # directory they create in the bind-mounted workspace — release/ included —
+      # comes out root-owned and mode 755. This action runs as the `runner` user,
+      # which then cannot write there: the download fails instantly, five times,
+      # and reports "Artifact download failed after 5 retries", which reads like a
+      # network problem and is not.
+      #
+      # Reading root-owned files is fine, which is why the upload side and the
+      # count gate never noticed. Only this step writes.
       - name: Download the macOS installer
         uses: actions/download-artifact@v7
         with:
           name: release-macos-arm64
-          path: release
+          path: release-mac
 
       - name: Collect assets
         run: |
@@ -151,7 +154,7 @@ jobs:
           # Filenames contain spaces — "Digital DM Screen-0.3.0-x64-setup.exe" —
           # so the array and "${assets[@]}" are what keeps them one argument each.
           # .blockmap is excluded: it serves electron-updater, which is unused.
-          assets=(release/*.exe release/*.AppImage release/*.deb release/*.dmg)
+          assets=(release/*.exe release/*.AppImage release/*.deb release-mac/*.dmg)
           printf '%s\n' "${assets[@]}"
           # dist:win can produce the NSIS installer and lose the portable one,
           # leaving release/ half fresh. Counting catches that here, where it

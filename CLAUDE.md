@@ -305,11 +305,22 @@ the release from something no branch contains.
 pins the broken copy. Recovering means deleting and re-cutting the tag, which the
 tag ruleset blocks by design, so it needs the ruleset disabled for a moment.
 
-**`upload-artifact` and `download-artifact` must share a major.** They are a
-matched pair; mixing them fails every download with "Artifact download failed
-after 5 retries", which reads like a network problem and is not. Nothing catches
-it before a release, because `release.yml` only runs on a tag — a Dependabot bump
-of one half passes PR CI and breaks the next release instead.
+**The compose services run as root, so anything they write is root-owned.** The
+bind mount means `release/`, `out/` and `.cache/` come out owned by uid 0, mode
+755. Reading them afterwards is fine — which is why this stayed invisible for so
+long — but a later step running as the runner's own user cannot *write* into
+them.
+
+It surfaced as `actions/download-artifact` failing with "Artifact download failed
+after 5 retries", which reads like a network problem and is nothing of the kind:
+it was `EACCES` on a root-owned `release/`, five times, in 26 seconds. The macOS
+DMG is therefore downloaded into `release-mac/`, a directory Docker never
+touches. Anything else added to `release.yml` that writes into the workspace
+after a compose step needs the same care.
+
+**Nothing catches a `release.yml` bug before a release**, because it only runs on
+a tag. It gets no PR coverage at all, so a change there is unverified until the
+moment it matters.
 
 **CI runners are not "the host".** The Docker rule above exists because this
 machine has no Node and should keep it that way; a runner is destroyed when the
