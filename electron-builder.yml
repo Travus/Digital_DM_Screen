@@ -37,17 +37,22 @@ mac:
   # ICNS; do not rely on a host-generated, untracked binary asset here.
   icon: build/icon.png
   category: public.app-category.utilities
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: Digital-DM-Screen-${version}-${arch}.${ext}
 
 win:
   target:
     - nsis
     - portable
 
+# Artifact naming. `${productName}` is "Digital DM Screen", and GitHub replaces
+# the spaces with dots when a release asset is uploaded, so every release needed
+# the five files renaming by hand. The literal below is that name already
+# hyphenated; keep it in step with productName if that ever changes.
+
 # Named per target — a shared win.artifactName would label the portable build
 # "setup" as well.
 nsis:
-  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  artifactName: Digital-DM-Screen-${version}-${arch}-setup.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
@@ -55,4 +60,12 @@ nsis:
   shortcutName: Digital DM Screen
 
 portable:
-  artifactName: ${productName}-${version}-${arch}-portable.${ext}
+  artifactName: Digital-DM-Screen-${version}-${arch}-portable.${ext}
+
+# AppImage carries no arch in its default name and the release table follows that;
+# deb keeps one, because a .deb without an architecture is unusual.
+appImage:
+  artifactName: Digital-DM-Screen-${version}.${ext}
+
+deb:
+  artifactName: Digital-DM-Screen-${version}-${arch}.${ext}
