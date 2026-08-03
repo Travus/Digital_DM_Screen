@@ -1,5 +1,7 @@
 # Digital DM Screen
 
+[![CI](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml/badge.svg)](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml)
+
 A tiling DM screen for running tabletop games. Split the window into as many
 panes as you want, drop a module into each one, and save the whole arrangement —
 panel settings and contents included — as a layout file you can reopen or hand to
