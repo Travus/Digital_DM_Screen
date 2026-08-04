@@ -476,6 +476,45 @@ h4 {
   opacity: 0.62;
 }
 
+.hint-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  /* Never intercept the pointer that summoned it — the hint sits directly under
+     the button, and a hint that can be hovered flickers against its own trigger. */
+  pointer-events: none;
+  animation: hint-in 90ms ease-out;
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -2px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 /* --------------------------------------------------------------- controls */
 
 .btn {

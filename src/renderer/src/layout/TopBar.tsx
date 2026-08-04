@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../state/store'
 import { shortcuts } from '../lib/shortcuts'
+import { ShortcutHint } from '../components/ShortcutHint'
 
 export function TopBar(): JSX.Element {
   const name = useAppStore((state) => state.doc.name)
@@ -66,20 +67,28 @@ export function TopBar(): JSX.Element {
       <span className="spacer" />
 
       <div className="topbar-actions">
-        {/* The shortcut rides on the button face rather than only in the tooltip —
-            a hint you have to hover to find teaches nobody anything. */}
-        <button className="btn" onClick={() => void newLayout()} title="New layout">
-          New <span className="shortcut">{shortcuts.newLayout}</span>
-        </button>
-        <button className="btn" onClick={() => void openLayout()} title="Open layout">
-          Open <span className="shortcut">{shortcuts.openLayout}</span>
-        </button>
-        <button className="btn primary" onClick={() => void save()} title="Save layout">
-          Save <span className="shortcut">{shortcuts.save}</span>
-        </button>
-        <button className="btn" onClick={() => void saveAs()} title="Save layout to a new file">
-          Save As <span className="shortcut">{shortcuts.saveAs}</span>
-        </button>
+        {/* No `title` on these four — the hint replaces it, and both at once
+            would mean two tooltips for one button. */}
+        <ShortcutHint label="New layout" shortcut={shortcuts.newLayout}>
+          <button className="btn" onClick={() => void newLayout()}>
+            New
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Open layout" shortcut={shortcuts.openLayout}>
+          <button className="btn" onClick={() => void openLayout()}>
+            Open
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Save layout" shortcut={shortcuts.save}>
+          <button className="btn primary" onClick={() => void save()}>
+            Save
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Save to a new file" shortcut={shortcuts.saveAs}>
+          <button className="btn" onClick={() => void saveAs()}>
+            Save As
+          </button>
+        </ShortcutHint>
 
         <span className="divider" />
 

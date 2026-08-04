@@ -96,6 +96,13 @@ const shots = [
     layout: starter,
     click: '.panel .icon-btn[title="Panel menu"]'
   },
+  // The top bar says nothing until hovered; settle has to outlast the delay.
+  {
+    name: 'topbar-hint',
+    layout: starter,
+    hover: '.topbar-actions .hint-anchor .btn.primary',
+    settle: 900
+  },
   // Locked layout: splitter grips gone, structural menu items gone.
   {
     name: 'locked',
@@ -213,7 +220,7 @@ async function seedSession(layoutPath, mutate, data) {
   )
 }
 
-function run(shotPath, click, settle) {
+function run(shotPath, click, settle, hover) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
@@ -231,6 +238,7 @@ function run(shotPath, click, settle) {
           XDG_CONFIG_HOME: configHome,
           DMSCREEN_SMOKE_SHOT: shotPath,
           ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
+          ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
         },
@@ -265,7 +273,7 @@ for (const shot of shots) {
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot.click, shot.settle)
+    const output = await run(shotPath, shot.click, shot.settle, shot.hover)
 
     if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
 

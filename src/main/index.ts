@@ -169,7 +169,33 @@ function installSmokeHook(window: BrowserWindow): void {
           await wait(500)
         }
 
-        // Extra dwell for shots of something that changes over time.
+        // Park the pointer on one control, for UI that only a hover reveals.
+        // Dispatched as `pointerover`, not `pointerenter`: React listens at the
+        // root and synthesises enter from the bubbling event, so an enter event
+        // sent straight to the element goes unheard.
+        const hover = (process.env['DMSCREEN_SMOKE_HOVER'] ?? '').trim()
+        if (hover) {
+          const found = (await window.webContents.executeJavaScript(
+            `(() => {
+              const el = document.querySelector(${JSON.stringify(hover)})
+              if (!el) return false
+              const box = el.getBoundingClientRect()
+              const init = {
+                bubbles: true,
+                clientX: box.left + box.width / 2,
+                clientY: box.top + box.height / 2,
+                pointerType: 'mouse'
+              }
+              el.dispatchEvent(new PointerEvent('pointerover', init))
+              el.dispatchEvent(new MouseEvent('mouseover', init))
+              return true
+            })()`
+          )) as boolean
+          if (!found) console.log(`[renderer:error] no element matched ${hover}`)
+        }
+
+        // Extra dwell for shots of something that changes over time — and for a
+        // hover the reveal delay has to run out inside.
         const settle = Number(process.env['DMSCREEN_SMOKE_SETTLE'] ?? 0)
         if (Number.isFinite(settle) && settle > 0) await wait(settle)
 
