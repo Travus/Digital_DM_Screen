@@ -115,6 +115,26 @@ first, then `Categories` is overwritten unconditionally from `linux.category`,
 so anything set there is silently discarded. `linux.category` is the only knob;
 to ship more than one category, put them all in it.
 
+**`Comment` is overwritten the same way, from `description`.** So a long deb
+description would also become the desktop file's one-line tooltip, and setting
+`desktop.entry.Comment` cannot rescue it. The deb's own description therefore
+goes to fpm directly, as a second `--description` in `deb.fpm` — fpm gets the
+flag twice and keeps the last. Worth knowing that the override is positional:
+electron-builder pushes `options.fpm` after the args it builds itself, and if
+that ever changes the description silently reverts to the one-liner. `dpkg-deb
+-I` on the built package is what says which one won.
+
+**The Linux install screen reads the control file and nothing else.** Opening a
+`.deb` in GNOME Software shows the *package* name, the control Description, and
+`Homepage` as "Project Website" — and no icon, because nothing is unpacked yet.
+Its `file_to_app` path (`plugins/packagekit/gs-plugin-packagekit.c`) asks
+PackageKit for a file *list* purely to find a `.desktop` name; it never reads a
+file out of the archive. So an icon on that screen is not something the package
+can supply. The AppStream metainfo in `build/` is for after the install, where it
+is what makes the app a named entry with an icon rather than a bare package. Its
+`<launchable>` must match the installed `.desktop` filename, which electron-builder
+names after `linux.executableName`.
+
 **macOS must be built on macOS.** The original cross-build experiment was
 measured against electron-builder 26.15.3 in the `builder:wine` container, not
 assumed:

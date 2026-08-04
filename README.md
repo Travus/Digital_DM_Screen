@@ -1,6 +1,6 @@
 # Digital DM Screen
 
-[![CI](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml/badge.svg)](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml)
+[![CI](https://github.com/Travus/Digital_DM_Screen/actions/workflows/ci.yml/badge.svg)](https://github.com/Travus/Digital_DM_Screen/actions/workflows/ci.yml)
 
 A tiling DM screen for running tabletop games. Split the window into as many
 panes as you want, drop a module into each one, and save the whole arrangement —
@@ -250,6 +250,13 @@ lone png at whatever size it already is, and nothing looks for icons in a
 ```sh
 docker compose run --rm --entrypoint bash smoke -lc scripts/gen-icons.sh
 ```
+
+The `.deb` also installs `build/dev.travus.dmscreen.metainfo.xml` into
+`/usr/share/metainfo/`. That is the AppStream file GNOME Software and Discover
+read to list the installed app by name, with its icon, description and links,
+rather than as a bare package. It describes the app after installation only —
+the screen shown *before* you install a downloaded `.deb` is built from the
+package's control fields alone, so it has no icon to show.
 
 ### Running it while developing
 
