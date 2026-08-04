@@ -3,7 +3,7 @@ import type { PanelNode } from '../../../shared/types'
 import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
-import { primaryModifier } from '../lib/platform'
+import { shortcuts } from '../lib/shortcuts'
 import { ModulePicker } from './ModulePicker'
 
 /**
@@ -161,12 +161,13 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
               ⚙
             </button>
           )}
+          {/* Keep the "Fullscreen" opening — smoke.mjs selects on it. */}
           <button
             className="icon-btn"
             title={
               maximized
-                ? 'Return to normal view (Esc)'
-                : `Fullscreen this panel (${primaryModifier}+Enter)`
+                ? `Return to normal view (${shortcuts.restore})`
+                : `Fullscreen this panel (${shortcuts.maximize})`
             }
             onClick={() => toggleMaximize(node.id)}
           >
@@ -191,8 +192,16 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                 ? []
                 : [
                     { separator: true },
-                    { label: 'Split right', onSelect: () => splitPanel(node.id, 'row') },
-                    { label: 'Split down', onSelect: () => splitPanel(node.id, 'column') },
+                    {
+                      label: 'Split right',
+                      shortcut: shortcuts.splitRight,
+                      onSelect: () => splitPanel(node.id, 'row')
+                    },
+                    {
+                      label: 'Split down',
+                      shortcut: shortcuts.splitDown,
+                      onSelect: () => splitPanel(node.id, 'column')
+                    },
                     ...(parentSplitId
                       ? [
                           {
@@ -206,7 +215,12 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                         ]
                       : []),
                     { separator: true },
-                    { label: 'Close panel', danger: true, onSelect: () => closePanel(node.id) }
+                    {
+                      label: 'Close panel',
+                      shortcut: shortcuts.closePanel,
+                      danger: true,
+                      onSelect: () => closePanel(node.id)
+                    }
                   ])
             ]}
           />
@@ -266,6 +280,8 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
 
 interface MenuItem {
   label?: string
+  /** Shown faintly at the right of the row, the way a native menu does it. */
+  shortcut?: string
   onSelect?: () => void
   danger?: boolean
   separator?: boolean
@@ -314,7 +330,8 @@ function PanelMenu({
                   item.onSelect?.()
                 }}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
               </button>
             )
           )}

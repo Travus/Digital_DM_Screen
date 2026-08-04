@@ -5,7 +5,7 @@ import { RecentsPanel } from './layout/RecentsPanel'
 import { TopBar } from './layout/TopBar'
 import { useDataStore } from './state/dataStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
-import { primaryModifier } from './lib/platform'
+import { shortcuts } from './lib/shortcuts'
 
 /** How long the layout must sit still before we stash it in userData. */
 const SESSION_DEBOUNCE_MS = 700
@@ -190,30 +190,30 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
         <dl className="deflist">
           <div className="defrow">
             <dt>
-              {primaryModifier}+\ / {primaryModifier}+Shift+\
+              {shortcuts.splitRight} / {shortcuts.splitDown}
             </dt>
             <dd>Split the active panel right / down</dd>
           </div>
           <div className="defrow">
-            <dt>{primaryModifier}+Enter</dt>
-            <dd>Fullscreen the active panel — Esc returns</dd>
+            <dt>{shortcuts.maximize}</dt>
+            <dd>Fullscreen the active panel — {shortcuts.restore} returns</dd>
           </div>
           <div className="defrow">
-            <dt>{primaryModifier}+W</dt>
+            <dt>{shortcuts.closePanel}</dt>
             <dd>Close the active panel</dd>
           </div>
           <div className="defrow">
             <dt>
-              {primaryModifier}+S / {primaryModifier}+O / {primaryModifier}+N
+              {shortcuts.save} / {shortcuts.openLayout} / {shortcuts.newLayout}
             </dt>
             <dd>Save, open, new layout</dd>
           </div>
           <div className="defrow">
-            <dt>F2</dt>
+            <dt>{shortcuts.rename}</dt>
             <dd>Rename the layout</dd>
           </div>
           <div className="defrow">
-            <dt>{primaryModifier}+L</dt>
+            <dt>{shortcuts.toggleLock}</dt>
             <dd>Lock or unlock the layout</dd>
           </div>
           <div className="defrow">

@@ -90,6 +90,12 @@ const shots = [
       '.tracker-grid .timer:nth-of-type(2) .timer-readout.editable'
     ].join('\n')
   },
+  // The panel menu unlocked, where the rows that have a shortcut show it.
+  {
+    name: 'panel-menu',
+    layout: starter,
+    click: '.panel .icon-btn[title="Panel menu"]'
+  },
   // Locked layout: splitter grips gone, structural menu items gone.
   {
     name: 'locked',

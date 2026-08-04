@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../state/store'
-import { primaryModifier } from '../lib/platform'
+import { shortcuts } from '../lib/shortcuts'
 
 export function TopBar(): JSX.Element {
   const name = useAppStore((state) => state.doc.name)
@@ -55,7 +55,7 @@ export function TopBar(): JSX.Element {
       ) : (
         <button
           className="layout-name"
-          title={filePath ?? 'Not saved to a file yet — click to rename'}
+          title={`${filePath ?? 'Not saved to a file yet'} — click or press ${shortcuts.rename} to rename`}
           onClick={() => setRenaming(true)}
         >
           {name}
@@ -66,44 +66,32 @@ export function TopBar(): JSX.Element {
       <span className="spacer" />
 
       <div className="topbar-actions">
-        <button
-          className="btn"
-          onClick={() => void newLayout()}
-          title={`New layout (${primaryModifier}+N)`}
-        >
-          New
+        {/* The shortcut rides on the button face rather than only in the tooltip —
+            a hint you have to hover to find teaches nobody anything. */}
+        <button className="btn" onClick={() => void newLayout()} title="New layout">
+          New <span className="shortcut">{shortcuts.newLayout}</span>
         </button>
-        <button
-          className="btn"
-          onClick={() => void openLayout()}
-          title={`Open layout (${primaryModifier}+O)`}
-        >
-          Open
+        <button className="btn" onClick={() => void openLayout()} title="Open layout">
+          Open <span className="shortcut">{shortcuts.openLayout}</span>
         </button>
-        <button
-          className="btn primary"
-          onClick={() => void save()}
-          title={`Save layout (${primaryModifier}+S)`}
-        >
-          Save
+        <button className="btn primary" onClick={() => void save()} title="Save layout">
+          Save <span className="shortcut">{shortcuts.save}</span>
         </button>
-        <button
-          className="btn"
-          onClick={() => void saveAs()}
-          title={`Save as… (${primaryModifier}+Shift+S)`}
-        >
-          Save As
+        <button className="btn" onClick={() => void saveAs()} title="Save layout to a new file">
+          Save As <span className="shortcut">{shortcuts.saveAs}</span>
         </button>
 
         <span className="divider" />
 
+        {/* Icon-only buttons have nowhere to put the hint, so theirs stays in the
+            tooltip. Keep the "Lock the layout" wording — smoke.mjs selects on it. */}
         <button
           className={`icon-btn ${locked ? 'on' : ''}`}
           onClick={toggleLock}
           title={
             locked
-              ? 'Layout locked — click to allow resizing, splitting and closing panels'
-              : 'Lock the layout: freeze panel sizes and positions'
+              ? `Layout locked (${shortcuts.toggleLock}) — click to allow resizing, splitting and closing panels`
+              : `Lock the layout (${shortcuts.toggleLock}): freeze panel sizes and positions`
           }
         >
           <LockIcon locked={locked} />
