@@ -221,6 +221,13 @@ push to `main`:
 `builder:wine` image as local builds; the Mac installer uses the native runner
 required for a valid app bundle and DMG.
 
+Installers built for a pull request are labelled with its number —
+`Digital-DM-Screen-0.3.0-PR-17-amd64.deb`. A PR build carries the same version
+as the release it will become, so without that there is nothing in the filename
+to tell the two apart once both are in your downloads folder. The version the
+package reports after installing is still the plain one; only the file is
+labelled.
+
 ### Cutting a release
 
 ```sh

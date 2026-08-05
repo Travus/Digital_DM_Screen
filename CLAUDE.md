@@ -135,6 +135,34 @@ is what makes the app a named entry with an icon rather than a bare package. Its
 `<launchable>` must match the installed `.desktop` filename, which electron-builder
 names after `linux.executableName`.
 
+**A deb description is one paragraph, or it grows dots.** The control format
+marks a blank line with ` .`, and nothing between the file and the screen turns
+that back into a paragraph break — apt hands the description over as written,
+PackageKit passes it through, GNOME Software prints it. Every break arrives as a
+stray `.` on a line of its own, and a description that opens with one leads with
+it. Lines wrap into a paragraph by themselves, so hand-wrapping is free; it is
+only breaks that cost. The metainfo keeps its paragraphs, because the tools that
+read *it* understand them.
+
+**The metainfo is verifiable without a desktop.** Unpack the built package over
+a throwaway Ubuntu and ask AppStream what it found:
+
+```sh
+docker run --rm -v "${PWD}/release:/r" ubuntu:24.04 bash -c \
+  'apt-get update -qq && apt-get install -y -qq appstream &&
+   dpkg-deb -x /r/Digital-DM-Screen-*-amd64.deb / &&
+   appstreamcli get dev.travus.dmscreen'
+```
+
+It should print the component with `Name: Digital DM Screen` and
+`Icon: digital-dm-screen` — the icon proving the `<launchable>` matched the
+installed `.desktop` file, which is the join gnome-software makes too
+(`gs_appstream_add_data_merge_fixup` in `lib/gs-appstream.c`, matching on
+`launchable[@type='desktop-id']`). If that works and a software centre still
+does not list the app, the package is not the variable: suspect a stale
+`~/.cache/gnome-software/appstream/components.xmlb`, or a centre that only lists
+what it can install itself.
+
 **macOS must be built on macOS.** The original cross-build experiment was
 measured against electron-builder 26.15.3 in the `builder:wine` container, not
 assumed:

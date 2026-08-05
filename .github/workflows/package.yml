@@ -111,6 +111,14 @@ jobs:
             exit 1
           fi
 
+      - name: Label the installers with the PR number
+        if: github.event_name == 'pull_request'
+        env:
+          PR: ${{ github.event.number }}
+        # Through bash rather than as an executable: the exec bit does not
+        # survive a Windows checkout, and this repo is developed on one.
+        run: bash ./scripts/label-pr-build.sh release "$PR"
+
       # So a PR can be tried by hand rather than only read. Short retention on
       # purpose: these are ~400MB a run and only useful while the PR is open.
       # Releases are built fresh from the tag by release.yml, never from here.
@@ -167,6 +175,16 @@ jobs:
       # binary, so it catches broken signatures and bundle structure too.
       - name: Launch and render the packaged app
         run: npm run smoke:mac
+
+      # After the launch test, which resolves the .app by its real name, and
+      # after the signature check for the same reason.
+      - name: Label the installer with the PR number
+        if: github.event_name == 'pull_request'
+        env:
+          PR: ${{ github.event.number }}
+        # Through bash rather than as an executable: the exec bit does not
+        # survive a Windows checkout, and this repo is developed on one.
+        run: bash ./scripts/label-pr-build.sh release "$PR"
 
       - name: Upload macOS installer
         uses: actions/upload-artifact@v7

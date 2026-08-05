@@ -78,24 +78,26 @@ deb:
   # --description straight to fpm sets the control field alone; the flag appears
   # twice on the command line and the last one wins.
   #
-  # The first line is the summary the installer shows in bold; fpm indents the rest
-  # into the extended description and turns blank lines into the ` .` the format
-  # wants. Keep it roughly in step with build/dev.travus.dmscreen.metainfo.xml.
+  # The first line is the summary the installer shows in bold; the rest is one
+  # paragraph, and one paragraph only. fpm turns a blank line into the ` .` the
+  # control format uses for a paragraph break, and nothing between there and the
+  # screen puts it back: apt hands the description over as written, PackageKit
+  # passes it through, and GNOME Software prints it — so every break arrives as a
+  # stray `.` on a line of its own. Lines wrap into a paragraph on their own, so
+  # this is only about breaks. Keep it in step with
+  # build/dev.travus.dmscreen.metainfo.xml, which is read by tools that do
+  # understand paragraphs and keeps its own.
   fpm:
     - --description
     - |-
       A tiling digital DM screen for tabletop RPGs
-
       Split the window into as many panes as you like and give each one a module:
       initiative and party trackers, conditions and rules reference, dice, timers,
-      counters, notes, random tables and a name generator.
-
-      The whole arrangement saves to a .dmscreen file - panel settings and live
-      contents included - so a screen set up for one campaign reopens exactly as it
-      was left, or goes to a friend as a single file.
-
-      Reference content is SRD-only. Anything beyond it loads at runtime from a
-      data pack.
+      counters, notes, random tables and a name generator. The whole arrangement
+      saves to a .dmscreen file, panel settings and live contents included, so a
+      screen set up for one campaign reopens exactly as it was left, or goes to a
+      friend as a single file. Reference content is SRD-only; anything beyond it
+      loads at runtime from a data pack.
     # AppStream metadata. Nothing reads it before installing, but it is what makes
     # the installed app a proper entry in GNOME Software rather than a bare package
     # name. Relative to the project root, which is where fpm is spawned.
