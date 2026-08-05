@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../state/store'
-import { primaryModifier } from '../lib/platform'
+import { shortcuts } from '../lib/shortcuts'
+import { ShortcutHint } from '../components/ShortcutHint'
 
 export function TopBar(): JSX.Element {
   const name = useAppStore((state) => state.doc.name)
@@ -55,7 +56,7 @@ export function TopBar(): JSX.Element {
       ) : (
         <button
           className="layout-name"
-          title={filePath ?? 'Not saved to a file yet — click to rename'}
+          title={`${filePath ?? 'Not saved to a file yet'} — click or press ${shortcuts.rename} to rename`}
           onClick={() => setRenaming(true)}
         >
           {name}
@@ -66,44 +67,40 @@ export function TopBar(): JSX.Element {
       <span className="spacer" />
 
       <div className="topbar-actions">
-        <button
-          className="btn"
-          onClick={() => void newLayout()}
-          title={`New layout (${primaryModifier}+N)`}
-        >
-          New
-        </button>
-        <button
-          className="btn"
-          onClick={() => void openLayout()}
-          title={`Open layout (${primaryModifier}+O)`}
-        >
-          Open
-        </button>
-        <button
-          className="btn primary"
-          onClick={() => void save()}
-          title={`Save layout (${primaryModifier}+S)`}
-        >
-          Save
-        </button>
-        <button
-          className="btn"
-          onClick={() => void saveAs()}
-          title={`Save as… (${primaryModifier}+Shift+S)`}
-        >
-          Save As
-        </button>
+        {/* No `title` on these four — the hint replaces it, and both at once
+            would mean two tooltips for one button. */}
+        <ShortcutHint label="New layout" shortcut={shortcuts.newLayout}>
+          <button className="btn" onClick={() => void newLayout()}>
+            New
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Open layout" shortcut={shortcuts.openLayout}>
+          <button className="btn" onClick={() => void openLayout()}>
+            Open
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Save layout" shortcut={shortcuts.save}>
+          <button className="btn primary" onClick={() => void save()}>
+            Save
+          </button>
+        </ShortcutHint>
+        <ShortcutHint label="Save to a new file" shortcut={shortcuts.saveAs}>
+          <button className="btn" onClick={() => void saveAs()}>
+            Save As
+          </button>
+        </ShortcutHint>
 
         <span className="divider" />
 
+        {/* Icon-only buttons have nowhere to put the hint, so theirs stays in the
+            tooltip. Keep the "Lock the layout" wording — smoke.mjs selects on it. */}
         <button
           className={`icon-btn ${locked ? 'on' : ''}`}
           onClick={toggleLock}
           title={
             locked
-              ? 'Layout locked — click to allow resizing, splitting and closing panels'
-              : 'Lock the layout: freeze panel sizes and positions'
+              ? `Layout locked (${shortcuts.toggleLock}) — click to allow resizing, splitting and closing panels`
+              : `Lock the layout (${shortcuts.toggleLock}): freeze panel sizes and positions`
           }
         >
           <LockIcon locked={locked} />
