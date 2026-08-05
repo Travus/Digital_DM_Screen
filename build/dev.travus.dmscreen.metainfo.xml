@@ -21,9 +21,15 @@
 
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT AND CC-BY-4.0</project_license>
+  <!--
+    Both spellings on purpose. <developer> is AppStream 1.0; the 0.12 that
+    Ubuntu 20.04 ships does not know the tag and drops the name on the floor.
+    <developer_name> is what that version reads, and 1.0 still accepts it.
+  -->
   <developer id="dev.travus">
     <name>Travus</name>
   </developer>
+  <developer_name>Travus</developer_name>
 
   <description>
     <p>

@@ -163,6 +163,16 @@ does not list the app, the package is not the variable: suspect a stale
 `~/.cache/gnome-software/appstream/components.xmlb`, or a centre that only lists
 what it can install itself.
 
+**Check the metainfo against `ubuntu:20.04` as well, which is what this is for.**
+Focal ships AppStream 0.12, and a tag introduced after it is not an error there —
+it is an *info* saying `unknown-tag`, and the value is silently dropped. That is
+how `<developer>`, which is 1.0 syntax, left the author name off every 20.04
+machine while validating perfectly on 24.04. The file therefore carries both
+spellings: 0.12 reads `<developer_name>` and ignores the other, 1.0 reads
+`<developer>` and calls the other deprecated. Each version emits one info and
+neither loses anything. `appstreamcli dump <id>` is what shows which tags
+survived parsing — `get` prints a fixed summary and would have hidden this.
+
 **macOS must be built on macOS.** The original cross-build experiment was
 measured against electron-builder 26.15.3 in the `builder:wine` container, not
 assumed:
