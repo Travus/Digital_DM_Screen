@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PanelNode } from '../../../shared/types'
 import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
 import { shortcuts } from '../lib/shortcuts'
+import { placeMenu, type Placement, type Size } from '../lib/menuPlacement'
 import { ModulePicker } from './ModulePicker'
 
 /**
@@ -297,6 +298,9 @@ function PanelMenu({
   items: MenuItem[]
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [placement, setPlacement] = useState<Placement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -307,9 +311,39 @@ function PanelMenu({
     return () => document.removeEventListener('pointerdown', onDocumentPointerDown)
   }, [open, onOpenChange])
 
+  /**
+   * The menu is `fixed`, so it has to be told where to go. Measured in a layout
+   * effect, which runs before the browser paints: the pass rendered without a
+   * placement is never seen.
+   */
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement(null)
+      return
+    }
+    // The natural size is taken once, on that first placement-less pass. Taking
+    // it again after a max-height has been applied would read the capped height
+    // back, and the menu would latch to whichever side it first flipped to.
+    let size: Size | null = null
+    const reposition = (): void => {
+      if (!buttonRef.current || !menuRef.current) return
+      size ??= { width: menuRef.current.offsetWidth, height: menuRef.current.offsetHeight }
+      setPlacement(
+        placeMenu(buttonRef.current.getBoundingClientRect(), size, {
+          width: window.innerWidth,
+          height: window.innerHeight
+        })
+      )
+    }
+    reposition()
+    window.addEventListener('resize', reposition)
+    return () => window.removeEventListener('resize', reposition)
+  }, [open])
+
   return (
     <div className="menu-anchor" ref={ref}>
       <button
+        ref={buttonRef}
         className={`icon-btn ${open ? 'on' : ''}`}
         title="Panel menu"
         onClick={() => onOpenChange(!open)}
@@ -317,7 +351,11 @@ function PanelMenu({
         ⋯
       </button>
       {open && (
-        <div className="menu">
+        <div
+          className="menu"
+          ref={menuRef}
+          style={placement ? { ...placement } : { visibility: 'hidden' }}
+        >
           {items.map((item, index) =>
             item.separator ? (
               <div key={`sep-${index}`} className="menu-sep" />

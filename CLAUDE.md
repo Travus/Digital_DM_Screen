@@ -80,6 +80,20 @@ fallback is not enough; it must be scoped.
 key application-wide, including inside text fields. Panel fullscreen exits via
 a `keydown` listener in `App.tsx`.
 
+**A panel clips anything laid out inside it.** `.panel` is `overflow: hidden`,
+so an absolutely positioned popover is cut off at the panel edge — the ⋯ menu
+lost its last rows, "Close panel" among them, in any panel shorter than the
+menu. Anything overhanging a panel is therefore `position: fixed` and placed
+from JS: `placeMenu()` for the panel menu, and `ConditionPopover` inline for the
+cross-reference cards. That escapes the clip because no ancestor of a panel sets
+`transform`, `filter` or `contain` — any of which would make itself the
+containing block and bring the clipping back.
+
+Escaping the clip means nothing keeps the popover inside the *window* either, so
+placement has to flip and clamp for itself. And a smoke shot only proves it if
+the panel it opens in is too small to hold it: `panel-menu` opens the same menu
+on a full-height panel and stayed green throughout.
+
 **The portable exe locks itself while running.** If `release/…-portable.exe` is
 open, `dist:win` fails with a bare "Error - aborting creation process" from NSIS,
 with nothing pointing at the cause. Worse, the Linux targets and the NSIS

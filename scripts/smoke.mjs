@@ -96,6 +96,26 @@ const shots = [
     layout: starter,
     click: '.panel .icon-btn[title="Panel menu"]'
   },
+  // The same menu on a panel too short to hold it: every row has to be visible,
+  // spilling over the panel below. The shot above never showed this — it opens
+  // the menu on the full-height left panel, which has room for it either way.
+  {
+    name: 'panel-menu-short',
+    layout: starter,
+    mutate: (doc) => {
+      doc.root.children[1].sizes = [0.16, 0.84]
+    },
+    click: '.panel:has(.table.resizable) .icon-btn[title="Panel menu"]'
+  },
+  // And near the foot of the window, where it has to open upwards instead.
+  {
+    name: 'panel-menu-flipped',
+    layout: starter,
+    mutate: (doc) => {
+      doc.root.children[1].sizes = [0.84, 0.16]
+    },
+    click: '.split.column > .pane:last-child .icon-btn[title="Panel menu"]'
+  },
   // The top bar says nothing until hovered; settle has to outlast the delay.
   {
     name: 'topbar-hint',
