@@ -404,20 +404,25 @@ h4 {
 /* ------------------------------------------------------------------- menu */
 
 .menu-anchor {
-  position: relative;
+  display: flex;
 }
 
+/*
+  Fixed and placed from JS by placeMenu(): laid out inside the panel it was
+  clipped by the panel's own overflow, so in a short panel the last rows could
+  not be reached without resizing first.
+*/
 .menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   z-index: 80;
-  /* Its containing block is the ⋯ button, so shrink-to-fit gives this the width
-     of the longest *word* and wraps everything else. Label and shortcut on one
-     row only stay on one row if the menu is told to size to its widest row. */
+  /* Shrink-to-fit gives this the width of the longest *word* and wraps
+     everything else. Label and shortcut on one row only stay on one row if the
+     menu is told to size to its widest row. */
   width: max-content;
   max-width: 320px;
   min-width: 180px;
+  /* Only bites against the max-height a window too short for the menu forces. */
+  overflow-y: auto;
   padding: 4px;
   background: var(--bg-3);
   border: 1px solid var(--line);
