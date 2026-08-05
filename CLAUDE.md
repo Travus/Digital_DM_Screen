@@ -115,6 +115,64 @@ first, then `Categories` is overwritten unconditionally from `linux.category`,
 so anything set there is silently discarded. `linux.category` is the only knob;
 to ship more than one category, put them all in it.
 
+**`Comment` is overwritten the same way, from `description`.** So a long deb
+description would also become the desktop file's one-line tooltip, and setting
+`desktop.entry.Comment` cannot rescue it. The deb's own description therefore
+goes to fpm directly, as a second `--description` in `deb.fpm` — fpm gets the
+flag twice and keeps the last. Worth knowing that the override is positional:
+electron-builder pushes `options.fpm` after the args it builds itself, and if
+that ever changes the description silently reverts to the one-liner. `dpkg-deb
+-I` on the built package is what says which one won.
+
+**The Linux install screen reads the control file and nothing else.** Opening a
+`.deb` in GNOME Software shows the *package* name, the control Description, and
+`Homepage` as "Project Website" — and no icon, because nothing is unpacked yet.
+Its `file_to_app` path (`plugins/packagekit/gs-plugin-packagekit.c`) asks
+PackageKit for a file *list* purely to find a `.desktop` name; it never reads a
+file out of the archive. So an icon on that screen is not something the package
+can supply. The AppStream metainfo in `build/` is for after the install, where it
+is what makes the app a named entry with an icon rather than a bare package. Its
+`<launchable>` must match the installed `.desktop` filename, which electron-builder
+names after `linux.executableName`.
+
+**A deb description is one paragraph, or it grows dots.** The control format
+marks a blank line with ` .`, and nothing between the file and the screen turns
+that back into a paragraph break — apt hands the description over as written,
+PackageKit passes it through, GNOME Software prints it. Every break arrives as a
+stray `.` on a line of its own, and a description that opens with one leads with
+it. Lines wrap into a paragraph by themselves, so hand-wrapping is free; it is
+only breaks that cost. The metainfo keeps its paragraphs, because the tools that
+read *it* understand them.
+
+**The metainfo is verifiable without a desktop.** Unpack the built package over
+a throwaway Ubuntu and ask AppStream what it found:
+
+```sh
+docker run --rm -v "${PWD}/release:/r" ubuntu:24.04 bash -c \
+  'apt-get update -qq && apt-get install -y -qq appstream &&
+   dpkg-deb -x /r/Digital-DM-Screen-*-amd64.deb / &&
+   appstreamcli get dev.travus.dmscreen'
+```
+
+It should print the component with `Name: Digital DM Screen` and
+`Icon: digital-dm-screen` — the icon proving the `<launchable>` matched the
+installed `.desktop` file, which is the join gnome-software makes too
+(`gs_appstream_add_data_merge_fixup` in `lib/gs-appstream.c`, matching on
+`launchable[@type='desktop-id']`). If that works and a software centre still
+does not list the app, the package is not the variable: suspect a stale
+`~/.cache/gnome-software/appstream/components.xmlb`, or a centre that only lists
+what it can install itself.
+
+**Check the metainfo against `ubuntu:20.04` as well, which is what this is for.**
+Focal ships AppStream 0.12, and a tag introduced after it is not an error there —
+it is an *info* saying `unknown-tag`, and the value is silently dropped. That is
+how `<developer>`, which is 1.0 syntax, left the author name off every 20.04
+machine while validating perfectly on 24.04. The file therefore carries both
+spellings: 0.12 reads `<developer_name>` and ignores the other, 1.0 reads
+`<developer>` and calls the other deprecated. Each version emits one info and
+neither loses anything. `appstreamcli dump <id>` is what shows which tags
+survived parsing — `get` prints a fixed summary and would have hidden this.
+
 **macOS must be built on macOS.** The original cross-build experiment was
 measured against electron-builder 26.15.3 in the `builder:wine` container, not
 assumed:

@@ -7,8 +7,8 @@
   "//license": "Split on purpose — the code is mine, the SRD text under src/renderer/src/data/ is not. See LICENSE.md.",
   "license": "MIT AND CC-BY-4.0",
   "private": true,
-  "//homepage": "Required by the .deb target. Point this at the real repo when there is one.",
-  "homepage": "https://github.com/Travus/digital-dm-screen",
+  "//homepage": "Required by the .deb target, where it becomes the Homepage field the installer shows as Project Website. Must be the repo's current name — the old one only resolves through GitHub's rename redirect, which is not something to ship a link into.",
+  "homepage": "https://github.com/Travus/Digital_DM_Screen",
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",

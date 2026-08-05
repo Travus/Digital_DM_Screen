@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata, installed into /usr/share/metainfo/ by the deb target.
+
+  This is what turns a bare "digital-dm-screen" package into a named application
+  with an icon, a description and links in GNOME Software and KDE Discover. It is
+  read once the package is *installed*; nothing reads it out of the .deb file
+  beforehand, so it does not change the install screen — see CLAUDE.md.
+
+  There is deliberately no <releases> block. It would have to be edited in step
+  with every version bump, and a stale release list is worse than none.
+-->
+<component type="desktop-application">
+  <id>dev.travus.dmscreen</id>
+  <!-- Must match the .desktop file electron-builder installs, which is named
+       after linux.executableName. -->
+  <launchable type="desktop-id">digital-dm-screen.desktop</launchable>
+
+  <name>Digital DM Screen</name>
+  <summary>A tiling digital DM screen for tabletop RPGs</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT AND CC-BY-4.0</project_license>
+  <!--
+    Both spellings on purpose. <developer> is AppStream 1.0; the 0.12 that
+    Ubuntu 20.04 ships does not know the tag and drops the name on the floor.
+    <developer_name> is what that version reads, and 1.0 still accepts it.
+  -->
+  <developer id="dev.travus">
+    <name>Travus</name>
+  </developer>
+  <developer_name>Travus</developer_name>
+
+  <description>
+    <p>
+      Split the window into as many panes as you like and give each one a module:
+      initiative and party trackers, conditions and rules reference, dice, timers,
+      counters, notes, random tables and a name generator.
+    </p>
+    <p>
+      The whole arrangement saves to a .dmscreen file — panel settings and live
+      contents included — so a screen set up for one campaign reopens exactly as it
+      was left, or goes to a friend as a single file.
+    </p>
+    <p>
+      Reference content is SRD-only. Anything beyond it loads at runtime from a
+      data pack.
+    </p>
+  </description>
+
+  <categories>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>RPG</keyword>
+    <keyword>tabletop</keyword>
+    <keyword>dungeon master</keyword>
+    <keyword>initiative</keyword>
+    <keyword>encounter</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>The starter layout</caption>
+      <image type="source" width="1500" height="923">https://raw.githubusercontent.com/Travus/Digital_DM_Screen/main/docs/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/Travus/Digital_DM_Screen</url>
+  <url type="bugtracker">https://github.com/Travus/Digital_DM_Screen/issues</url>
+
+  <content_rating type="oars-1.1" />
+</component>

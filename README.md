@@ -1,6 +1,6 @@
 # Digital DM Screen
 
-[![CI](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml/badge.svg)](https://github.com/Travus/digital-dm-screen/actions/workflows/ci.yml)
+[![CI](https://github.com/Travus/Digital_DM_Screen/actions/workflows/ci.yml/badge.svg)](https://github.com/Travus/Digital_DM_Screen/actions/workflows/ci.yml)
 
 A tiling DM screen for running tabletop games. Split the window into as many
 panes as you want, drop a module into each one, and save the whole arrangement —
@@ -221,6 +221,13 @@ push to `main`:
 `builder:wine` image as local builds; the Mac installer uses the native runner
 required for a valid app bundle and DMG.
 
+Installers built for a pull request are labelled with its number —
+`Digital-DM-Screen-0.3.0-PR-17-amd64.deb`. A PR build carries the same version
+as the release it will become, so without that there is nothing in the filename
+to tell the two apart once both are in your downloads folder. The version the
+package reports after installing is still the plain one; only the file is
+labelled.
+
 ### Cutting a release
 
 ```sh
@@ -250,6 +257,13 @@ lone png at whatever size it already is, and nothing looks for icons in a
 ```sh
 docker compose run --rm --entrypoint bash smoke -lc scripts/gen-icons.sh
 ```
+
+The `.deb` also installs `build/dev.travus.dmscreen.metainfo.xml` into
+`/usr/share/metainfo/`. That is the AppStream file GNOME Software and Discover
+read to list the installed app by name, with its icon, description and links,
+rather than as a bare package. It describes the app after installation only —
+the screen shown *before* you install a downloaded `.deb` is built from the
+package's control fields alone, so it has no icon to show.
 
 ### Running it while developing
 
