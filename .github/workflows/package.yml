@@ -54,6 +54,9 @@ on:
 
 permissions:
   contents: read
+  # Only so a manual run can ask whether its branch has an open PR, and name the
+  # artifacts after it. Nothing here writes.
+  pull-requests: read
 
 defaults:
   run:
@@ -111,15 +114,22 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve the PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PR: ${{ github.event.number }}
+        run: bash ./scripts/resolve-pr.sh
+
       # Renaming runs back through the compose service, not on the runner:
       # release/ is a bind mount written by a root container, so the runner's own
       # user gets EACCES on every mv. Whoever wrote the files has to rename them.
       # Called through bash because the exec bit does not survive a Windows
       # checkout, and this repo is developed on one.
       - name: Label the installers with the PR number
-        if: github.event_name == 'pull_request'
+        if: steps.pr.outputs.number != ''
         env:
-          PR: ${{ github.event.number }}
+          PR: ${{ steps.pr.outputs.number }}
         run: docker compose run --rm -T build bash scripts/label-pr-build.sh release "$PR"
 
       # So a PR can be tried by hand rather than only read. Short retention on
@@ -179,13 +189,20 @@ jobs:
       - name: Launch and render the packaged app
         run: npm run smoke:mac
 
+      - name: Resolve the PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PR: ${{ github.event.number }}
+        run: bash ./scripts/resolve-pr.sh
+
       # After the launch test and the signature check, both of which resolve the
       # .app by its real name. No container here — this job builds natively, so
       # the runner owns release/ and can rename inside it.
       - name: Label the installer with the PR number
-        if: github.event_name == 'pull_request'
+        if: steps.pr.outputs.number != ''
         env:
-          PR: ${{ github.event.number }}
+          PR: ${{ steps.pr.outputs.number }}
         run: bash ./scripts/label-pr-build.sh release "$PR"
 
       - name: Upload macOS installer

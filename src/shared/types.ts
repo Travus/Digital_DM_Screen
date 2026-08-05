@@ -196,3 +196,4 @@ export type MenuAction =
   | 'panel:maximize'
   | 'panel:restore'
   | 'app:about'
+  | 'app:shortcuts'

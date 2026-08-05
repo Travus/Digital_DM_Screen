@@ -7,6 +7,7 @@ import type {
   RecentEntry,
   SessionSnapshot
 } from '../shared/types'
+import type { Keymap, ResolvedKeymap } from '../shared/actions'
 
 export interface AppInfo {
   version: string
@@ -78,6 +79,29 @@ const api = {
     ipcRenderer.on('data:changed', listener)
     return () => {
       ipcRenderer.off('data:changed', listener)
+    }
+  },
+
+  /**
+   * Defaults with the user's overrides applied, read synchronously for the same
+   * reason as `initialData` — shortcut labels are on screen in the first paint.
+   */
+  initialKeymap: ipcRenderer.sendSync('keymap:snapshot') as ResolvedKeymap,
+
+  /** Just the user's changes, which is what the editor shows as "changed". */
+  keymapOverrides: (): Promise<Keymap> => ipcRenderer.invoke('keymap:overrides'),
+
+  /** Persists overrides and rebuilds the menu. Resolves to the merged result. */
+  setKeymap: (overrides: Keymap): Promise<ResolvedKeymap> =>
+    ipcRenderer.invoke('keymap:set', overrides),
+  resetKeymap: (): Promise<ResolvedKeymap> => ipcRenderer.invoke('keymap:reset'),
+
+  /** Subscribe to keybinding changes. Returns an unsubscribe function. */
+  onKeymapChanged: (handler: (keymap: ResolvedKeymap) => void): (() => void) => {
+    const listener = (_event: unknown, keymap: ResolvedKeymap): void => handler(keymap)
+    ipcRenderer.on('keymap:changed', listener)
+    return () => {
+      ipcRenderer.off('keymap:changed', listener)
     }
   }
 }

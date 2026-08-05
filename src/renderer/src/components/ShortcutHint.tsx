@@ -21,7 +21,8 @@ export function ShortcutHint({
   children
 }: {
   label: string
-  shortcut: string
+  /** Absent once an action can be unbound — the hint then names the control only. */
+  shortcut?: string
   children: ReactNode
 }): JSX.Element {
   const [shown, setShown] = useState(false)
@@ -65,7 +66,7 @@ export function ShortcutHint({
       {shown && (
         <span className="hint" role="tooltip">
           {label}
-          <span className="shortcut">{shortcut}</span>
+          {shortcut && <span className="shortcut">{shortcut}</span>}
         </span>
       )}
     </span>

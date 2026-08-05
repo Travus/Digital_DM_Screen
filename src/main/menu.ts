@@ -1,6 +1,8 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import { basename } from 'node:path'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
+import { isValidAccelerator } from '../shared/accelerator'
+import type { ActionId, ResolvedKeymap } from '../shared/actions'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
 
@@ -23,17 +25,37 @@ const SRD_DATASETS: Dataset[] = ['conditions', 'rules', 'abilities', 'diseases']
  * to the renderer as a `MenuAction`, so the menu and the in-app buttons run the
  * exact same code paths.
  *
+ * Accelerators come from `keymap`, which is the user's keybindings merged over
+ * the catalogue in `src/shared/actions.ts`. They are not written here any more:
+ * this file and the renderer's labels used to hold separate copies that had to
+ * be edited together, which stops being merely untidy once the user can change
+ * one of them.
+ *
  * Note: no Escape accelerator here — a menu accelerator would swallow Escape
- * app-wide, including inside text fields. The renderer owns that key.
+ * app-wide, including inside text fields. The renderer owns that key, which is
+ * why `panel:restore` is `fixed` in the catalogue and has no item below.
  */
 export function buildMenu(
   recents: RecentEntry[],
   data: DataSnapshot,
+  keymap: ResolvedKeymap,
   dispatch: MenuDispatch,
   dataActions: DataActions
 ): void {
   const send = (action: MenuAction) => () => dispatch(action)
   const isMac = process.platform === 'darwin'
+
+  /**
+   * Last line of defence before `Menu.buildFromTemplate`, which throws on a
+   * malformed accelerator — and a throw here means no menu at all, so no Help
+   * item, so no way to reach the editor and undo the binding that caused it.
+   * The keymap is sanitised on read and validated before saving, so this should
+   * never fire; it costs nothing to make sure it cannot.
+   */
+  const accel = (id: ActionId): string | undefined => {
+    const accelerator = keymap[id]
+    return accelerator && isValidAccelerator(accelerator) ? accelerator : undefined
+  }
 
   // No sublabels anywhere in this menu: Windows renders them but sizes the menu
   // off the label alone, so anything longer than the label is cut mid-word. The
@@ -115,6 +137,12 @@ export function buildMenu(
       label: isMac ? 'Help' : '&Help',
       submenu: [
         {
+          label: 'Keyboard Shortcuts…',
+          accelerator: accel('app:shortcuts'),
+          click: send('app:shortcuts')
+        },
+        { type: 'separator' },
+        {
           label: isMac ? 'About, Shortcuts & License…' : `About ${app.getName()}`,
           click: send('app:about')
         }
@@ -127,16 +155,16 @@ export function buildMenu(
     {
       label: isMac ? 'Layout' : '&Layout',
       submenu: [
-        { label: 'New Layout', accelerator: 'CmdOrCtrl+N', click: send('layout:new') },
-        { label: 'Open Layout…', accelerator: 'CmdOrCtrl+O', click: send('layout:open') },
+        { label: 'New Layout', accelerator: accel('layout:new'), click: send('layout:new') },
+        { label: 'Open Layout…', accelerator: accel('layout:open'), click: send('layout:open') },
         { label: 'Open Recent', submenu: recentItems },
         { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: send('layout:save') },
-        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: send('layout:saveAs') },
-        { label: 'Rename…', accelerator: 'F2', click: send('layout:rename') },
+        { label: 'Save', accelerator: accel('layout:save'), click: send('layout:save') },
+        { label: 'Save As…', accelerator: accel('layout:saveAs'), click: send('layout:saveAs') },
+        { label: 'Rename…', accelerator: accel('layout:rename'), click: send('layout:rename') },
         {
           label: 'Lock / Unlock Layout',
-          accelerator: 'CmdOrCtrl+L',
+          accelerator: accel('layout:toggleLock'),
           click: send('layout:toggleLock')
         },
         ...layoutQuitItems
@@ -160,16 +188,24 @@ export function buildMenu(
     {
       label: isMac ? 'Panel' : '&Panel',
       submenu: [
-        { label: 'Split Right', accelerator: 'CmdOrCtrl+\\', click: send('panel:splitRight') },
-        { label: 'Split Down', accelerator: 'CmdOrCtrl+Shift+\\', click: send('panel:splitDown') },
+        {
+          label: 'Split Right',
+          accelerator: accel('panel:splitRight'),
+          click: send('panel:splitRight')
+        },
+        {
+          label: 'Split Down',
+          accelerator: accel('panel:splitDown'),
+          click: send('panel:splitDown')
+        },
         { type: 'separator' },
         {
           label: 'Fullscreen Panel (Esc to exit)',
-          accelerator: 'CmdOrCtrl+Enter',
+          accelerator: accel('panel:maximize'),
           click: send('panel:maximize')
         },
         { type: 'separator' },
-        { label: 'Close Panel', accelerator: 'CmdOrCtrl+W', click: send('panel:close') }
+        { label: 'Close Panel', accelerator: accel('panel:close'), click: send('panel:close') }
       ]
     },
     {
@@ -177,7 +213,7 @@ export function buildMenu(
       submenu: [
         {
           label: 'Import Data Pack…',
-          accelerator: 'CmdOrCtrl+I',
+          accelerator: accel('data:importPack'),
           click: () => dataActions.importPack()
         },
         { label: 'Reload Data Packs from Disk', click: () => dataActions.reloadPacks() },

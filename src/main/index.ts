@@ -13,10 +13,13 @@ import {
   addRecent,
   clearRecents,
   listRecents,
+  readKeymap,
   readSession,
   removeRecent,
+  writeKeymap,
   writeSession
 } from './userStore'
+import { resolveKeymap, sanitiseKeymap, type Keymap, type ResolvedKeymap } from '../shared/actions'
 import { addPack, currentSnapshot, loadPacks, removePack, setDatasetEnabled } from './packStore'
 import { buildMenu, type DataActions } from './menu'
 
@@ -33,6 +36,12 @@ let documentName = 'Untitled layout'
 let forceClose = false
 /** Set by before-quit so a confirmed close resumes Cmd+Q instead of only hiding its window. */
 let quitRequested = false
+/**
+ * The user's keybinding overrides, sparse. Main owns them because main builds
+ * the menu that carries the accelerators; the renderer gets a resolved copy for
+ * its labels.
+ */
+let keymapOverrides: Keymap = {}
 
 function fileNameFor(name: string): string {
   const safe = name.replace(/[\\/:*?"<>|]/g, '-').trim()
@@ -114,9 +123,24 @@ async function refreshMenu(): Promise<void> {
   buildMenu(
     await listRecents(),
     currentSnapshot(),
+    resolveKeymap(keymapOverrides),
     (action, payload) => mainWindow?.webContents.send('menu:action', action, payload),
     dataActions
   )
+}
+
+/**
+ * Persists a rebinding, rebuilds the menu around it and tells the renderer, so a
+ * changed shortcut takes effect on the accelerator and on every label at once
+ * without a restart.
+ */
+async function applyKeymap(overrides: Keymap): Promise<ResolvedKeymap> {
+  keymapOverrides = sanitiseKeymap(overrides).keymap
+  await writeKeymap(keymapOverrides)
+  const resolved = resolveKeymap(keymapOverrides)
+  mainWindow?.webContents.send('keymap:changed', resolved)
+  await refreshMenu()
+  return resolved
 }
 
 /**
@@ -144,6 +168,16 @@ function installSmokeHook(window: BrowserWindow): void {
       try {
         // Long enough for the session restore round-trip to land.
         await wait(1800)
+
+        // Fire a menu command first, for UI that has no other way in. The About
+        // and Keyboard Shortcuts dialogs open from the native menu only, and a
+        // native menu is not something a CSS selector can reach — so without
+        // this they had no smoke coverage at all.
+        const menuAction = (process.env['DMSCREEN_SMOKE_MENU'] ?? '').trim()
+        if (menuAction) {
+          window.webContents.send('menu:action', menuAction)
+          await wait(400)
+        }
 
         // Optionally drive controls through the real UI before capturing.
         // Newline-separated so several can be clicked in sequence.
@@ -447,6 +481,24 @@ ipcMain.on('data:snapshot', (event) => {
   event.returnValue = currentSnapshot()
 })
 
+/**
+ * Synchronous for the same reason as `data:snapshot`: the top bar and the panel
+ * headers print shortcut labels on first paint, and an async gate would show
+ * them blank for a frame and then reflow.
+ */
+ipcMain.on('keymap:snapshot', (event) => {
+  event.returnValue = resolveKeymap(keymapOverrides)
+})
+
+/** The sparse overrides, which is what the editor edits — not the resolved map. */
+ipcMain.handle('keymap:overrides', (): Keymap => keymapOverrides)
+
+ipcMain.handle('keymap:set', (_event, overrides: Keymap): Promise<ResolvedKeymap> =>
+  applyKeymap(overrides)
+)
+
+ipcMain.handle('keymap:reset', (): Promise<ResolvedKeymap> => applyKeymap({}))
+
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
@@ -474,7 +526,13 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     // Before the window exists, so the renderer can take the snapshot
-    // synchronously at preload and never render a half-loaded state.
+    // synchronously at preload and never render a half-loaded state. The keymap
+    // is read here for the same reason: the top bar prints shortcut labels in
+    // its very first paint.
+    const loaded = await readKeymap()
+    keymapOverrides = loaded.keymap
+    for (const warning of loaded.warnings) console.warn(`keybindings.json: ${warning}`)
+
     await loadPacks()
     await refreshMenu()
     createWindow()

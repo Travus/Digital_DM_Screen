@@ -1981,6 +1981,83 @@ code {
   align-self: flex-end;
 }
 
+/* Wider than the About dialog: every row is label + chord + two buttons. */
+.shortcuts-modal {
+  width: min(680px, 92vw);
+}
+
+/* The toolbar's own buttons lay themselves out; the rule above would shove both
+   to the right edge and drop the spacer between them. */
+.shortcuts-modal .toolbar .btn {
+  align-self: auto;
+}
+
+.shortcut-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(130px, auto) 62px;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Marks a row the user has moved off its default, in the editor and in the
+   About list — otherwise "why is this not what the docs say" has no answer. */
+.shortcut-changed {
+  padding: 1px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.shortcut-key {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.shortcut-key:hover {
+  border-color: var(--accent);
+}
+
+/* Unmistakable while it is swallowing every keypress on the window. */
+.shortcut-key.recording {
+  color: var(--bg-1);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.shortcut-key.fixed {
+  color: var(--text-faint);
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+
+.shortcut-row-actions {
+  display: flex;
+  gap: 2px;
+}
+
 /* --------------------------------------------------------------- scrollbar */
 
 ::-webkit-scrollbar {
