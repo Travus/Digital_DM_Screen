@@ -200,6 +200,52 @@ const shots = [
     click: '.panel .icon-btn[title="Panel menu"]'
   },
 
+  /* ----------------------------------------------------------------- big dice */
+
+  // Fresh from the picker: a d20, unthrown, prompting to be clicked.
+  {
+    name: 'bigdice',
+    layout: null,
+    click: '.picker-card[data-module-id="bigdice"]'
+  },
+  // A real click on the die, dwelt past the tumble so the shot catches a settled
+  // result rather than a mid-animation frame. The value is random by nature —
+  // what this proves is that the throw path works end to end.
+  {
+    name: 'bigdice-thrown',
+    layout: null,
+    click: ['.picker-card[data-module-id="bigdice"]', '.bigdice-stage'].join('\n'),
+    settle: 1400
+  },
+  // Seeded rather than rolled, because a natural 20 cannot be arranged by
+  // clicking. Shows the flourish and the history strip together.
+  {
+    name: 'bigdice-nat20',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = {
+        sides: 20,
+        value: 20,
+        history: [
+          { id: 'throw_a', sides: 20, value: 20 },
+          { id: 'throw_b', sides: 20, value: 7 },
+          { id: 'throw_c', sides: 20, value: 13 }
+        ]
+      }
+    }
+  },
+  // Percentile renders as the two ten-sided dice it physically is, so this is
+  // the shot that would catch it collapsing back to one.
+  {
+    name: 'bigdice-percentile',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = { sides: 100, value: 73, history: [] }
+    }
+  },
+
   /* --------------------------------------------------------------- data packs */
 
   // The important one. With no conditions loaded, the cross-reference scanner
