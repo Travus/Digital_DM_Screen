@@ -199,6 +199,24 @@ const shots = [
     keys: { 'panel:close': 'CmdOrCtrl+Alt+K', 'panel:splitRight': null },
     click: '.panel .icon-btn[title="Panel menu"]'
   },
+  // Two-stroke sequences, tmux-style: a modified prefix and a bare finish. The ⋯
+  // menu has to print both halves, which is the whole visible difference between
+  // a sequence working and a sequence being silently truncated to its prefix.
+  {
+    name: 'shortcuts-chords',
+    layout: starter,
+    keys: { 'panel:splitRight': 'CmdOrCtrl+B 5', 'panel:splitDown': 'CmdOrCtrl+B 2' },
+    click: '.panel .icon-btn[title="Panel menu"]'
+  },
+  // Half-typed. The indicator has to be visible and say what it is waiting for —
+  // the app is swallowing the next keystroke, and silence there reads as a
+  // dropped key rather than a deliberate state.
+  {
+    name: 'chord-pending',
+    layout: starter,
+    keys: { 'panel:splitRight': 'CmdOrCtrl+B 5' },
+    press: { code: 'KeyB', ctrlKey: true }
+  },
 
   /* --------------------------------------------------------------- data packs */
 
@@ -274,7 +292,7 @@ async function seedSession(layoutPath, mutate, data, keys) {
   )
 }
 
-function run(shotPath, click, settle, hover, menu) {
+function run(shotPath, click, settle, hover, menu, press) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
@@ -293,6 +311,7 @@ function run(shotPath, click, settle, hover, menu) {
           DMSCREEN_SMOKE_SHOT: shotPath,
           ...(menu ? { DMSCREEN_SMOKE_MENU: menu } : {}),
           ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
+          ...(press ? { DMSCREEN_SMOKE_PRESS: JSON.stringify(press) } : {}),
           ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
@@ -328,7 +347,7 @@ for (const shot of shots) {
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot.click, shot.settle, shot.hover, shot.menu)
+    const output = await run(shotPath, shot.click, shot.settle, shot.hover, shot.menu, shot.press)
 
     if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
 

@@ -121,6 +121,49 @@ paste app-wide. They are reserved in all three spellings of the primary modifier
 since a user recording on macOS produces `Cmd` and on Windows `Ctrl` while the
 catalogue stores `CmdOrCtrl`.
 
+### Two-stroke sequences
+
+A binding is one stroke or two, space-separated in `keybindings.json`:
+`"CmdOrCtrl+K CmdOrCtrl+S"`. Emacs writes that `C-x C-s`; JetBrains calls the
+second half a "second stroke".
+
+**Dispatch is split, and the split is forced.** An Electron accelerator is
+single-stroke only, so a sequence cannot be one. Single-stroke bindings stay menu
+accelerators; sequences run through `advanceChord` in
+`src/renderer/src/lib/chords.ts`. Do not "simplify" this by moving everything to
+the renderer — the menu would then show no accelerators at all, and
+`registerAccelerator: false` (display without registering) is **macOS-only**, so
+there is no cross-platform way back.
+
+**A menu accelerator beats the renderer, always.** Electron fires it before the
+web page sees the key, which is the same mechanism as the Escape trap above. So a
+single-stroke binding and any sequence containing that stroke cannot coexist: the
+accelerator wins and the sequence never completes. `findConflict` returns
+`shadowed`/`shadows` for this, and it applies to **either** half — a role fires
+whether or not a prefix is pending, so `CmdOrCtrl+K CmdOrCtrl+C` loses its second
+stroke to Copy just as surely as its first.
+
+**Only the first stroke needs a modifier; the second may be bare.** That is not
+laxity, it is the whole feature: `C-x 3`, `C-w v` and `C-b %` all finish on a
+plain key. It stays safe because a sequence can only *begin* on a modified
+stroke, so ordinary typing can never open one. It is also why Emacs, Vim and tmux
+import cleanly — their finishing keys are bare, and bare keys can never be
+single-stroke bindings, so nothing can shadow them.
+
+**Emacs cannot have its own prefix.** `C-x` is Cut. Reserving it is not this
+app's choice to make — shadowing Cut breaks it in every text field. `C-b` and
+`C-k` are free. A test pins this, because it looks like an oversight.
+
+**A pending prefix times out; Emacs and VS Code wait forever.** Different stakes:
+a DM who fumbles a prefix mid-session would otherwise have the app silently eat
+whatever they typed next. Two seconds, plus a conspicuous indicator, because a
+swallowed keystroke with no explanation reads as a dropped key.
+
+**Recording waits 900 ms after the first stroke.** There is no way to tell
+`Ctrl+S` from the opening of `Ctrl+K Ctrl+S` except by waiting — they are
+identical up to that point. The alternative was an explicit "record a sequence"
+toggle, which taxes every ordinary rebinding to avoid a pause that lands once.
+
 **`ActionDef.enabled` is deliberately unused.** It is for the command palette
 (#20's follow-up), which unlike a menu cannot list a command that quietly does
 nothing. Writing the predicates while the entries were being written was free;
@@ -380,13 +423,16 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 - `mutate(doc)` — adjust that layout for states clicking can't reach
 - `data` / `keys` — seed `datapacks.json` / `keybindings.json` in userData
 - `menu` — fire a `MenuAction` before anything is clicked
+- `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
   (focus is what reveals the condition cross-reference popovers)
 - `settle` — extra dwell before capture, for anything that changes over time
 
 `menu` exists because a native menu is not something a CSS selector can reach,
 and the About and Keyboard Shortcuts dialogs open from nowhere else — so until it
-was added they had no coverage available to them at all.
+was added they had no coverage available to them at all. `press` is there for the
+same reason one rung down: the half-typed state of a two-stroke sequence is
+reached by a *key*, and there is no control for `click` to select.
 
 **Build before you smoke, or you are photographing the last build.**
 `scripts/smoke.mjs` launches `out/`, not `src/`. Run `npm run build` first;

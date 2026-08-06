@@ -91,6 +91,13 @@ const api = {
   /** Just the user's changes, which is what the editor shows as "changed". */
   keymapOverrides: (): Promise<Keymap> => ipcRenderer.invoke('keymap:overrides'),
 
+  /**
+   * Import runs in main, where the packs are read and indexed, so the menu item
+   * calls it directly. A two-stroke binding for it lands in the renderer though,
+   * which needs this to reach the same code.
+   */
+  importDataPack: (): Promise<void> => ipcRenderer.invoke('data:importPack'),
+
   /** Persists overrides and rebuilds the menu. Resolves to the merged result. */
   setKeymap: (overrides: Keymap): Promise<ResolvedKeymap> =>
     ipcRenderer.invoke('keymap:set', overrides),

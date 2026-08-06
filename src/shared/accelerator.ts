@@ -316,3 +316,89 @@ export function formatAccelerator(accelerator: string, platform: string): string
   const source = parsed ? formatParsed(parsed) : accelerator
   return source.replace('CmdOrCtrl', platform === 'darwin' ? 'Cmd' : 'Ctrl')
 }
+
+/* ------------------------------------------------------------------ bindings */
+
+/**
+ * A *binding* is what an action is bound to: either one stroke (`CmdOrCtrl+S`)
+ * or two, separated by a space (`CmdOrCtrl+K CmdOrCtrl+S`) — press the first,
+ * release, press the second. Emacs writes that `C-x C-s`; VS Code calls it a
+ * chord; JetBrains calls the second half a "second stroke".
+ *
+ * Two is the cap. Emacs goes deeper, but nothing anyone asked to import does,
+ * and each extra level widens the window in which the app is swallowing
+ * keystrokes that would otherwise be typing.
+ */
+export const MAX_STROKES = 2
+
+export function bindingStrokes(binding: string): string[] {
+  return binding.split(' ').filter(Boolean)
+}
+
+export function isChordBinding(binding: string): boolean {
+  return bindingStrokes(binding).length > 1
+}
+
+export type BindingProblem = AcceleratorProblem | 'too-long'
+
+export const BINDING_PROBLEM_MESSAGES: Record<BindingProblem, string> = {
+  ...PROBLEM_MESSAGES,
+  syntax: 'That is not a key combination this app can bind.',
+  'no-modifier':
+    'The first key needs Ctrl, Cmd, Alt or Super — a bare key would fire while typing in a panel.',
+  reserved: 'That combination is reserved by the system or the app.',
+  'too-long': 'Two keystrokes is the limit.'
+}
+
+/**
+ * Validates a whole binding.
+ *
+ * Only the **first** stroke must carry a modifier. The second may be bare, and
+ * that is the entire point: `C-x 3`, `C-w v` and `C-b %` all finish on a plain
+ * key, and refusing those would leave nothing of Emacs, Vim or tmux to import.
+ * It is safe precisely because a sequence can only *start* from a modified
+ * stroke — ordinary typing can never open one.
+ */
+export function checkBinding(binding: string): BindingProblem | null {
+  const strokes = bindingStrokes(binding)
+  if (strokes.length === 0) return 'syntax'
+  if (strokes.length > MAX_STROKES) return 'too-long'
+
+  for (const [index, stroke] of strokes.entries()) {
+    const parsed = parseAccelerator(stroke)
+    if (!parsed) return 'syntax'
+
+    // Reserved applies to *every* stroke, not just the first. A menu role is
+    // registered app-wide and fires whether or not a prefix is pending, so
+    // `CmdOrCtrl+K CmdOrCtrl+C` would lose its second stroke to Copy.
+    if (parsed.key === 'Escape' || RESERVED.has(formatParsed(parsed))) return 'reserved'
+
+    if (index === 0) {
+      const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(parsed.key)
+      const hasRealModifier = parsed.modifiers.some((modifier) => REAL_MODIFIERS.includes(modifier))
+      if (!isFunctionKey && !hasRealModifier) return 'no-modifier'
+    }
+  }
+
+  return null
+}
+
+export function isValidBinding(binding: string): boolean {
+  return checkBinding(binding) === null
+}
+
+/** Canonical form of a whole binding, or null if any stroke fails to parse. */
+export function normaliseBinding(binding: string): string | null {
+  const strokes = bindingStrokes(binding)
+  if (!strokes.length) return null
+
+  const normalised = strokes.map(normaliseAccelerator)
+  if (normalised.some((stroke) => stroke === null)) return null
+  return normalised.join(' ')
+}
+
+export function formatBinding(binding: string, platform: string): string {
+  return bindingStrokes(binding)
+    .map((stroke) => formatAccelerator(stroke, platform))
+    .join(' ')
+}

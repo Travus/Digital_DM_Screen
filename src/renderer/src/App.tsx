@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { acceleratorFromChord, formatBinding } from '../../shared/accelerator'
+import type { ActionId } from '../../shared/actions'
 import type { MenuAction } from '../../shared/types'
 import { LayoutView } from './layout/LayoutView'
 import { RecentsPanel } from './layout/RecentsPanel'
 import { TopBar } from './layout/TopBar'
+import { advanceChord, CHORD_TIMEOUT_MS } from './lib/chords'
 import { useDataStore } from './state/dataStore'
 import { useKeymapStore } from './state/keymapStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
@@ -10,6 +13,16 @@ import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 
 /** How long the layout must sit still before we stash it in userData. */
 const SESSION_DEBOUNCE_MS = 700
+
+/**
+ * Everything `runAction` can be asked to do, from either of its two callers.
+ *
+ * The two vocabularies overlap without matching: the menu can send
+ * `layout:openRecent` and `recents:clear`, which are not bindable and so are not
+ * in the catalogue, while the catalogue has `data:importPack`, which the menu
+ * runs in main and never dispatches here.
+ */
+type RunnableAction = ActionId | MenuAction
 
 export function App(): JSX.Element {
   const doc = useAppStore((state) => state.doc)
@@ -22,6 +35,10 @@ export function App(): JSX.Element {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [restored, setRestored] = useState(false)
+  /** First half of a two-stroke sequence, while the app waits for the second. */
+  const [pendingChord, setPendingChord] = useState<string | null>(null)
+
+  const keymap = useKeymapStore((state) => state.keymap)
 
   useEffect(() => applyTheme(theme), [theme])
 
@@ -59,89 +76,138 @@ export function App(): JSX.Element {
     void window.dmscreen.setDirty(dirty, doc.name)
   }, [dirty, doc.name])
 
-  /* Menu commands run the same store actions the in-app buttons do. */
-  useEffect(() => {
-    return window.dmscreen.onMenuAction((action: MenuAction, payload?: string) => {
-      const store = useAppStore.getState()
-      const target = resolveTargetNodeId()
+  /* Menu commands run the same store actions the in-app buttons do.
+     Lifted out of the subscription so the chord dispatcher below can reach the
+     same code path — a sequence must do exactly what its menu item does. Every
+     setter it closes over is a stable `useState` one, so `[]` is honest. */
+  const runAction = useCallback((action: RunnableAction, payload?: string): void => {
+    const store = useAppStore.getState()
+    const target = resolveTargetNodeId()
 
-      switch (action) {
-        case 'layout:new':
-          void store.newLayout()
-          break
-        case 'layout:open':
-          void store.openLayout()
-          break
-        case 'layout:openRecent':
-          if (payload) void store.openLayout(payload)
-          break
-        case 'recents:clear':
-          void store.clearRecents()
-          break
-        case 'layout:save':
-          // Main may be waiting on the outcome before letting the window close.
-          //
-          // Flush the session before answering, rather than leaving it to the
-          // debounced write below. On "Save and quit" the app exits within
-          // milliseconds, so that timer never fires and session.json keeps the
-          // pre-save snapshot — including `dirty: true`. The layout file was
-          // always written correctly; the next launch just restored a stale flag
-          // and asked to save again.
-          void store.save().then(async (saved) => {
-            if (saved) {
-              const {
-                doc: savedDoc,
-                filePath: savedPath,
-                dirty: savedDirty
-              } = useAppStore.getState()
-              await window.dmscreen.writeSession({
-                doc: savedDoc,
-                filePath: savedPath,
-                dirty: savedDirty
-              })
-            }
-            window.dmscreen.notifySaveComplete(saved)
-          })
-          break
-        case 'layout:saveAs':
-          void store.saveAs()
-          break
-        case 'layout:rename':
-          document.querySelector<HTMLButtonElement>('.layout-name')?.click()
-          break
-        case 'layout:toggleLock':
-          store.toggleLock()
-          break
-        case 'panel:splitRight':
-          if (target) store.splitPanel(target, 'row')
-          break
-        case 'panel:splitDown':
-          if (target) store.splitPanel(target, 'column')
-          break
-        case 'panel:close':
-          if (target) store.closePanel(target)
-          break
-        case 'panel:maximize':
-          if (target) store.toggleMaximize(target)
-          break
-        case 'panel:restore':
-          store.maximize(null)
-          break
-        case 'app:about':
-          setAboutOpen(true)
-          break
-        case 'app:shortcuts':
-          setShortcutsOpen(true)
-          break
-      }
-    })
+    switch (action) {
+      case 'layout:new':
+        void store.newLayout()
+        break
+      case 'layout:open':
+        void store.openLayout()
+        break
+      case 'layout:openRecent':
+        if (payload) void store.openLayout(payload)
+        break
+      case 'recents:clear':
+        void store.clearRecents()
+        break
+      case 'layout:save':
+        // Main may be waiting on the outcome before letting the window close.
+        //
+        // Flush the session before answering, rather than leaving it to the
+        // debounced write below. On "Save and quit" the app exits within
+        // milliseconds, so that timer never fires and session.json keeps the
+        // pre-save snapshot — including `dirty: true`. The layout file was
+        // always written correctly; the next launch just restored a stale flag
+        // and asked to save again.
+        void store.save().then(async (saved) => {
+          if (saved) {
+            const { doc: savedDoc, filePath: savedPath, dirty: savedDirty } = useAppStore.getState()
+            await window.dmscreen.writeSession({
+              doc: savedDoc,
+              filePath: savedPath,
+              dirty: savedDirty
+            })
+          }
+          window.dmscreen.notifySaveComplete(saved)
+        })
+        break
+      case 'layout:saveAs':
+        void store.saveAs()
+        break
+      case 'layout:rename':
+        document.querySelector<HTMLButtonElement>('.layout-name')?.click()
+        break
+      case 'layout:toggleLock':
+        store.toggleLock()
+        break
+      case 'panel:splitRight':
+        if (target) store.splitPanel(target, 'row')
+        break
+      case 'panel:splitDown':
+        if (target) store.splitPanel(target, 'column')
+        break
+      case 'panel:close':
+        if (target) store.closePanel(target)
+        break
+      case 'panel:maximize':
+        if (target) store.toggleMaximize(target)
+        break
+      case 'panel:restore':
+        store.maximize(null)
+        break
+      case 'app:about':
+        setAboutOpen(true)
+        break
+      case 'app:shortcuts':
+        setShortcutsOpen(true)
+        break
+      // Handled in main, where the packs are read — but a sequence bound to it
+      // arrives here, so the renderer needs a way to ask for it.
+      case 'data:importPack':
+        void window.dmscreen.importDataPack()
+        break
+    }
   }, [])
+
+  useEffect(() => window.dmscreen.onMenuAction(runAction), [runAction])
+
+  /* Two-stroke sequences. Single-stroke bindings never reach this: they are menu
+     accelerators, which Electron fires before the renderer sees the key. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      // Escape is handled below, where cancelling a half-typed sequence is one
+      // rung of the same priority chain as leaving fullscreen.
+      if (event.key === 'Escape') return
+
+      const stroke = acceleratorFromChord(event, window.dmscreen.platform)
+      if (!stroke) return
+
+      const outcome = advanceChord(pendingChord, stroke, keymap)
+      if (outcome.type === 'ignore') return
+
+      // Everything else is ours: swallow it. A stroke that completes nothing is
+      // still swallowed, because half of `Ctrl+K 3` arriving as a literal "3" in
+      // whatever field had focus is worse than the sequence quietly failing.
+      event.preventDefault()
+
+      if (outcome.type === 'pending') {
+        setPendingChord(outcome.prefix)
+        return
+      }
+      setPendingChord(null)
+      if (outcome.type === 'fire') runAction(outcome.action)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [pendingChord, keymap, runAction])
+
+  /* A half-finished sequence gives up on its own, so a fumbled prefix cannot sit
+     there swallowing whatever the user types next. */
+  useEffect(() => {
+    if (!pendingChord) return
+    const timer = window.setTimeout(() => setPendingChord(null), CHORD_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [pendingChord])
 
   /* Escape leaves panel fullscreen. Owned here rather than by a menu
      accelerator, which would swallow Escape inside text fields. */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      // Abandoning a half-typed sequence outranks everything else: the user is
+      // most likely correcting a fumbled prefix, not asking to leave fullscreen.
+      if (pendingChord) {
+        setPendingChord(null)
+        return
+      }
       // The shortcuts editor takes Escape first while it is recording, on the
       // capture phase, so cancelling a capture never reaches this.
       if (shortcutsOpen) {
@@ -158,7 +224,7 @@ export function App(): JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [aboutOpen, shortcutsOpen])
+  }, [aboutOpen, shortcutsOpen, pendingChord])
 
   return (
     <div className={`app ${maximizedNodeId ? 'has-maximized' : ''}`}>
@@ -175,6 +241,15 @@ export function App(): JSX.Element {
         <button className="restore-hint" onClick={() => useAppStore.getState().maximize(null)}>
           Esc to return to the full screen
         </button>
+      )}
+
+      {/* Says out loud that the app is holding a prefix and will swallow the next
+          key. Without it a fumbled Ctrl+K looks exactly like a dropped keystroke. */}
+      {pendingChord && (
+        <div className="chord-pending" role="status">
+          <kbd>{formatBinding(pendingChord, window.dmscreen.platform)}</kbd>
+          <span>waiting for the second key — Esc to cancel</span>
+        </div>
       )}
 
       {aboutOpen && (

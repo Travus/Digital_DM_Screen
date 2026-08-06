@@ -203,6 +203,23 @@ function installSmokeHook(window: BrowserWindow): void {
           await wait(500)
         }
 
+        // Send one synthetic keypress. The only way to photograph a half-typed
+        // two-stroke sequence: its prefix is a key, not a control, so there is
+        // nothing for `click` to select.
+        const press = (process.env['DMSCREEN_SMOKE_PRESS'] ?? '').trim()
+        if (press) {
+          await window.webContents.executeJavaScript(
+            `(() => {
+              const init = ${press}
+              window.dispatchEvent(
+                new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+              )
+              return true
+            })()`
+          )
+          await wait(400)
+        }
+
         // Park the pointer on one control, for UI that only a hover reveals.
         // Dispatched as `pointerover`, not `pointerenter`: React listens at the
         // root and synthesises enter from the bubbling event, so an enter event
@@ -492,6 +509,9 @@ ipcMain.on('keymap:snapshot', (event) => {
 
 /** The sparse overrides, which is what the editor edits — not the resolved map. */
 ipcMain.handle('keymap:overrides', (): Keymap => keymapOverrides)
+
+/** Same entry point the Data menu item uses, for a sequence bound to it. */
+ipcMain.handle('data:importPack', (): void => dataActions.importPack())
 
 ipcMain.handle('keymap:set', (_event, overrides: Keymap): Promise<ResolvedKeymap> =>
   applyKeymap(overrides)

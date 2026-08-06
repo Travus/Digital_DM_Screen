@@ -145,6 +145,24 @@ handled by the app itself rather than by the menu, because a menu shortcut for
 `keybindings.json` beside the layout session, so they survive a reinstall and
 never travel inside a `.dmscreen` file.
 
+### Two-key sequences
+
+A shortcut can also be two keystrokes in a row, the way Emacs, Vim and tmux work —
+press `Ctrl+B`, let go, then press `5`. To record one, press the second key
+straight after the first; the first needs a modifier, the second can be anything.
+While a sequence is half typed the app says so at the foot of the window, and
+`Esc` abandons it.
+
+Two things are worth knowing before you rebuild a keymap around them:
+
+- **A shortcut and a sequence cannot share a keystroke.** `Ctrl+S` saves, so
+  `Ctrl+K Ctrl+S` can never finish — saving happens the moment you press the
+  second key. The editor says which binding is in the way. Sequences that end on
+  a *plain* key never hit this, which is why `Ctrl+B 5` is fine.
+- **`Ctrl+X` cannot start a sequence**, so Emacs's own `C-x` prefix is out: it is
+  Cut, and taking it would break cut in every text box. `Ctrl+B` and `Ctrl+K` are
+  both free.
+
 ## Building
 
 Windows and Linux builds run through Docker Compose — no Node or Electron on the

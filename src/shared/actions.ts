@@ -15,7 +15,7 @@
  * is what the shortcuts editor shows. The menu keeps its own.
  */
 
-import { checkAccelerator, normaliseAccelerator } from './accelerator'
+import { bindingStrokes, checkBinding, isChordBinding, normaliseBinding } from './accelerator'
 
 export type ActionId =
   | 'layout:new'
@@ -271,33 +271,78 @@ export function sanitiseKeymap(raw: unknown): KeymapLoad {
       warnings.push(`"${key}" is not a key combination.`)
       continue
     }
-    const problem = checkAccelerator(value)
+    const problem = checkBinding(value)
     if (problem) {
       warnings.push(`"${key}" is bound to ${value}, which is ${problem}.`)
       continue
     }
-    keymap[action.id] = normaliseAccelerator(value)
+    keymap[action.id] = normaliseBinding(value)
   }
 
   return { keymap, warnings }
 }
 
 /**
- * The action already holding a chord, if any. Compared on normalised form so
- * `Shift+CmdOrCtrl+s` and `CmdOrCtrl+Shift+S` count as the clash they are.
+ * Why a binding cannot be used.
+ *
+ * `duplicate` is the obvious one. The other two come from the split dispatch:
+ * a single-stroke binding is a **menu accelerator**, and Electron fires those
+ * app-wide before the renderer ever sees the key. So a single stroke and any
+ * chord containing that same stroke cannot coexist — whichever is the menu
+ * accelerator wins, every time, and the chord simply never completes.
+ *
+ * In practice this bites far less than it sounds. Emacs, Vim and tmux all end
+ * their sequences on a *bare* key (`C-x 3`, `C-w v`, `C-b %`), and bare keys
+ * can never be single-stroke bindings here — so those import cleanly. It is the
+ * VS Code style, `CmdOrCtrl+K CmdOrCtrl+S`, that collides, and only when its
+ * second stroke is separately bound.
  */
+export type Conflict =
+  | { kind: 'duplicate'; action: ActionId }
+  | { kind: 'shadowed'; action: ActionId; stroke: string }
+  | { kind: 'shadows'; action: ActionId; stroke: string }
+
 export function findConflict(
   keymap: ResolvedKeymap,
-  accelerator: string,
+  binding: string,
   exclude: ActionId
-): ActionId | null {
-  const wanted = normaliseAccelerator(accelerator)
+): Conflict | null {
+  const wanted = normaliseBinding(binding)
   if (!wanted) return null
+
+  const wantedStrokes = bindingStrokes(wanted)
+  const wantedIsChord = wantedStrokes.length > 1
 
   for (const action of ACTIONS) {
     if (action.id === exclude) continue
+
     const current = keymap[action.id]
-    if (current && normaliseAccelerator(current) === wanted) return action.id
+    if (!current) continue
+    const other = normaliseBinding(current)
+    if (!other) continue
+
+    if (other === wanted) return { kind: 'duplicate', action: action.id }
+
+    const otherStrokes = bindingStrokes(other)
+    const otherIsChord = otherStrokes.length > 1
+
+    // Their single stroke would be eaten by the menu before our chord could use
+    // it — as either half.
+    if (wantedIsChord && !otherIsChord && wantedStrokes.includes(other)) {
+      return { kind: 'shadowed', action: action.id, stroke: other }
+    }
+
+    // The mirror: we are the single stroke that would eat a stroke of theirs.
+    if (!wantedIsChord && otherIsChord && otherStrokes.includes(wanted)) {
+      return { kind: 'shadows', action: action.id, stroke: wanted }
+    }
   }
   return null
+}
+
+/** Bindings that need the renderer's sequence dispatcher rather than the menu. */
+export function chordBindings(keymap: ResolvedKeymap): [ActionId, string][] {
+  return (Object.entries(keymap) as [ActionId, string | null][])
+    .filter((entry): entry is [ActionId, string] => !!entry[1] && isChordBinding(entry[1]))
+    .map(([id, binding]) => [id, normaliseBinding(binding) ?? binding])
 }
