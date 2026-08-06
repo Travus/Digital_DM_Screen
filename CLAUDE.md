@@ -80,6 +80,54 @@ fallback is not enough; it must be scoped.
 key application-wide, including inside text fields. Panel fullscreen exits via
 a `keydown` listener in `App.tsx`.
 
+That listener does not check modifiers, so `Ctrl+Escape` leaves fullscreen too.
+Escape is therefore reserved in *every* combination, not just bare — see
+`checkAccelerator`.
+
+## Keybindings
+
+`src/shared/actions.ts` is the catalogue: one entry per command, with its default
+accelerator. It is the only place a binding is written. `src/main/menu.ts` reads
+accelerators from it, and so does the renderer for every caption.
+
+That used to be two copies — literal `accelerator:` strings in `menu.ts` and a
+literal table in `lib/shortcuts.ts`, whose own comment said the two had to be
+edited together. Constants can survive that. A user-editable binding cannot: the
+copy that is not the keymap just becomes a caption that lies.
+
+**Overrides are sparse, and `??` is the wrong merge.** `keybindings.json` holds
+only what the user changed, so a later change to a default still reaches anyone
+who never touched it — the same argument as panel state. But `null` there means
+*deliberately unbound*, which is not the same as absent, and
+`overrides[id] ?? default` silently turns one into the other. `resolveKeymap`
+tests presence with `hasOwnProperty`. A test caught this; nothing else would
+have, because the wrong behaviour looks exactly like the right one until someone
+clears a binding.
+
+**A bad accelerator costs you the whole menu.** `Menu.buildFromTemplate` throws
+on a malformed string, and the menu is where Help → Keyboard Shortcuts… lives —
+so the throw takes away the only route to undoing what caused it. `sanitiseKeymap`
+is therefore total in the way `resolve()` is: it collects warnings and drops bad
+entries rather than raising. `menu.ts` re-checks anyway before building.
+
+**Record from `event.code`, not `event.key`.** With Shift held, `key` reports the
+*shifted* character, so the shipped default `CmdOrCtrl+Shift+\` would record as
+`CmdOrCtrl+Shift+|` and never match. `code` names the physical key, which also
+keeps a chord put on a non-US layout.
+
+**The macOS Edit roles are load-bearing.** `Cmd+C/V/X/A/Z` work in text fields
+only because the OS routes them through the menu; shadowing one kills copy and
+paste app-wide. They are reserved in all three spellings of the primary modifier,
+since a user recording on macOS produces `Cmd` and on Windows `Ctrl` while the
+catalogue stores `CmdOrCtrl`.
+
+**`ActionDef.enabled` is deliberately unused.** It is for the command palette
+(#20's follow-up), which unlike a menu cannot list a command that quietly does
+nothing. Writing the predicates while the entries were being written was free;
+retrofitting them means re-deriving each guard from wherever it currently lives —
+`store.closePanel`'s early return, `PanelFrame`'s omitted rows, `App`'s
+`if (target)`.
+
 **A panel clips anything laid out inside it.** `.panel` is `overflow: hidden`,
 so an absolutely positioned popover is cut off at the panel edge — the ⋯ menu
 lost its last rows, "Close panel" among them, in any panel shorter than the
@@ -330,9 +378,22 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 
 - `layout` — seed a session from a `.dmscreen` file, or `null` for empty
 - `mutate(doc)` — adjust that layout for states clicking can't reach
+- `data` / `keys` — seed `datapacks.json` / `keybindings.json` in userData
+- `menu` — fire a `MenuAction` before anything is clicked
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
   (focus is what reveals the condition cross-reference popovers)
 - `settle` — extra dwell before capture, for anything that changes over time
+
+`menu` exists because a native menu is not something a CSS selector can reach,
+and the About and Keyboard Shortcuts dialogs open from nowhere else — so until it
+was added they had no coverage available to them at all.
+
+**Build before you smoke, or you are photographing the last build.**
+`scripts/smoke.mjs` launches `out/`, not `src/`. Run `npm run build` first;
+`ci.yml` does, which is why this only bites locally. It fails silently in the
+worst way — a shot whose new UI is simply absent still captures a valid-looking
+screenshot and reports `ok`, exactly like the `conditions-search` empty-state
+trap above. Read the image.
 
 Picker cards carry `data-module-id`, so `.picker-card[data-module-id="timers"]`
 is a stable way into any module from an empty layout.
@@ -367,6 +428,14 @@ user, and a gate that cries wolf is decoration.
 **`package.yml` must never become a required status check.** It is
 `paths`-filtered, and a skipped check never reports, which would block every
 unrelated PR permanently.
+
+The same filter means a PR touching only `src/**` never builds installers. To
+build one by hand, dispatch the workflow against the branch — `gh workflow run
+package.yml --ref <branch>`, or the Run workflow button. `scripts/resolve-pr.sh`
+then looks up whether that branch has an open PR, so a dispatched build still
+labels its artifacts; with no PR open it returns empty and the labelling step
+skips rather than guessing. Releases never reach it — they run from `release.yml`
+on a tag.
 
 **The release tag goes on after the merge**, not via `npm version`. Its own tag
 points at the pre-merge commit, which a squash merge leaves off `main` — cutting

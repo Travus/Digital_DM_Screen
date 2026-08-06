@@ -4,8 +4,9 @@ import { LayoutView } from './layout/LayoutView'
 import { RecentsPanel } from './layout/RecentsPanel'
 import { TopBar } from './layout/TopBar'
 import { useDataStore } from './state/dataStore'
+import { useKeymapStore } from './state/keymapStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
-import { shortcuts } from './lib/shortcuts'
+import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 
 /** How long the layout must sit still before we stash it in userData. */
 const SESSION_DEBOUNCE_MS = 700
@@ -19,12 +20,16 @@ export function App(): JSX.Element {
   const theme = useAppStore((state) => state.theme)
 
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [restored, setRestored] = useState(false)
 
   useEffect(() => applyTheme(theme), [theme])
 
   /* Reference data changes in the main process — importing a pack, or a toggle. */
   useEffect(() => window.dmscreen.onDataChanged(useDataStore.getState().apply), [])
+
+  /* Keybindings likewise: main owns them because main owns the menu. */
+  useEffect(() => window.dmscreen.onKeymapChanged(useKeymapStore.getState().apply), [])
 
   /* Restore the previous session, then start tracking recents. */
   useEffect(() => {
@@ -125,6 +130,9 @@ export function App(): JSX.Element {
         case 'app:about':
           setAboutOpen(true)
           break
+        case 'app:shortcuts':
+          setShortcutsOpen(true)
+          break
       }
     })
   }, [])
@@ -134,6 +142,12 @@ export function App(): JSX.Element {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      // The shortcuts editor takes Escape first while it is recording, on the
+      // capture phase, so cancelling a capture never reaches this.
+      if (shortcutsOpen) {
+        setShortcutsOpen(false)
+        return
+      }
       if (aboutOpen) {
         setAboutOpen(false)
         return
@@ -144,7 +158,7 @@ export function App(): JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [aboutOpen])
+  }, [aboutOpen, shortcutsOpen])
 
   return (
     <div className={`app ${maximizedNodeId ? 'has-maximized' : ''}`}>
@@ -163,12 +177,27 @@ export function App(): JSX.Element {
         </button>
       )}
 
-      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+      {aboutOpen && (
+        <AboutDialog
+          onClose={() => setAboutOpen(false)}
+          onEditShortcuts={() => {
+            setAboutOpen(false)
+            setShortcutsOpen(true)
+          }}
+        />
+      )}
+      {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     </div>
   )
 }
 
-function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
+function AboutDialog({
+  onClose,
+  onEditShortcuts
+}: {
+  onClose: () => void
+  onEditShortcuts: () => void
+}): JSX.Element {
   const [info, setInfo] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
@@ -186,41 +215,14 @@ function AboutDialog({ onClose }: { onClose: () => void }): JSX.Element {
           arrangement — settings and contents included — as a layout file.
         </p>
 
+        {/* Generated from the catalogue and the live keymap — this used to be a
+            hand-kept list of literals, which is exactly what stops being safe
+            once the bindings can change under it. */}
         <h4 className="section-title">Shortcuts</h4>
-        <dl className="deflist">
-          <div className="defrow">
-            <dt>
-              {shortcuts.splitRight} / {shortcuts.splitDown}
-            </dt>
-            <dd>Split the active panel right / down</dd>
-          </div>
-          <div className="defrow">
-            <dt>{shortcuts.maximize}</dt>
-            <dd>Fullscreen the active panel — {shortcuts.restore} returns</dd>
-          </div>
-          <div className="defrow">
-            <dt>{shortcuts.closePanel}</dt>
-            <dd>Close the active panel</dd>
-          </div>
-          <div className="defrow">
-            <dt>
-              {shortcuts.save} / {shortcuts.openLayout} / {shortcuts.newLayout}
-            </dt>
-            <dd>Save, open, new layout</dd>
-          </div>
-          <div className="defrow">
-            <dt>{shortcuts.rename}</dt>
-            <dd>Rename the layout</dd>
-          </div>
-          <div className="defrow">
-            <dt>{shortcuts.toggleLock}</dt>
-            <dd>Lock or unlock the layout</dd>
-          </div>
-          <div className="defrow">
-            <dt>Double-click a splitter</dt>
-            <dd>Even out that row or column</dd>
-          </div>
-        </dl>
+        <ShortcutSummary />
+        <button className="btn" onClick={onEditShortcuts}>
+          Change shortcuts…
+        </button>
 
         {info && (
           <p className="note mono">

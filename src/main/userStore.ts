@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'node:path'
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises'
 import type { RecentEntry, SessionSnapshot } from '../shared/types'
+import { sanitiseKeymap, type Keymap, type KeymapLoad } from '../shared/actions'
 
 const MAX_RECENTS = 12
 
@@ -51,6 +52,19 @@ export async function removeRecent(path: string): Promise<RecentEntry[]> {
 export async function clearRecents(): Promise<RecentEntry[]> {
   await writeJson(userFile('recents.json'), [])
   return []
+}
+
+/**
+ * Keybindings live here rather than in the session, for the reason data packs
+ * live outside `useAppStore`: everything in the session rides along with
+ * `dirty`, and rebinding a key must never mark a layout unsaved.
+ */
+export async function readKeymap(): Promise<KeymapLoad> {
+  return sanitiseKeymap(await readJson<unknown>(userFile('keybindings.json')))
+}
+
+export async function writeKeymap(keymap: Keymap): Promise<void> {
+  await writeJson(userFile('keybindings.json'), keymap)
 }
 
 export async function readSession(): Promise<SessionSnapshot | null> {

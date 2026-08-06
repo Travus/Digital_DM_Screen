@@ -172,6 +172,34 @@ const shots = [
     ].join('\n')
   },
 
+  /* -------------------------------------------------------------- shortcuts */
+
+  // The editor, on defaults: every row shows the chord the menu carries, and
+  // "Leave panel fullscreen" shows as fixed rather than simply missing.
+  {
+    name: 'shortcuts-editor',
+    layout: starter,
+    menu: 'app:shortcuts'
+  },
+  // Mid-capture. Also the shot that would catch the recording state failing to
+  // announce itself, which matters because it is swallowing every keypress.
+  {
+    name: 'shortcuts-recording',
+    layout: starter,
+    menu: 'app:shortcuts',
+    click: '.shortcut-row:nth-of-type(3) .shortcut-key'
+  },
+  // The point of the whole change: one entry in keybindings.json, and the ⋯
+  // menu row says the new chord. Before this PR the row read from a literal
+  // table that knew nothing about the menu's accelerators, so it would have gone
+  // on saying Ctrl+W here.
+  {
+    name: 'shortcuts-rebound',
+    layout: starter,
+    keys: { 'panel:close': 'CmdOrCtrl+Alt+K', 'panel:splitRight': null },
+    click: '.panel .icon-btn[title="Panel menu"]'
+  },
+
   /* --------------------------------------------------------------- data packs */
 
   // The important one. With no conditions loaded, the cross-reference scanner
@@ -212,7 +240,7 @@ const shots = [
   }
 ]
 
-async function seedSession(layoutPath, mutate, data) {
+async function seedSession(layoutPath, mutate, data, keys) {
   await rm(userData, { recursive: true, force: true })
   await mkdir(userData, { recursive: true })
 
@@ -220,6 +248,12 @@ async function seedSession(layoutPath, mutate, data) {
   // up any data state without needing the menu.
   if (data) {
     await writeFile(join(userData, 'datapacks.json'), JSON.stringify(data, null, 2))
+  }
+
+  // Keybinding overrides live there too, and sparsely — one entry is a whole
+  // rebinding, which is what makes a "did the label follow the key" shot cheap.
+  if (keys) {
+    await writeFile(join(userData, 'keybindings.json'), JSON.stringify(keys, null, 2))
   }
 
   if (!layoutPath) return
@@ -240,7 +274,7 @@ async function seedSession(layoutPath, mutate, data) {
   )
 }
 
-function run(shotPath, click, settle, hover) {
+function run(shotPath, click, settle, hover, menu) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
@@ -257,6 +291,7 @@ function run(shotPath, click, settle, hover) {
           ...process.env,
           XDG_CONFIG_HOME: configHome,
           DMSCREEN_SMOKE_SHOT: shotPath,
+          ...(menu ? { DMSCREEN_SMOKE_MENU: menu } : {}),
           ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
           ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
@@ -289,11 +324,11 @@ let failed = false
 for (const shot of shots) {
   const shotPath = join(outDir, `${shot.name}.png`)
   await rm(shotPath, { force: true })
-  await seedSession(shot.layout, shot.mutate, shot.data)
+  await seedSession(shot.layout, shot.mutate, shot.data, shot.keys)
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot.click, shot.settle, shot.hover)
+    const output = await run(shotPath, shot.click, shot.settle, shot.hover, shot.menu)
 
     if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
 

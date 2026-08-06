@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useAppStore } from '../state/store'
-import { shortcuts } from '../lib/shortcuts'
+import { parenthesised, useShortcuts } from '../lib/shortcuts'
 import { ShortcutHint } from '../components/ShortcutHint'
 
 export function TopBar(): JSX.Element {
+  const shortcuts = useShortcuts()
   const name = useAppStore((state) => state.doc.name)
   const dirty = useAppStore((state) => state.dirty)
   const filePath = useAppStore((state) => state.filePath)
@@ -56,7 +57,9 @@ export function TopBar(): JSX.Element {
       ) : (
         <button
           className="layout-name"
-          title={`${filePath ?? 'Not saved to a file yet'} — click or press ${shortcuts.rename} to rename`}
+          title={`${filePath ?? 'Not saved to a file yet'} — click${
+            shortcuts['layout:rename'] ? ` or press ${shortcuts['layout:rename']}` : ''
+          } to rename`}
           onClick={() => setRenaming(true)}
         >
           {name}
@@ -69,22 +72,22 @@ export function TopBar(): JSX.Element {
       <div className="topbar-actions">
         {/* No `title` on these four — the hint replaces it, and both at once
             would mean two tooltips for one button. */}
-        <ShortcutHint label="New layout" shortcut={shortcuts.newLayout}>
+        <ShortcutHint label="New layout" shortcut={shortcuts['layout:new']}>
           <button className="btn" onClick={() => void newLayout()}>
             New
           </button>
         </ShortcutHint>
-        <ShortcutHint label="Open layout" shortcut={shortcuts.openLayout}>
+        <ShortcutHint label="Open layout" shortcut={shortcuts['layout:open']}>
           <button className="btn" onClick={() => void openLayout()}>
             Open
           </button>
         </ShortcutHint>
-        <ShortcutHint label="Save layout" shortcut={shortcuts.save}>
+        <ShortcutHint label="Save layout" shortcut={shortcuts['layout:save']}>
           <button className="btn primary" onClick={() => void save()}>
             Save
           </button>
         </ShortcutHint>
-        <ShortcutHint label="Save to a new file" shortcut={shortcuts.saveAs}>
+        <ShortcutHint label="Save to a new file" shortcut={shortcuts['layout:saveAs']}>
           <button className="btn" onClick={() => void saveAs()}>
             Save As
           </button>
@@ -99,8 +102,8 @@ export function TopBar(): JSX.Element {
           onClick={toggleLock}
           title={
             locked
-              ? `Layout locked (${shortcuts.toggleLock}) — click to allow resizing, splitting and closing panels`
-              : `Lock the layout (${shortcuts.toggleLock}): freeze panel sizes and positions`
+              ? `Layout locked${parenthesised(shortcuts['layout:toggleLock'])} — click to allow resizing, splitting and closing panels`
+              : `Lock the layout${parenthesised(shortcuts['layout:toggleLock'])}: freeze panel sizes and positions`
           }
         >
           <LockIcon locked={locked} />

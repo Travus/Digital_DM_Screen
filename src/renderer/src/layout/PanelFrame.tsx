@@ -3,7 +3,7 @@ import type { PanelNode } from '../../../shared/types'
 import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
-import { shortcuts } from '../lib/shortcuts'
+import { parenthesised, useShortcuts } from '../lib/shortcuts'
 import { placeMenu, type Placement, type Size } from '../lib/menuPlacement'
 import { ModulePicker } from './ModulePicker'
 
@@ -41,6 +41,8 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [picking, setPicking] = useState(false)
+
+  const shortcuts = useShortcuts()
 
   const module = panel ? getModule(panel.moduleId) : undefined
   const showPicker = picking || !module || panel?.moduleId === EMPTY_MODULE_ID
@@ -167,8 +169,8 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
             className="icon-btn"
             title={
               maximized
-                ? `Return to normal view (${shortcuts.restore})`
-                : `Fullscreen this panel (${shortcuts.maximize})`
+                ? `Return to normal view${parenthesised(shortcuts['panel:restore'])}`
+                : `Fullscreen this panel${parenthesised(shortcuts['panel:maximize'])}`
             }
             onClick={() => toggleMaximize(node.id)}
           >
@@ -195,12 +197,12 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                     { separator: true },
                     {
                       label: 'Split right',
-                      shortcut: shortcuts.splitRight,
+                      shortcut: shortcuts['panel:splitRight'],
                       onSelect: () => splitPanel(node.id, 'row')
                     },
                     {
                       label: 'Split down',
-                      shortcut: shortcuts.splitDown,
+                      shortcut: shortcuts['panel:splitDown'],
                       onSelect: () => splitPanel(node.id, 'column')
                     },
                     ...(parentSplitId
@@ -218,7 +220,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                     { separator: true },
                     {
                       label: 'Close panel',
-                      shortcut: shortcuts.closePanel,
+                      shortcut: shortcuts['panel:close'],
                       danger: true,
                       onSelect: () => closePanel(node.id)
                     }

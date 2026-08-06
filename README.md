@@ -123,6 +123,12 @@ Worth knowing:
 
 ## Keyboard
 
+These are the defaults. **Help → Keyboard Shortcuts…** rebinds any of them:
+click a shortcut, press the combination you want, and the menu and every button
+caption follow it immediately. A combination needs Ctrl, Cmd, Alt or Super — a
+bare key would fire while you were typing in a panel — and function keys are the
+exception, which is why `F2` is a default.
+
 | Key | Action |
 |---|---|
 | `Cmd/Ctrl+\` / `Cmd/Ctrl+Shift+\` | Split the active panel right / down |
@@ -132,6 +138,12 @@ Worth knowing:
 | `F2` | Rename the layout |
 | `Cmd/Ctrl+L` | Lock or unlock the layout |
 | `Cmd/Ctrl+I` | Import a data pack |
+
+`Esc` is the one that cannot be changed: it leaves panel fullscreen, and it is
+handled by the app itself rather than by the menu, because a menu shortcut for
+`Esc` would swallow the key inside text fields too. Your changes live in
+`keybindings.json` beside the layout session, so they survive a reinstall and
+never travel inside a `.dmscreen` file.
 
 ## Building
 
