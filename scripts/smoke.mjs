@@ -236,13 +236,36 @@ const shots = [
     }
   },
   // Percentile renders as the two ten-sided dice it physically is, so this is
-  // the shot that would catch it collapsing back to one.
+  // the shot that would catch it collapsing back to one. Seeded at 100 — the one
+  // throw in a hundred that shows 00 and 0, and the only three-digit total the
+  // history strip ever has to hold.
   {
     name: 'bigdice-percentile',
     layout: starter,
     mutate: (doc) => {
       doc.panels.panel_ref.moduleId = 'bigdice'
-      doc.panels.panel_ref.state = { sides: 100, value: 73, history: [] }
+      doc.panels.panel_ref.state = {
+        sides: 100,
+        value: 100,
+        history: [
+          { id: 'throw_p', sides: 100, value: 100 },
+          { id: 'throw_q', sides: 100, value: 7 },
+          { id: 'throw_r', sides: 100, value: 62 }
+        ]
+      }
+    }
+  },
+  // The two numbers that came closest to overflowing their faces, at two very
+  // different panel sizes: a d12 showing 12 and a d4 showing 4. Both sit inside
+  // an inner face, so this is what would catch either one clipping again.
+  {
+    name: 'bigdice-tight-faces',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = { sides: 4, value: 4, history: [] }
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = { sides: 12, value: 12, history: [] }
     }
   },
 

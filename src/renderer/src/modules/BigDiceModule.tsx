@@ -38,6 +38,12 @@ interface Settings {
   /** Mark a natural 20 and a natural 1 on the d20. */
   critFlourish: boolean
   animate: boolean
+  /**
+   * Whether a percentile throw of `00` and `0` is 100 or 0 — which is to say,
+   * whether the die reads 1–100 or 0–99. Tables disagree, and the faces are
+   * identical either way, so only the total changes.
+   */
+  zeroIsHundred: boolean
 }
 
 function label(sides: number): string {
@@ -45,14 +51,26 @@ function label(sides: number): string {
 }
 
 /**
- * Percentile is two ten-sided dice, and showing it as two is the whole point of
- * a module meant to be watched. 100 reads as "00" and "0", the way it does on
- * the table.
+ * Rolled as the two dice it physically is, rather than as `rollDie(100)`.
+ *
+ * That matters for the 0–99 convention, which has no equivalent single roll, and
+ * it makes the one interesting result reachable honestly: `00` and `0` comes up
+ * when both dice land on zero, once in a hundred throws either way.
+ */
+function rollPercentile(zeroIsHundred: boolean): number {
+  const tens = rollDie(10) - 1
+  const units = rollDie(10) - 1
+  const raw = tens * 10 + units
+  return raw === 0 && zeroIsHundred ? 100 : raw
+}
+
+/**
+ * The two faces for a percentile total. 100 and 0 are the same throw — both
+ * dice showing zero — so both render as `00` and `0`.
  */
 function percentileFaces(value: number): [string, string] {
-  const tens = value === 100 ? 0 : Math.floor(value / 10) * 10
-  const units = value === 100 ? 0 : value % 10
-  return [String(tens).padStart(2, '0'), String(units)]
+  const raw = value === 100 ? 0 : value
+  return [String(Math.floor(raw / 10) * 10).padStart(2, '0'), String(raw % 10)]
 }
 
 function BigDice({
@@ -85,9 +103,12 @@ function BigDice({
     setFace(null)
   }, [state.sides])
 
+  const throwDie = (): number =>
+    state.sides === 100 ? rollPercentile(settings.zeroIsHundred) : rollDie(state.sides)
+
   const roll = (): void => {
     if (tumbling) return
-    const result = rollDie(state.sides)
+    const result = throwDie()
 
     const settle = (): void => {
       clearTimers()
@@ -110,7 +131,7 @@ function BigDice({
     }
 
     setTumbling(true)
-    timers.current.push(window.setInterval(() => setFace(rollDie(state.sides)), TICK_MS))
+    timers.current.push(window.setInterval(() => setFace(throwDie()), TICK_MS))
     timers.current.push(window.setInterval(settle, TUMBLE_MS))
   }
 
@@ -208,20 +229,27 @@ function Die({ sides, face }: { sides: number; face: string }): JSX.Element {
     12: (
       <>
         <polygon points="50,5 93,37 77,90 23,90 7,37" />
-        <polygon points="50,26 71,42 63,67 37,67 29,42" className="facet" />
+        {/* Sized to clear "12" at the full face size — a tighter pentagon clipped it. */}
+        <polygon points="50,14 81,38 69,74 31,74 19,38" className="facet" />
       </>
     ),
     20: (
       <>
         <polygon points="50,4 89,27 89,73 50,96 11,73 11,27" />
-        {/* Wide enough to hold two digits — the number sits inside this face. */}
-        <polygon points="50,22 80,73 20,73" className="facet" />
+        {/* Wide enough that a two-digit number keeps clear of the sloping sides,
+            which is what sets the width: "20" is widest where the face is
+            narrowest, near the top of the glyphs. */}
+        <polygon points="50,18 84,74 16,74" className="facet" />
       </>
     )
   }
 
-  // A d4 reads low because a triangle's visual centre sits below its midpoint.
-  const textY = sides === 4 ? 68 : sides === 20 ? 61 : sides === 10 ? 56 : 50
+  /*
+    A triangle's centroid sits a third of the way up from its base, so a number
+    placed at the box's midpoint reads low. These follow the face each number
+    actually sits in, not the viewBox.
+  */
+  const textY = sides === 4 ? 60 : sides === 20 ? 57 : sides === 10 ? 56 : 50
 
   return (
     <svg className={`die d${sides}`} viewBox="0 0 100 100" aria-hidden="true">
@@ -251,6 +279,14 @@ function BigDiceSettings({ settings, setSettings }: ModuleProps<State, Settings>
           onChange={(event) => setSettings({ critFlourish: event.target.checked })}
         />
         Call out a natural 20 or natural 1 on the d20
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.zeroIsHundred}
+          onChange={(event) => setSettings({ zeroIsHundred: event.target.checked })}
+        />
+        On d%, read 00 and 0 as 100 rather than 0
       </label>
       <label className="check">
         <input
@@ -291,7 +327,8 @@ export const bigDiceModule = defineModule<State, Settings>({
     showHistory: true,
     historyLimit: 10,
     critFlourish: true,
-    animate: true
+    animate: true,
+    zeroIsHundred: true
   }),
   Component: BigDice,
   Settings: BigDiceSettings
