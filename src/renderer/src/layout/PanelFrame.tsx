@@ -370,7 +370,7 @@ function PanelMenu({
                   item.onSelect?.()
                 }}
               >
-                <span>{item.label}</span>
+                <span className="menu-label">{item.label}</span>
                 {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
               </button>
             )

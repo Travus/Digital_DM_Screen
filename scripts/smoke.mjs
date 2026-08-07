@@ -217,6 +217,17 @@ const shots = [
     keys: { 'panel:splitRight': 'CmdOrCtrl+B 5' },
     press: { code: 'KeyB', ctrlKey: true }
   },
+  // Every modifier on both strokes — a legal binding, and the one that used to
+  // wrap "Split right" onto two lines because the label was the only thing in
+  // the row allowed to give. The label must stay on one line here.
+  {
+    name: 'shortcuts-long-binding',
+    layout: starter,
+    keys: {
+      'panel:splitRight': 'Super+CmdOrCtrl+Alt+Shift+J Super+CmdOrCtrl+Alt+Shift+4'
+    },
+    click: '.panel .icon-btn[title="Panel menu"]'
+  },
   // The preset list, which is also the shot that would catch a preset going
   // missing or a blurb overflowing its row.
   {
