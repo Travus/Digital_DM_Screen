@@ -140,10 +140,19 @@ Electron fires accelerators before the web page sees the key — the same mechan
 as the Escape trap above. The fix is not to suppress the accelerator while a
 prefix is pending (stateful, and it gets stuck); it is `rendererSingles`: any
 single-stroke binding whose stroke is *also* used by a sequence loses its
-accelerator permanently and is dispatched by `advanceChord` instead. Its menu
-item prints the binding in the label, the way a sequence's does. Both sides
+accelerator permanently and is dispatched by `advanceChord` instead. Both sides
 compute that set from the same keymap, so they cannot disagree about who owns a
 key.
+
+**The native accelerator column shows what the menu will fire, and nothing else.**
+So a sequence, and a stroke handed to the renderer, both leave it blank. Writing
+them into the label instead — `Split Down  (Ctrl+K Ctrl+\)` — was tried and
+reverted: it put two different treatments in one menu, native-right-aligned for
+some rows and parenthesised body text for others, which reads as a bug rather
+than as information. The column means one thing on every platform and a sequence
+is not expressible in it. The ⋯ panel menu and the shortcuts editor render
+sequences properly and sit closer to where they are used, so nothing is lost that
+a user cannot reach.
 
 **Only the opening stroke is contested.** A second stroke may reuse a stroke that
 is bound on its own, because a pending prefix says which was meant —

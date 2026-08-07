@@ -1,7 +1,7 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import { basename } from 'node:path'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
-import { formatBinding, isChordBinding, isValidBinding } from '../shared/accelerator'
+import { isChordBinding, isValidBinding } from '../shared/accelerator'
 import { rendererSingles, type ActionId, type ResolvedKeymap } from '../shared/actions'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
@@ -45,31 +45,35 @@ export function buildMenu(
   const send = (action: MenuAction) => () => dispatch(action)
   const isMac = process.platform === 'darwin'
 
+  // Strokes the menu must not register, because a sequence needs the renderer to
+  // see them. Computed once from the same keymap the renderer reads, so the two
+  // always agree on who owns which key without talking to each other.
+  const handedOver = new Set(rendererSingles(keymap).map(([, binding]) => binding))
+
   /**
-   * Builds a menu item's label and accelerator together, because for a two-stroke
-   * sequence they are the same decision.
+   * The accelerator column shows exactly what this menu will fire, and nothing
+   * else.
    *
-   * An Electron accelerator is single-stroke only, so `CmdOrCtrl+K CmdOrCtrl+S`
-   * cannot go in the accelerator field — it goes in the label instead. Dropping
-   * it would leave the menu claiming the command has no shortcut at all, which
-   * is precisely the lying caption this catalogue exists to prevent.
+   * Two kinds of binding fall outside that. A two-stroke sequence cannot go in
+   * the field at all — Electron accelerators are single-stroke — and a stroke
+   * handed to the renderer must not be registered here, or the menu would fire it
+   * before the sequence could ever use it.
+   *
+   * Both are left blank rather than written into the label. The column means one
+   * thing on every platform, and a sequence is not something it can express;
+   * spelling it out in the label instead put two different treatments in one
+   * menu, which read as a mistake. The ⋯ panel menu and the shortcuts editor both
+   * render sequences properly, and both sit closer to where they get used.
    *
    * The validity check is also the last line of defence before
    * `Menu.buildFromTemplate`, which throws on a malformed accelerator — and a
    * throw here means no menu, so no Help item, so no way to reach the editor and
    * undo whatever caused it.
    */
-  // Strokes the menu must not register, because a sequence needs the renderer to
-  // see them. Computed once from the same keymap the renderer reads, so the two
-  // always agree on who owns which key without talking to each other.
-  const handedOver = new Set(rendererSingles(keymap).map(([, binding]) => binding))
-
   const item = (id: ActionId, label: string): { label: string; accelerator?: string } => {
     const binding = keymap[id]
     if (!binding || !isValidBinding(binding)) return { label }
-    if (isChordBinding(binding) || handedOver.has(binding)) {
-      return { label: `${label}  (${formatBinding(binding, process.platform)})` }
-    }
+    if (isChordBinding(binding) || handedOver.has(binding)) return { label }
     return { label, accelerator: binding }
   }
 
