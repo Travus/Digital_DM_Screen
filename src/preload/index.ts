@@ -97,6 +97,7 @@ const api = {
    * which needs this to reach the same code.
    */
   importDataPack: (): Promise<void> => ipcRenderer.invoke('data:importPack'),
+  reloadDataPacks: (): Promise<void> => ipcRenderer.invoke('data:reloadPacks'),
 
   /** Persists overrides and rebuilds the menu. Resolves to the merged result. */
   setKeymap: (overrides: Keymap): Promise<ResolvedKeymap> =>

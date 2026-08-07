@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { acceleratorFromChord, formatBinding } from '../../shared/accelerator'
 import type { ActionId } from '../../shared/actions'
+import { findParent } from '../../shared/layout'
 import type { MenuAction } from '../../shared/types'
 import { LayoutView } from './layout/LayoutView'
 import { RecentsPanel } from './layout/RecentsPanel'
@@ -83,6 +84,9 @@ export function App(): JSX.Element {
   const runAction = useCallback((action: RunnableAction, payload?: string): void => {
     const store = useAppStore.getState()
     const target = resolveTargetNodeId()
+    // The split a command like Flip or Even Out acts on is the one *containing*
+    // the target panel, which is what the ⋯ menu offers too.
+    const surroundingSplit = target ? (findParent(store.doc.root, target)?.id ?? null) : null
 
     switch (action) {
       case 'layout:new':
@@ -141,6 +145,27 @@ export function App(): JSX.Element {
         break
       case 'panel:restore':
         store.maximize(null)
+        break
+      case 'panel:rename':
+        if (target) store.setRenamingNode(target)
+        break
+      case 'panel:changeModule':
+        if (target) store.setPickingNode(target)
+        break
+      case 'split:flip':
+        if (surroundingSplit) store.flipSplit(surroundingSplit)
+        break
+      case 'split:equalise':
+        if (surroundingSplit) store.equalise(surroundingSplit)
+        break
+      case 'view:toggleTheme':
+        store.setTheme(store.theme === 'dark' ? 'light' : 'dark')
+        break
+      case 'view:toggleSidebar':
+        store.toggleSidebar()
+        break
+      case 'data:reloadPacks':
+        void window.dmscreen.reloadDataPacks()
         break
       case 'app:about':
         setAboutOpen(true)

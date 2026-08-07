@@ -29,11 +29,18 @@ export type ActionId =
   | 'panel:maximize'
   | 'panel:restore'
   | 'panel:close'
+  | 'panel:rename'
+  | 'panel:changeModule'
+  | 'split:flip'
+  | 'split:equalise'
+  | 'view:toggleTheme'
+  | 'view:toggleSidebar'
   | 'data:importPack'
+  | 'data:reloadPacks'
   | 'app:about'
   | 'app:shortcuts'
 
-export type ActionCategory = 'Layout' | 'Panel' | 'Data' | 'Application'
+export type ActionCategory = 'Layout' | 'Panel' | 'View' | 'Data' | 'Application'
 
 /**
  * What an action needs to know about the app to say whether it currently
@@ -50,6 +57,8 @@ export interface ActionContext {
   hasPanel: boolean
   /** Some panel is currently fullscreen. */
   maximized: boolean
+  /** The target panel sits inside a split, so there is one to flip or even out. */
+  hasSplit: boolean
 }
 
 export interface ActionDef {
@@ -114,7 +123,9 @@ export const ACTIONS: readonly ActionDef[] = [
     id: 'layout:rename',
     label: 'Rename layout',
     category: 'Layout',
-    defaultAccelerator: 'F2'
+    // F2 went to the panel, which is the thing you are usually looking at when
+    // you reach for a rename key. The layout keeps the same key one rung up.
+    defaultAccelerator: 'Shift+F2'
   },
   {
     id: 'layout:toggleLock',
@@ -161,10 +172,61 @@ export const ACTIONS: readonly ActionDef[] = [
   },
 
   {
+    id: 'panel:rename',
+    label: 'Rename panel',
+    category: 'Panel',
+    defaultAccelerator: 'F2',
+    enabled: (context) => context.hasPanel
+  },
+  {
+    id: 'panel:changeModule',
+    label: 'Change module',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => context.hasPanel
+  },
+  // Both ship unbound. They are occasional tidying commands rather than
+  // something reached for mid-session, and every chord worth spending is better
+  // spent elsewhere — the ⋯ menu is where these actually get used.
+  {
+    id: 'split:flip',
+    label: 'Flip surrounding split',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => !context.locked && context.hasSplit
+  },
+  {
+    id: 'split:equalise',
+    label: 'Even out surrounding split',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => !context.locked && context.hasSplit
+  },
+
+  {
+    id: 'view:toggleTheme',
+    label: 'Switch light or dark theme',
+    category: 'View',
+    defaultAccelerator: null
+  },
+  {
+    id: 'view:toggleSidebar',
+    label: 'Show or hide recent layouts',
+    category: 'View',
+    defaultAccelerator: null
+  },
+
+  {
     id: 'data:importPack',
     label: 'Import data pack',
     category: 'Data',
     defaultAccelerator: 'CmdOrCtrl+I'
+  },
+  {
+    id: 'data:reloadPacks',
+    label: 'Reload data packs from disk',
+    category: 'Data',
+    defaultAccelerator: null
   },
 
   {
@@ -187,6 +249,7 @@ export const ACTIONS: readonly ActionDef[] = [
 export const ACTION_CATEGORIES: readonly ActionCategory[] = [
   'Layout',
   'Panel',
+  'View',
   'Data',
   'Application'
 ]

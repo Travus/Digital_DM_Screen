@@ -510,8 +510,9 @@ ipcMain.on('keymap:snapshot', (event) => {
 /** The sparse overrides, which is what the editor edits — not the resolved map. */
 ipcMain.handle('keymap:overrides', (): Keymap => keymapOverrides)
 
-/** Same entry point the Data menu item uses, for a sequence bound to it. */
+/** Same entry points the Data menu items use, for a shortcut bound to them. */
 ipcMain.handle('data:importPack', (): void => dataActions.importPack())
+ipcMain.handle('data:reloadPacks', (): void => dataActions.reloadPacks())
 
 ipcMain.handle('keymap:set', (_event, overrides: Keymap): Promise<ResolvedKeymap> =>
   applyKeymap(overrides)

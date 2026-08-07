@@ -200,8 +200,22 @@ export function buildMenu(
     {
       label: isMac ? 'Panel' : '&Panel',
       submenu: [
+        // Every bindable action needs an item here, not only for discovery: an
+        // accelerator is registered by *being* on a menu item, so a default with
+        // no row to sit on would simply never fire.
+        { ...item('panel:rename', 'Rename Panel…'), click: send('panel:rename') },
+        {
+          ...item('panel:changeModule', 'Change Module…'),
+          click: send('panel:changeModule')
+        },
+        { type: 'separator' },
         { ...item('panel:splitRight', 'Split Right'), click: send('panel:splitRight') },
         { ...item('panel:splitDown', 'Split Down'), click: send('panel:splitDown') },
+        { ...item('split:flip', 'Flip Surrounding Split'), click: send('split:flip') },
+        {
+          ...item('split:equalise', 'Even Out Surrounding Split'),
+          click: send('split:equalise')
+        },
         { type: 'separator' },
         {
           ...item('panel:maximize', 'Fullscreen Panel (Esc to exit)'),
@@ -215,7 +229,10 @@ export function buildMenu(
       label: isMac ? 'Data' : '&Data',
       submenu: [
         { ...item('data:importPack', 'Import Data Pack…'), click: () => dataActions.importPack() },
-        { label: 'Reload Data Packs from Disk', click: () => dataActions.reloadPacks() },
+        {
+          ...item('data:reloadPacks', 'Reload Data Packs from Disk'),
+          click: () => dataActions.reloadPacks()
+        },
         { type: 'separator' },
         { label: 'Data Packs', submenu: packItems },
         { type: 'separator' },
@@ -236,6 +253,15 @@ export function buildMenu(
     {
       label: isMac ? 'View' : '&View',
       submenu: [
+        {
+          ...item('view:toggleTheme', 'Switch Light / Dark Theme'),
+          click: send('view:toggleTheme')
+        },
+        {
+          ...item('view:toggleSidebar', 'Recent Layouts'),
+          click: send('view:toggleSidebar')
+        },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },

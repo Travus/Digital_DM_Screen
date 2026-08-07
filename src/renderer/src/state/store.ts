@@ -27,6 +27,17 @@ interface AppState {
   maximizedNodeId: string | null
   /** Last panel the user interacted with — the target for menu/keyboard commands. */
   activeNodeId: string | null
+  /**
+   * Panels currently showing their rename field or their module picker.
+   *
+   * UI state, not document state — it lives here rather than in `PanelFrame`
+   * only because a keyboard command has to be able to open them, and a shortcut
+   * has no way into another component's `useState`. Set directly, never through
+   * `mutate()`, exactly like `maximizedNodeId` above: renaming a panel is not a
+   * change to the layout until the name is actually committed.
+   */
+  renamingNodeId: string | null
+  pickingNodeId: string | null
   theme: Theme
   sidebarOpen: boolean
 
@@ -61,6 +72,8 @@ interface AppState {
   maximize: (nodeId: string | null) => void
   toggleMaximize: (nodeId: string) => void
   setActive: (nodeId: string) => void
+  setRenamingNode: (nodeId: string | null) => void
+  setPickingNode: (nodeId: string | null) => void
   setTheme: (theme: Theme) => void
   toggleSidebar: () => void
 }
@@ -113,6 +126,8 @@ export const useAppStore = create<AppState>((set, get) => {
     recents: [],
     maximizedNodeId: null,
     activeNodeId: null,
+    renamingNodeId: null,
+    pickingNodeId: null,
     theme: readTheme(),
     sidebarOpen: false,
 
@@ -279,6 +294,9 @@ export const useAppStore = create<AppState>((set, get) => {
       set((state) => ({ maximizedNodeId: state.maximizedNodeId === nodeId ? null : nodeId })),
 
     setActive: (nodeId) => set({ activeNodeId: nodeId }),
+
+    setRenamingNode: (nodeId) => set({ renamingNodeId: nodeId }),
+    setPickingNode: (nodeId) => set({ pickingNodeId: nodeId }),
 
     setTheme: (theme) => {
       localStorage.setItem(THEME_KEY, theme)
