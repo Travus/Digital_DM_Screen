@@ -2,7 +2,7 @@ import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import { basename } from 'node:path'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
 import { formatBinding, isChordBinding, isValidBinding } from '../shared/accelerator'
-import type { ActionId, ResolvedKeymap } from '../shared/actions'
+import { rendererSingles, type ActionId, type ResolvedKeymap } from '../shared/actions'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
 
@@ -59,10 +59,15 @@ export function buildMenu(
    * throw here means no menu, so no Help item, so no way to reach the editor and
    * undo whatever caused it.
    */
+  // Strokes the menu must not register, because a sequence needs the renderer to
+  // see them. Computed once from the same keymap the renderer reads, so the two
+  // always agree on who owns which key without talking to each other.
+  const handedOver = new Set(rendererSingles(keymap).map(([, binding]) => binding))
+
   const item = (id: ActionId, label: string): { label: string; accelerator?: string } => {
     const binding = keymap[id]
     if (!binding || !isValidBinding(binding)) return { label }
-    if (isChordBinding(binding)) {
+    if (isChordBinding(binding) || handedOver.has(binding)) {
       return { label: `${label}  (${formatBinding(binding, process.platform)})` }
     }
     return { label, accelerator: binding }

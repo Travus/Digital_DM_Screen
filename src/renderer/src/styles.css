@@ -2058,6 +2058,28 @@ code {
   gap: 2px;
 }
 
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.preset {
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.preset:hover {
+  border-color: var(--accent);
+}
+
 /* ---------------------------------------------------------------- big dice */
 
 /*

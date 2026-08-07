@@ -46,21 +46,37 @@ describe('the presets that exist', () => {
     expect(findPreset('default')?.bindings).toEqual({})
   })
 
-  it('moves Close Panel off the bare prefix it would otherwise shadow', () => {
-    // Vim and tmux both need their prefix free. Ctrl+W ships bound to Close
-    // Panel, so the Vim preset has to claim it — and does, on `C-w c`.
+  it('moves Close Panel off the prefix it would otherwise open', () => {
+    // Vim's window commands all sit behind Ctrl+W, which ships bound to Close
+    // Panel. Leave that and the menu owns the prefix, so no sequence ever
+    // starts. Vim puts Close on `C-w c` anyway.
     expect(findPreset('vim')?.bindings['panel:close']).toBe('CmdOrCtrl+W C')
     expect(findPreset('tmux')?.bindings['panel:close']).toBe('CmdOrCtrl+B X')
   })
 
+  it('lets a sequence finish on a stroke that is bound on its own', () => {
+    // The whole point of the second-stroke rule. VS Code's Ctrl+K Ctrl+S ends on
+    // Ctrl+S, which is Save — allowed, because a pending prefix disambiguates.
+    const applied = resolveKeymap(findPreset('vscode')!.bindings)
+    expect(applied['app:shortcuts']).toBe('CmdOrCtrl+K CmdOrCtrl+S')
+    expect(applied['layout:save']).toBe('CmdOrCtrl+S')
+    expect(findConflict(applied, 'CmdOrCtrl+K CmdOrCtrl+S', 'app:shortcuts')).toBeNull()
+  })
+
+  it('unbinds everything except the one binding that cannot move', () => {
+    const applied = resolveKeymap(findPreset('none')!.bindings)
+    for (const action of ACTIONS) {
+      expect([action.id, applied[action.id]]).toEqual([action.id, action.fixed ? 'Escape' : null])
+    }
+  })
+
   it('has no preset that quietly does nothing', () => {
-    // A button that changes no binding is worse than no button — see the note in
-    // presets.ts about why VS Code and Zed are absent rather than no-ops.
+    // A button that changes no binding is worse than no button — which is why
+    // Cursor is absent rather than shipped as a duplicate of VS Code.
+    const defaults = resolveKeymap({})
     for (const preset of PRESETS) {
       if (preset.id === 'default') continue
-      const defaults = resolveKeymap({})
-      const applied = resolveKeymap(preset.bindings)
-      expect([preset.id, applied]).not.toEqual([preset.id, defaults])
+      expect([preset.id, resolveKeymap(preset.bindings)]).not.toEqual([preset.id, defaults])
     }
   })
 })

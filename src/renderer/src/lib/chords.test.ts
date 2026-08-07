@@ -64,10 +64,42 @@ describe('the sequence dispatcher', () => {
     expect(advanceChord(null, 'CmdOrCtrl+P', withChord)).toEqual({ type: 'ignore' })
   })
 
-  it('ignores a single-stroke binding, which the menu owns', () => {
-    // Ctrl+S is bound to save, but as a menu accelerator — it must not be
-    // claimed here as well, or it would fire twice.
+  it('ignores a single-stroke binding the menu still owns', () => {
+    // Ctrl+S is bound to save, and no sequence uses it, so it is still a menu
+    // accelerator. Claiming it here as well would fire save twice.
     expect(advanceChord(null, 'CmdOrCtrl+S', withChord)).toEqual({ type: 'ignore' })
+  })
+
+  describe('when a sequence borrows a stroke that is also bound alone', () => {
+    // VS Code's arrangement: Ctrl+K Ctrl+S opens the editor, Ctrl+S still saves.
+    const shared = keymap({ 'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S' })
+
+    it('fires the single binding when nothing is pending', () => {
+      expect(advanceChord(null, 'CmdOrCtrl+S', shared)).toEqual({
+        type: 'fire',
+        action: 'layout:save'
+      })
+    })
+
+    it('completes the sequence when a prefix is pending', () => {
+      expect(advanceChord('CmdOrCtrl+K', 'CmdOrCtrl+S', shared)).toEqual({
+        type: 'fire',
+        action: 'app:shortcuts'
+      })
+    })
+
+    it('still holds the prefix itself', () => {
+      expect(advanceChord(null, 'CmdOrCtrl+K', shared)).toEqual({
+        type: 'pending',
+        prefix: 'CmdOrCtrl+K'
+      })
+    })
+
+    it('leaves untouched single strokes to the menu', () => {
+      // Ctrl+O is not part of any sequence, so its accelerator stays and the
+      // renderer must not fire it a second time.
+      expect(advanceChord(null, 'CmdOrCtrl+O', shared)).toEqual({ type: 'ignore' })
+    })
   })
 
   it('holds a prefix that opens a sequence', () => {
@@ -121,36 +153,32 @@ describe('conflicts between sequences and single strokes', () => {
     })
   })
 
-  it('refuses a sequence whose stroke is already a menu accelerator', () => {
-    // Ctrl+S is save. `Ctrl+K Ctrl+S` could never complete, because the menu
-    // fires save the moment the second stroke lands.
-    expect(findConflict(keymap({}), 'CmdOrCtrl+K CmdOrCtrl+S', 'app:shortcuts')).toEqual({
-      kind: 'shadowed',
-      action: 'layout:save',
-      stroke: 'CmdOrCtrl+S'
-    })
+  it('allows a sequence to finish on a stroke that is bound on its own', () => {
+    // Ctrl+S is Save, and `Ctrl+K Ctrl+S` still works: with a prefix pending the
+    // context says which was meant. Save gives up its menu accelerator for it.
+    expect(findConflict(keymap({}), 'CmdOrCtrl+K CmdOrCtrl+S', 'app:shortcuts')).toBeNull()
   })
 
-  it('catches the collision on the opening stroke too', () => {
+  it('refuses a sequence that opens on a stroke another action owns alone', () => {
+    // Ctrl+W closes the panel. Pressing it can mean that, or the start of a
+    // sequence, and nothing later in time tells you which — so it is refused.
     expect(findConflict(keymap({}), 'CmdOrCtrl+W 3', 'app:shortcuts')).toEqual({
-      kind: 'shadowed',
+      kind: 'prefix-taken',
       action: 'panel:close',
       stroke: 'CmdOrCtrl+W'
     })
   })
 
-  it('refuses a single stroke that would shadow an existing sequence', () => {
+  it('refuses a single stroke that is already how a sequence opens', () => {
     const withChord = keymap({ 'panel:splitRight': 'CmdOrCtrl+B 3' })
     expect(findConflict(withChord, 'CmdOrCtrl+B', 'app:shortcuts')).toEqual({
-      kind: 'shadows',
+      kind: 'prefix-blocks',
       action: 'panel:splitRight',
       stroke: 'CmdOrCtrl+B'
     })
   })
 
-  it('allows a bare finishing stroke that no single binding can claim', () => {
-    // The reason Emacs, Vim and tmux import cleanly: bare keys are never
-    // single-stroke bindings here, so nothing can shadow them.
+  it('allows a bare finishing stroke, which nothing can claim alone', () => {
     expect(findConflict(keymap({}), 'CmdOrCtrl+B 3', 'app:shortcuts')).toBeNull()
     expect(findConflict(keymap({}), 'CmdOrCtrl+B 5', 'app:shortcuts')).toBeNull()
   })

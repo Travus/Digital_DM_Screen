@@ -283,24 +283,61 @@ export function sanitiseKeymap(raw: unknown): KeymapLoad {
 }
 
 /**
+ * Every stroke used by a two-stroke binding, either half.
+ *
+ * This is the set that decides who dispatches what. A stroke in here cannot be a
+ * menu accelerator, because Electron fires those before the web page sees the
+ * key — the sequence would lose that stroke to the menu every time.
+ */
+export function chordStrokes(keymap: ResolvedKeymap): Set<string> {
+  const strokes = new Set<string>()
+  for (const [, binding] of chordBindings(keymap)) {
+    for (const stroke of bindingStrokes(binding)) strokes.add(stroke)
+  }
+  return strokes
+}
+
+/**
+ * Single-stroke bindings the menu has to give up, because some sequence uses
+ * that same stroke.
+ *
+ * They move to the renderer, which can tell the two apart from context: with a
+ * prefix pending the stroke finishes the sequence, and with nothing pending it
+ * fires on its own. The menu cannot make that distinction — it only ever sees
+ * one key at a time — which is why the accelerator has to go rather than be
+ * cleverly suppressed. Their menu items print the binding in the label instead.
+ */
+export function rendererSingles(keymap: ResolvedKeymap): [ActionId, string][] {
+  const strokes = chordStrokes(keymap)
+  return (Object.entries(keymap) as [ActionId, string | null][])
+    .filter((entry): entry is [ActionId, string] => {
+      const binding = entry[1]
+      return !!binding && !isChordBinding(binding) && strokes.has(binding)
+    })
+    .map(([id, binding]) => [id, normaliseBinding(binding) ?? binding])
+}
+
+/**
  * Why a binding cannot be used.
  *
- * `duplicate` is the obvious one. The other two come from the split dispatch:
- * a single-stroke binding is a **menu accelerator**, and Electron fires those
- * app-wide before the renderer ever sees the key. So a single stroke and any
- * chord containing that same stroke cannot coexist — whichever is the menu
- * accelerator wins, every time, and the chord simply never completes.
+ * Only the **first** stroke of a sequence is contested. Pressing it has to mean
+ * one thing: if some other action is bound to that stroke alone, there is no way
+ * to tell whether the user wants that action now or is opening a sequence, and
+ * no amount of waiting resolves it — the single-stroke binding would have to
+ * fire late, on a timeout, every time.
  *
- * In practice this bites far less than it sounds. Emacs, Vim and tmux all end
- * their sequences on a *bare* key (`C-x 3`, `C-w v`, `C-b %`), and bare keys
- * can never be single-stroke bindings here — so those import cleanly. It is the
- * VS Code style, `CmdOrCtrl+K CmdOrCtrl+S`, that collides, and only when its
- * second stroke is separately bound.
+ * A *second* stroke has no such problem and is deliberately allowed to collide.
+ * With a prefix pending the context is unambiguous, so `CmdOrCtrl+K CmdOrCtrl+S`
+ * coexists with `CmdOrCtrl+S` for Save; see `rendererSingles` for what that
+ * costs. This is what makes the VS Code, Zed and Sublime keymaps expressible at
+ * all — every one of them reuses a bound stroke as a finisher.
  */
 export type Conflict =
   | { kind: 'duplicate'; action: ActionId }
-  | { kind: 'shadowed'; action: ActionId; stroke: string }
-  | { kind: 'shadows'; action: ActionId; stroke: string }
+  /** The candidate sequence opens on a stroke another action already owns alone. */
+  | { kind: 'prefix-taken'; action: ActionId; stroke: string }
+  /** The candidate single stroke is already how another action's sequence opens. */
+  | { kind: 'prefix-blocks'; action: ActionId; stroke: string }
 
 export function findConflict(
   keymap: ResolvedKeymap,
@@ -326,15 +363,12 @@ export function findConflict(
     const otherStrokes = bindingStrokes(other)
     const otherIsChord = otherStrokes.length > 1
 
-    // Their single stroke would be eaten by the menu before our chord could use
-    // it — as either half.
-    if (wantedIsChord && !otherIsChord && wantedStrokes.includes(other)) {
-      return { kind: 'shadowed', action: action.id, stroke: other }
+    if (wantedIsChord && !otherIsChord && wantedStrokes[0] === other) {
+      return { kind: 'prefix-taken', action: action.id, stroke: other }
     }
 
-    // The mirror: we are the single stroke that would eat a stroke of theirs.
-    if (!wantedIsChord && otherIsChord && otherStrokes.includes(wanted)) {
-      return { kind: 'shadows', action: action.id, stroke: wanted }
+    if (!wantedIsChord && otherIsChord && otherStrokes[0] === wanted) {
+      return { kind: 'prefix-blocks', action: action.id, stroke: wanted }
     }
   }
   return null

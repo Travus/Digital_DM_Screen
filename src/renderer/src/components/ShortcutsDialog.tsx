@@ -15,6 +15,7 @@ import {
   type Conflict,
   type Keymap
 } from '../../../shared/actions'
+import { PRESETS } from '../../../shared/presets'
 import { useKeymapStore } from '../state/keymapStore'
 
 /**
@@ -35,17 +36,20 @@ const SECOND_STROKE_WINDOW_MS = 900
  */
 function describe(conflict: Conflict, platform: string): string {
   const name = findAction(conflict.action)?.label ?? conflict.action
+  // Narrowed before reading `stroke`: a duplicate has no single stroke to blame,
+  // the whole binding is the clash.
+  if (conflict.kind === 'duplicate') return `Already used by "${name}".`
+
   const stroke = formatBinding(conflict.stroke, platform)
   switch (conflict.kind) {
-    case 'duplicate':
-      return `Already used by "${name}".`
-    // Both sides of the same fact, worded from where the user is standing. A
-    // single-stroke binding is a menu accelerator and fires before the renderer
-    // sees the key, so it and any sequence containing it cannot both work.
-    case 'shadowed':
-      return `"${name}" already uses ${stroke} on its own, which would fire first. Rebind that one before using it here.`
-    case 'shadows':
-      return `This would fire before "${name}", which uses ${stroke} as part of a sequence.`
+    // Both sides of the same fact, worded from where the user is standing. Only
+    // the opening stroke is contested: pressing it would have to mean both "do
+    // that action" and "wait, a sequence is starting", and nothing that happens
+    // afterwards can tell those apart.
+    case 'prefix-taken':
+      return `${stroke} already runs "${name}" on its own, so a sequence cannot start with it. Move that one first.`
+    case 'prefix-blocks':
+      return `${stroke} is how "${name}" starts, so it cannot also be a shortcut by itself.`
   }
 }
 
@@ -106,7 +110,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
       setProblem(null)
       stopRecording()
     },
-    [keymap, overrides, commit, stopRecording]
+    [keymap, overrides, platform, commit, stopRecording]
   )
 
   useEffect(() => {
@@ -162,8 +166,6 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
     return () => window.clearTimeout(timer)
   }, [recording, captured, finish])
 
-  const changedCount = overrides ? Object.keys(overrides).length : 0
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -181,6 +183,31 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
         </p>
 
         {problem && <p className="note warn">{problem}</p>}
+
+        {/* Applying replaces every override rather than merging into them. A
+            half-applied keymap is how you end up with a prefix that still fires
+            something on its own, which is the one arrangement nothing can
+            resolve. "Default" is the way back. */}
+        <div className="settings-section">
+          <h4 className="section-title">Start from</h4>
+          <div className="preset-row">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                className="preset"
+                title={preset.blurb}
+                onClick={() => {
+                  stopRecording()
+                  setProblem(null)
+                  commit({ ...preset.bindings })
+                }}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          <p className="note">Replaces every shortcut, including ones you have changed yourself.</p>
+        </div>
 
         {ACTION_CATEGORIES.map((category) => {
           const rows = ACTIONS.filter((action) => action.category === category)
@@ -271,19 +298,9 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
           )
         })}
 
+        {/* No separate "reset" button: the Default preset above is that, and two
+            controls doing one thing is just a question about which to trust. */}
         <div className="toolbar">
-          <button
-            className="btn"
-            disabled={changedCount === 0}
-            onClick={() => {
-              stopRecording()
-              setProblem(null)
-              setOverrides({})
-              void window.dmscreen.resetKeymap()
-            }}
-          >
-            Reset all to defaults
-          </button>
           <span className="spacer" />
           <button className="btn primary" onClick={onClose}>
             Done

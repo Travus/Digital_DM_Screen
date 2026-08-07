@@ -1,32 +1,27 @@
-import type { ActionId, Keymap } from './actions'
+import { ACTIONS, type ActionId, type Keymap } from './actions'
 
 /**
- * Ready-made keymaps borrowed from tools people already have in their fingers.
+ * Ready-made keymaps borrowed from tools people already have in their fingers,
+ * in the spirit of Zed's own "base keymap" list.
  *
- * Each one is a **sparse** override map applied wholesale: actions it does not
- * mention fall back to the catalogue defaults, so a preset changes the commands
- * that tool has an opinion about and leaves the rest alone.
+ * Each is a **sparse** override map applied wholesale: actions it does not
+ * mention fall back to the catalogue defaults, so a preset speaks only for the
+ * commands its tool has an opinion about. Applying one replaces whatever was
+ * there before rather than merging — a half-applied keymap is how you end up
+ * with a prefix that still fires something on its own.
  *
- * ## Why this list is short
+ * Only bindings sourced from the tool itself are here. Two absences are
+ * deliberate rather than oversights:
  *
- * Two-stroke sequences made presets possible at all, but not universally, and
- * the reasons are worth writing down because they look like omissions.
+ * **Emacs.** Its prefix is `C-x`, which is Cut. On Windows and Linux that key is
+ * handled by Chromium in any editable field whatever the menu says, so it is not
+ * ours to give away; on macOS Cut is `Cmd+X` and `Ctrl+X` would be free, but
+ * shipping a preset that works on one platform and not another is worse than not
+ * shipping it. An Emacs keymap that opens on something other than `C-x` is not
+ * an Emacs keymap.
  *
- * **VS Code and Zed are already the defaults.** Every binding of theirs this app
- * has an equivalent for — `Ctrl+N`, `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`,
- * `Ctrl+W`, `Ctrl+\`, `F2` — is what ships. The parts that differ are the ones
- * that cannot work here: `Ctrl+K Ctrl+S` and `Ctrl+K Ctrl+\` each repeat a
- * stroke that is already a single-stroke binding, and a menu accelerator always
- * fires first. A "VS Code" button would be a button that does nothing.
- *
- * **Emacs cannot have its prefix.** `C-x` is Cut. Not reserving it would break
- * cut in every text field on every platform, and an Emacs keymap that opens on
- * anything other than `C-x` is not an Emacs keymap. Better to leave it out than
- * to ship something wearing the name.
- *
- * Vim and tmux both survive intact, because both drive their windows from a
- * modified prefix and finish on a plain key — the one shape this app supports
- * completely.
+ * **Cursor** is a VS Code fork and its defaults are identical, so it would be
+ * the same button twice.
  */
 export interface KeymapPreset {
   id: string
@@ -36,20 +31,68 @@ export interface KeymapPreset {
   bindings: Keymap
 }
 
+/** Every action, explicitly unbound. */
+const NOTHING: Keymap = Object.fromEntries(
+  ACTIONS.filter((action) => !action.fixed).map((action) => [action.id, null])
+)
+
 export const PRESETS: readonly KeymapPreset[] = [
   {
     id: 'default',
-    name: 'Defaults',
-    blurb: 'What the app ships with, which is also the VS Code and Zed layout.',
+    name: 'Default',
+    blurb: 'What the app ships with.',
     bindings: {}
+  },
+  {
+    id: 'vscode',
+    name: 'VS Code',
+    // Ctrl+K is VS Code's prefix. Both sequences finish on a stroke that is
+    // separately bound — Ctrl+\ splits right, Ctrl+S saves — which is exactly
+    // the case the renderer now arbitrates.
+    blurb: 'Ctrl+K sequences for the split and the shortcut editor. Also Cursor.',
+    bindings: {
+      'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
+      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
+    }
+  },
+  {
+    id: 'zed',
+    name: 'Zed',
+    // From Zed's own default keymap: ctrl-k down splits, ctrl-k ctrl-s opens the
+    // keymap. Its zoom is shift-escape, which Escape being reserved rules out.
+    blurb: 'Zed’s Ctrl+K family. Its Shift+Esc zoom is left out — Esc is reserved.',
+    bindings: {
+      'panel:splitDown': 'CmdOrCtrl+K Down',
+      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
+    }
+  },
+  {
+    id: 'sublime',
+    name: 'Sublime Text',
+    blurb: 'Sublime’s Alt+Shift layout commands for splitting.',
+    bindings: {
+      'panel:splitRight': 'Alt+Shift+2',
+      'panel:splitDown': 'Alt+Shift+8'
+    }
+  },
+  {
+    id: 'jetbrains',
+    name: 'JetBrains',
+    // JetBrains spends its Ctrl keys on editor commands, so the overlap with
+    // this app is small but real: Ctrl+W is Extend Selection there, not Close.
+    blurb: 'IntelliJ layout: Shift+F6 renames, Ctrl+F4 closes, Alt+Insert is new.',
+    bindings: {
+      'layout:rename': 'Shift+F6',
+      'layout:new': 'Alt+Insert',
+      'panel:close': 'CmdOrCtrl+F4'
+    }
   },
   {
     id: 'vim',
     name: 'Vim',
-    // C-w is Vim's window prefix. It is this app's default for Close Panel too,
-    // which is exactly the collision `findConflict` reports — so the preset has
-    // to move Close onto `C-w c`, which is where Vim puts it anyway.
-    blurb: 'Window commands behind Ctrl+W, as in Vim: v and s to split, c to close, o for only.',
+    // C-w is Vim's window prefix and this app's default for Close Panel, so the
+    // preset has to claim it — onto `C-w c`, which is where Vim puts it anyway.
+    blurb: 'Window commands behind Ctrl+W: v and s split, c closes, o for only.',
     bindings: {
       'panel:splitRight': 'CmdOrCtrl+W V',
       'panel:splitDown': 'CmdOrCtrl+W S',
@@ -62,13 +105,19 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'tmux',
     // % splits vertically (a vertical divider, panes side by side) and " splits
     // horizontally. Famously the opposite way round from how they read.
-    blurb: 'Pane commands behind Ctrl+B, as in tmux: % and " to split, x to kill, z to zoom.',
+    blurb: 'Pane commands behind Ctrl+B: % and " split, x kills, z zooms.',
     bindings: {
       'panel:splitRight': 'CmdOrCtrl+B %',
       'panel:splitDown': 'CmdOrCtrl+B "',
       'panel:close': 'CmdOrCtrl+B X',
       'panel:maximize': 'CmdOrCtrl+B Z'
     }
+  },
+  {
+    id: 'none',
+    name: 'None',
+    blurb: 'Every shortcut unbound. Esc still leaves fullscreen.',
+    bindings: NOTHING
   }
 ]
 

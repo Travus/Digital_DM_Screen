@@ -217,6 +217,25 @@ const shots = [
     keys: { 'panel:splitRight': 'CmdOrCtrl+B 5' },
     press: { code: 'KeyB', ctrlKey: true }
   },
+  // The preset list, which is also the shot that would catch a preset going
+  // missing or a blurb overflowing its row.
+  {
+    name: 'shortcuts-presets',
+    layout: starter,
+    menu: 'app:shortcuts'
+  },
+  // The VS Code keymap applied. Split Down and Keyboard Shortcuts both read as
+  // sequences, and Save keeps Ctrl+S even though the sequence ends on it — the
+  // arrangement that was impossible before the renderer learned to arbitrate.
+  {
+    name: 'shortcuts-vscode',
+    layout: starter,
+    keys: {
+      'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
+      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
+    },
+    menu: 'app:shortcuts'
+  },
 
   /* ----------------------------------------------------------------- big dice */
 
