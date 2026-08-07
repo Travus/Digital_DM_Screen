@@ -2058,6 +2058,256 @@ code {
   gap: 2px;
 }
 
+/* ---------------------------------------------------------------- big dice */
+
+/*
+  `overflow: hidden` is load-bearing. The tumble rotates the die, and a rotated
+  polygon's bounding box is wider than its resting one — enough, at some panel
+  widths, to overflow `.panel-body` and flash a scrollbar in and out for the
+  length of the animation. Clipping here keeps that out of the panel's scroll
+  calculation entirely; the geometry below is sized so nothing is ever actually
+  cut off.
+*/
+.bigdice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Marks the selected die. `.chip.saved` looks right but reads wrong here — this
+   is a current choice, not something stored. */
+.chip.on {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/*
+  The die takes whatever room is left. `min-height: 0` on a flex child is what
+  lets it shrink inside the panel rather than overflowing it — without it the
+  SVG's intrinsic size wins and the readout below is pushed out of sight.
+*/
+.bigdice-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2%;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.bigdice-pair {
+  display: contents;
+}
+
+/*
+  Capped rather than simply filling the panel. The die is meant to be read from
+  across a table, not to become a 700px wall — and in a fullscreened panel it
+  would, pushing the result underneath it out of sight.
+*/
+.die {
+  height: 100%;
+  max-height: min(100%, 420px);
+  width: auto;
+  max-width: 46%;
+  overflow: visible;
+  fill: var(--bg-4);
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  transition: filter 120ms ease-out;
+}
+
+/*
+  Keeps the outline the same weight whatever size the die is drawn at. Without
+  it the stroke scales with the viewBox, so a die in a fullscreened panel wears a
+  border thick enough to read as a design mistake. `vector-effect` is not
+  inherited, so it has to name the shapes rather than sit on the svg.
+*/
+.die polygon,
+.die rect,
+.die polyline {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Headroom for the rotation, so the tumble has room to swing without the die
+   ever reaching the clip. */
+.bigdice-stage:not(.tumbling) .die {
+  max-width: 86%;
+}
+
+.bigdice-pair .die {
+  max-width: 46%;
+}
+
+.bigdice-stage:hover .die {
+  filter: brightness(1.12);
+}
+
+/*
+  Matching `.input:focus` and `.condition-ref:focus`: no default ring, focus
+  shown on the control itself. It matters more here than anywhere else — the
+  stage fills the panel, so the browser's ring is a box drawn round everything.
+*/
+.bigdice-stage:focus {
+  outline: none;
+}
+
+.bigdice-stage:focus-visible .die {
+  stroke-width: 5;
+}
+
+/* Interior edges, so a d20 does not read as a plain hexagon. */
+.die .facet {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  opacity: 0.65;
+}
+
+.die-face {
+  fill: var(--text);
+  stroke: none;
+  font-size: 34px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* A d20's number sits inside the small top face, so it has to be smaller. */
+.die.d20 .die-face,
+.die.d4 .die-face {
+  font-size: 26px;
+}
+
+/* The d12's pentagon is roomier than those two but still an inset face, and "12"
+   filled it corner to corner at the full size. */
+.die.d12 .die-face {
+  font-size: 30px;
+}
+
+/* Never scales above 1, and rotates modestly: both grow the die's footprint, and
+   growing it is what put a scrollbar on the panel. */
+@keyframes bigdice-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(-9deg) scale(0.95);
+  }
+  50% {
+    transform: rotate(7deg) scale(1);
+  }
+  75% {
+    transform: rotate(-5deg) scale(0.97);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.bigdice-stage.tumbling .die {
+  animation: bigdice-tumble 240ms ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
+.bigdice-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.bigdice-total {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+
+.bigdice-prompt {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.bigdice-flourish {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+
+.bigdice-flourish.grim {
+  color: var(--danger);
+}
+
+/* `.facet` carries its own stroke, so it has to be recoloured by name — left out,
+   a natural 20 turns green everywhere except the one edge in the middle. */
+.bigdice-stage.nat20 .die,
+.bigdice-stage.nat20 .die .facet,
+.bigdice-total.nat20 {
+  stroke: var(--good);
+  color: var(--good);
+}
+
+.bigdice-stage.nat20 .die .facet {
+  fill: color-mix(in srgb, var(--good) 12%, transparent);
+}
+
+.bigdice-stage.nat20 .die .die-face {
+  fill: var(--good);
+}
+
+.bigdice-stage.nat1 .die,
+.bigdice-stage.nat1 .die .facet,
+.bigdice-total.nat1 {
+  stroke: var(--danger);
+  color: var(--danger);
+}
+
+.bigdice-stage.nat1 .die .facet {
+  fill: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.bigdice-stage.nat1 .die .die-face {
+  fill: var(--danger);
+}
+
+.bigdice-history {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* Wide enough for a three-digit percentile without the strip going ragged. */
+.bigdice-past {
+  min-width: 32px;
+  padding: 1px 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-dim);
+  background: var(--bg-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+/* Nothing about a die needs to move for it to be readable. */
+@media (prefers-reduced-motion: reduce) {
+  .bigdice-stage.tumbling .die {
+    animation: none;
+  }
+}
+
 /*
   Shown while a two-key sequence is half typed. Deliberately conspicuous and
   centred: the app is swallowing the next keystroke, and a user who fumbled the

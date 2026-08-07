@@ -28,8 +28,14 @@ import { useKeymapStore } from '../state/keymapStore'
  */
 const SECOND_STROKE_WINDOW_MS = 900
 
-function describe(conflict: Conflict): string {
+/**
+ * The stroke goes through `formatBinding` like every other one shown: internally
+ * it is stored as `CmdOrCtrl`, which is a detail of how one keymap serves both
+ * platforms and not something to put in front of anyone.
+ */
+function describe(conflict: Conflict, platform: string): string {
   const name = findAction(conflict.action)?.label ?? conflict.action
+  const stroke = formatBinding(conflict.stroke, platform)
   switch (conflict.kind) {
     case 'duplicate':
       return `Already used by "${name}".`
@@ -37,9 +43,9 @@ function describe(conflict: Conflict): string {
     // single-stroke binding is a menu accelerator and fires before the renderer
     // sees the key, so it and any sequence containing it cannot both work.
     case 'shadowed':
-      return `"${name}" already uses ${conflict.stroke} on its own, which would fire first. Rebind that one before using it here.`
+      return `"${name}" already uses ${stroke} on its own, which would fire first. Rebind that one before using it here.`
     case 'shadows':
-      return `This would fire before "${name}", which uses ${conflict.stroke} as part of a sequence.`
+      return `This would fire before "${name}", which uses ${stroke} as part of a sequence.`
   }
 }
 
@@ -60,6 +66,8 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
   const [problem, setProblem] = useState<string | null>(null)
 
   const platform = window.dmscreen.platform
+  /** What the primary modifier is called here — Cmd on a Mac, Ctrl everywhere else. */
+  const primary = platform === 'darwin' ? 'Cmd' : 'Ctrl'
 
   useEffect(() => {
     void window.dmscreen.keymapOverrides().then(setOverrides)
@@ -89,7 +97,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
 
       const clash = findConflict(keymap, binding, action)
       if (clash) {
-        setProblem(describe(clash))
+        setProblem(describe(clash, platform))
         setCaptured(null)
         return
       }
@@ -166,10 +174,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
       >
         <h2>Keyboard shortcuts</h2>
         <p className="note">
-          Click a shortcut to record a new one. The first key needs Ctrl, Cmd, Alt or Super — a bare
+          Click a shortcut to record a new one. The first key needs {primary}, Alt or Super — a bare
           key would fire while you were typing in a panel. For a two-key sequence like{' '}
-          <kbd>Ctrl+K</kbd> <kbd>3</kbd>, press the second key straight after the first; the second
-          may be any key at all.
+          <kbd>{primary}+K</kbd> <kbd>3</kbd>, press the second key straight after the first; the
+          second may be any key at all.
         </p>
 
         {problem && <p className="note warn">{problem}</p>}
