@@ -200,6 +200,75 @@ const shots = [
     click: '.panel .icon-btn[title="Panel menu"]'
   },
 
+  /* ----------------------------------------------------------------- big dice */
+
+  // Fresh from the picker: a d20, unthrown, prompting to be clicked.
+  {
+    name: 'bigdice',
+    layout: null,
+    click: '.picker-card[data-module-id="bigdice"]'
+  },
+  // A real click on the die, dwelt past the tumble so the shot catches a settled
+  // result rather than a mid-animation frame. The value is random by nature —
+  // what this proves is that the throw path works end to end.
+  {
+    name: 'bigdice-thrown',
+    layout: null,
+    click: ['.picker-card[data-module-id="bigdice"]', '.bigdice-stage'].join('\n'),
+    settle: 1400
+  },
+  // Seeded rather than rolled, because a natural 20 cannot be arranged by
+  // clicking. Shows the flourish and the history strip together.
+  {
+    name: 'bigdice-nat20',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = {
+        sides: 20,
+        value: 20,
+        history: [
+          { id: 'throw_a', sides: 20, value: 20 },
+          { id: 'throw_b', sides: 20, value: 7 },
+          { id: 'throw_c', sides: 20, value: 13 }
+        ]
+      }
+    }
+  },
+  // Percentile renders as the two ten-sided dice it physically is, so this is
+  // the shot that would catch it collapsing back to one. Seeded at 100 — the one
+  // throw in a hundred that shows 00 and 0, and the only three-digit total the
+  // history strip ever has to hold.
+  {
+    name: 'bigdice-percentile',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = {
+        sides: 100,
+        value: 100,
+        history: [
+          { id: 'throw_p', sides: 100, value: 100 },
+          { id: 'throw_q', sides: 100, value: 7 },
+          { id: 'throw_r', sides: 100, value: 62 }
+        ]
+      }
+    }
+  },
+  // The two numbers that came closest to overflowing their faces, at two very
+  // different panel sizes: a d12 showing 12 and a d4 showing 4. Both sit inside
+  // an inner face, so this is what would catch either one clipping again.
+  {
+    name: 'bigdice-tight-faces',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = { sides: 4, value: 4, history: [] }
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = { sides: 12, value: 12, history: [] }
+    }
+  },
+
   /* --------------------------------------------------------------- data packs */
 
   // The important one. With no conditions loaded, the cross-reference scanner

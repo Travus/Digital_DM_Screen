@@ -1,4 +1,5 @@
 import { abilitiesModule } from './AbilitiesModule'
+import { bigDiceModule } from './BigDiceModule'
 import { conditionsModule } from './ConditionsModule'
 import { diceModule } from './DiceModule'
 import { diseasesModule } from './DiseasesModule'
@@ -22,6 +23,7 @@ export const MODULES: AnyModule[] = [
   trackersModule,
   notesModule,
   diceModule,
+  bigDiceModule,
   tablesModule,
   namesModule,
   timerModule
