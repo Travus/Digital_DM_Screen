@@ -5,6 +5,21 @@ import { useKeymapStore } from '../state/keymapStore'
 import { resolveTargetNodeId, useAppStore } from '../state/store'
 
 /**
+ * What was typed last time, kept for as long as the app runs.
+ *
+ * Deliberately outside React and outside every store: it has to outlive the
+ * component, it is nobody's document state, and writing it must not render
+ * anything. Reopening lands on the same filtered list, which is most of the work
+ * of doing the same thing twice; the input is selected so the next keystroke
+ * throws it away, which is the rest.
+ *
+ * Only the text. The highlighted *row* is deliberately not remembered — an index
+ * means a different command as soon as the context changes, so restoring one
+ * would hand a blind Enter to whatever had moved into that position.
+ */
+let lastQuery = ''
+
+/**
  * A floating list of every command that currently applies, filtered as you type
  * and run with Enter.
  *
@@ -28,10 +43,11 @@ export function ActionPalette({
   const maximizedNodeId = useAppStore((state) => state.maximizedNodeId)
   const keymap = useKeymapStore((state) => state.keymap)
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(lastQuery)
   /** Highlighted row. Clamped rather than reset, so a slow deletion keeps its place. */
   const [cursor, setCursor] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const platform = window.dmscreen.platform
 
@@ -47,6 +63,13 @@ export function ActionPalette({
   )
 
   const active = Math.min(cursor, Math.max(entries.length - 1, 0))
+
+  /* Select the remembered query rather than putting a caret after it, so the
+     next keystroke replaces it and reopening never means clearing the box
+     first. `autoFocus` does the focusing; `select()` does not, reliably. */
+  useEffect(() => {
+    inputRef.current?.select()
+  }, [])
 
   /* Keep the highlighted row on screen. The list scrolls, and a cursor that
      walks off the bottom of it is a cursor the user has lost.
@@ -101,12 +124,14 @@ export function ActionPalette({
         aria-label="Action palette"
       >
         <input
+          ref={inputRef}
           className="input palette-input"
           type="text"
           autoFocus
           placeholder="Type a command…"
           value={query}
           onChange={(event) => {
+            lastQuery = event.target.value
             setQuery(event.target.value)
             setCursor(0)
           }}

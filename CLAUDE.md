@@ -209,7 +209,7 @@ absent rather than shipped as a duplicate of VS Code.
 
 ### The action palette
 
-`Cmd/Ctrl+Shift+A`. `src/renderer/src/lib/palette.ts` decides what it shows;
+`Cmd/Ctrl+Shift+P`. `src/renderer/src/lib/palette.ts` decides what it shows;
 `components/ActionPalette.tsx` is only the window around that.
 
 **It is the catalogue, rendered.** Rows are `ACTIONS` filtered by `enabled`, with
@@ -227,6 +227,19 @@ one. Every predicate restates a guard that already exists somewhere imperative �
 matches the ⋯ menu, but the palette says *why* the list is short when the layout
 is locked: half a list with no explanation reads as a broken palette.
 
+**The last query is remembered, the last row is not.** A module-level `let` in
+`ActionPalette.tsx` — outside React and outside every store, because it must
+outlive the component, is nobody's document state, and writing it must not
+render anything. Reopening lands on the same filtered list with the text
+selected, so repeating a command is two keys and a different search is just
+typing over it.
+
+Remembering the highlighted *index* as well would look like the obvious next
+step and is not: an index means a different command as soon as the context
+changes — lock the layout and the structural rows vanish — so restoring one
+hands a blind Enter to whatever moved into that position. The text re-filters
+against the current list and cannot do that.
+
 **Quit is in the catalogue, `fixed`.** The issue asked for "close the app" to be
 reachable, and a palette row needs a command to point at. `fixed` already meant
 "a key some other layer owns app-wide" — Escape belongs to the renderer, Quit to
@@ -240,7 +253,7 @@ row in the menu where what the palette claims and what the menu fires agreed by
 coincidence.
 
 **A single-stroke accelerator cannot be smoke-tested by `press`.** Electron fires
-it before the page sees the key, so a synthetic `keydown` for `Ctrl+Shift+A` is
+it before the page sees the key, so a synthetic `keydown` for `Ctrl+Shift+P` is
 correctly ignored by `advanceChord` and opens nothing. The palette shots use
 `menu:` instead. To check that an accelerator really registers, build the
 template and read it back — `Menu.buildFromTemplate([...]).items[0].accelerator`

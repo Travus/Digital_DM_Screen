@@ -239,10 +239,10 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Action palette',
     category: 'Application',
     // The one Application command worth a default, because it is how every other
-    // unbound command is reached. Ctrl+Shift+A rather than the editors' Ctrl+P /
-    // Ctrl+Shift+P: this app has no file switcher for those to be confused with,
-    // and A for "action" is what the thing is called here.
-    defaultAccelerator: 'CmdOrCtrl+Shift+A'
+    // unbound command is reached. Ctrl+Shift+P is what VS Code, Zed and Sublime
+    // all use for the same thing, so for most people it is already in the
+    // fingers — which is worth more than a mnemonic matching our own name for it.
+    defaultAccelerator: 'CmdOrCtrl+Shift+P'
   },
   {
     id: 'app:shortcuts',

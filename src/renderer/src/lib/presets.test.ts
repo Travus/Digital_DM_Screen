@@ -75,6 +75,19 @@ describe('the presets that exist', () => {
     }
   })
 
+  it('states the palette key even where it matches the shipped default', () => {
+    // A preset reproduces its tool, not our defaults. Left to fall through, the
+    // VS Code keymap would quietly stop being VS Code the day we moved ours.
+    expect(findPreset('vscode')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('zed')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('sublime')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+  })
+
+  it('puts the palette on Find Action for JetBrains', () => {
+    // IntelliJ has no Ctrl+Shift+P at all; Ctrl+Shift+A is the same idea there.
+    expect(findPreset('jetbrains')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+A')
+  })
+
   it('has no preset that quietly does nothing', () => {
     // A button that changes no binding is worse than no button — which is why
     // Cursor is absent rather than shipped as a duplicate of VS Code.

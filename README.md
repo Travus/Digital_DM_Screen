@@ -125,10 +125,14 @@ Worth knowing:
 
 ### The action palette
 
-`Cmd/Ctrl+Shift+A` (or **View → Action Palette…**) floats a searchable list of
+`Cmd/Ctrl+Shift+P` (or **View → Action Palette…**) floats a searchable list of
 every command the app has, and runs the one you pick with Enter. Arrow keys move,
 `Esc` puts it away, and typing filters — on the command name or on the menu it
 lives under, so `data` brings up everything in the Data menu at once.
+
+It reopens on whatever you typed last, selected, so running the same command
+again is two keys and starting a different search is just typing over it. That
+lasts as long as the app is running and is not saved anywhere.
 
 It is how you reach the commands that ship with no key of their own, which is
 most of them: there are more commands than there are chords worth spending. Each
@@ -156,7 +160,7 @@ exception, which is why `F2` is a default.
 | `F2` | Rename the layout |
 | `Cmd/Ctrl+L` | Lock or unlock the layout |
 | `Cmd/Ctrl+I` | Import a data pack |
-| `Cmd/Ctrl+Shift+A` | Open the action palette |
+| `Cmd/Ctrl+Shift+P` | Open the action palette |
 
 Two cannot be changed. `Esc` leaves panel fullscreen, and it is handled by the
 app itself rather than by the menu, because a menu shortcut for `Esc` would
@@ -195,7 +199,8 @@ changes — pick **Default** to get back.
 They only cover what the tool has an opinion about. Vim and tmux drive panes and
 say nothing about saving files, so those keep their usual keys; Emacs is absent
 because its `C-x` prefix is unavailable, and a keymap that opens on anything else
-would not be Emacs.
+would not be Emacs. The one that moves the palette is **JetBrains**, onto
+`Ctrl+Shift+A` — IntelliJ calls it Find Action and has no `Ctrl+Shift+P`.
 
 ## Building
 
