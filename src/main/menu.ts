@@ -124,6 +124,19 @@ export function buildMenu(
       ]
     : [{ label: 'No recent layouts', enabled: false }]
 
+  /**
+   * Quit is `fixed` in the catalogue, and its accelerator is written onto the
+   * role from there rather than left implicit.
+   *
+   * The role would supply the same key by itself — `getDefaultRoleAccelerator()`
+   * on a bare `role: 'quit'` returns `CommandOrControl+Q`. Passing it anyway
+   * keeps the rule this file is built on unbroken: every accelerator the menu
+   * registers comes from the keymap, so what the palette and the shortcuts editor
+   * say about a key is what the menu will actually fire. Quit would otherwise be
+   * the one row where those two facts happened to agree by coincidence.
+   */
+  const quit = item('app:quit', 'Quit')
+
   const macAppMenu: MenuItemConstructorOptions[] = isMac
     ? [
         {
@@ -141,7 +154,9 @@ export function buildMenu(
             { role: 'hideOthers' },
             { role: 'unhide' },
             { type: 'separator' },
-            { role: 'quit' }
+            // Label untouched — the role spells it "Quit Digital DM Screen",
+            // which is what a Mac user is looking for.
+            { role: 'quit', accelerator: quit.accelerator }
           ]
         }
       ]
@@ -149,7 +164,7 @@ export function buildMenu(
 
   const layoutQuitItems: MenuItemConstructorOptions[] = isMac
     ? []
-    : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]
+    : [{ type: 'separator' }, { ...quit, role: 'quit' }]
   const macPasteItems: MenuItemConstructorOptions[] = isMac ? [{ role: 'pasteAndMatchStyle' }] : []
   const macWindowMenu: MenuItemConstructorOptions[] = isMac ? [{ role: 'windowMenu' }] : []
   const helpMenu: MenuItemConstructorOptions[] = [
@@ -253,6 +268,10 @@ export function buildMenu(
     {
       label: isMac ? 'View' : '&View',
       submenu: [
+        // Where VS Code, Zed and Sublime all put theirs, so it is the first
+        // place anyone will look for it.
+        { ...item('app:palette', 'Action Palette…'), click: send('app:palette') },
+        { type: 'separator' },
         {
           ...item('view:toggleTheme', 'Switch Light / Dark Theme'),
           click: send('view:toggleTheme')

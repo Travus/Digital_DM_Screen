@@ -52,7 +52,12 @@ export const PRESETS: readonly KeymapPreset[] = [
     blurb: 'Ctrl+K sequences for the split and the shortcut editor. Also Cursor.',
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
-      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
+      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
+      // `workbench.action.showCommands`. Stated rather than left to fall through,
+      // even though the catalogue default is the same key today: a preset
+      // reproduces its tool, and one that tracked our defaults instead would
+      // quietly stop being VS Code the moment we moved one.
+      'app:palette': 'CmdOrCtrl+Shift+P'
     }
   },
   {
@@ -63,7 +68,9 @@ export const PRESETS: readonly KeymapPreset[] = [
     blurb: 'Zed’s Ctrl+K family. Its Shift+Esc zoom is left out — Esc is reserved.',
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K Down',
-      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
+      'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
+      // `command_palette::Toggle`.
+      'app:palette': 'CmdOrCtrl+Shift+P'
     }
   },
   {
@@ -72,7 +79,9 @@ export const PRESETS: readonly KeymapPreset[] = [
     blurb: 'Sublime’s Alt+Shift layout commands for splitting.',
     bindings: {
       'panel:splitRight': 'Alt+Shift+2',
-      'panel:splitDown': 'Alt+Shift+8'
+      'panel:splitDown': 'Alt+Shift+8',
+      // `show_overlay` with `"overlay": "command_palette"`.
+      'app:palette': 'CmdOrCtrl+Shift+P'
     }
   },
   {
@@ -80,11 +89,14 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'JetBrains',
     // JetBrains spends its Ctrl keys on editor commands, so the overlap with
     // this app is small but real: Ctrl+W is Extend Selection there, not Close.
-    blurb: 'IntelliJ layout: Shift+F6 renames, Ctrl+F4 closes, Alt+Insert is new.',
+    blurb: 'IntelliJ: Ctrl+Shift+A finds actions, Shift+F6 renames, Ctrl+F4 closes.',
     bindings: {
       'layout:rename': 'Shift+F6',
       'layout:new': 'Alt+Insert',
-      'panel:close': 'CmdOrCtrl+F4'
+      'panel:close': 'CmdOrCtrl+F4',
+      // Find Action, which is the palette by another name — and the one preset
+      // here that actually moves it, since IntelliJ has no Ctrl+Shift+P.
+      'app:palette': 'CmdOrCtrl+Shift+A'
     }
   },
   {

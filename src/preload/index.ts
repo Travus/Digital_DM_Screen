@@ -45,6 +45,8 @@ const api = {
   confirmDiscard: (name: string): Promise<'save' | 'discard' | 'cancel'> =>
     ipcRenderer.invoke('window:confirmDiscard', name),
   toggleWindowFullScreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggleFullScreen'),
+  /** Quit, for the action palette — the menu's Quit item is a native role. */
+  quitApp: (): Promise<void> => ipcRenderer.invoke('window:quit'),
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),
 
   /**

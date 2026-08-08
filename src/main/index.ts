@@ -220,6 +220,33 @@ function installSmokeHook(window: BrowserWindow): void {
           await wait(400)
         }
 
+        // Type into one field. Needed for anything whose interesting state is a
+        // *query* — the action palette filtering itself, say — where clicking
+        // gets you to the box and no further.
+        //
+        // The write goes through the native value setter rather than `el.value`
+        // because React tracks the last value it wrote on the node itself: a
+        // plain assignment updates the DOM but leaves the tracker agreeing with
+        // it, so the change event that follows is discarded as a no-op.
+        const typing = (process.env['DMSCREEN_SMOKE_TYPE'] ?? '').trim()
+        if (typing) {
+          const typed = (await window.webContents.executeJavaScript(
+            `(() => {
+              const { selector, text } = ${typing}
+              const el = document.querySelector(selector)
+              if (!el) return false
+              const setter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+              ).set
+              setter.call(el, text)
+              el.dispatchEvent(new Event('input', { bubbles: true }))
+              return true
+            })()`
+          )) as boolean
+          if (!typed) console.log(`[renderer:error] nothing to type into: ${typing}`)
+          await wait(400)
+        }
+
         // Park the pointer on one control, for UI that only a hover reveals.
         // Dispatched as `pointerover`, not `pointerenter`: React listens at the
         // root and synthesises enter from the bubbling event, so an enter event
@@ -480,6 +507,16 @@ ipcMain.handle('window:confirmDiscard', (_event, name: string): 'save' | 'discar
   if (choice === 0) return 'save'
   return choice === 1 ? 'discard' : 'cancel'
 })
+
+/**
+ * Quit from the action palette, which has no menu item to click for it.
+ *
+ * `app.quit()` and not `mainWindow.close()`: the two are deliberately distinct
+ * paths here — on macOS `window-all-closed` is a no-op, so closing the window
+ * would strand the process windowless rather than quitting. This lands in
+ * `before-quit`, so the unsaved-changes prompt reads "Save and quit".
+ */
+ipcMain.handle('window:quit', (): void => app.quit())
 
 ipcMain.handle('window:toggleFullScreen', (): boolean => {
   if (!mainWindow) return false

@@ -2087,6 +2087,94 @@ code {
   margin-bottom: 6px;
 }
 
+/* --------------------------------------------------------- action palette */
+
+/*
+  Near the top rather than centred, which is where every palette anyone has used
+  puts it: the list grows downwards as you type, so a centred one would walk its
+  own input up the screen on every keystroke.
+*/
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(560px, 92vw);
+  padding: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.palette-input {
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+/*
+  Capped so the palette cannot outgrow the window it is floating over — with
+  every command listed and nothing typed, the full list is longer than a short
+  window.
+*/
+.palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+}
+
+.palette-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/*
+  One highlight, driven by the cursor, and the pointer moves the cursor rather
+  than lighting a second row of its own. A `:hover` rule here would give the
+  list two highlights whenever the mouse happens to rest on it.
+
+  Louder than the ⋯ menu's hover, and deliberately: this row is what Enter runs,
+  which is a commitment a faint grey wash does not carry. The accent edge is an
+  inset shadow so nothing shifts by a pixel as the cursor moves down the list.
+*/
+.palette-item.active {
+  background: var(--bg-4);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.palette-label {
+  white-space: nowrap;
+}
+
+/* Which menu the command lives under, for a query like "data" that matches the
+   category rather than any one label. Faint — it is context, not the answer. */
+.palette-category {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* Ruled off, because the list above it is a scroll region: without a line the
+   note butts against a row cut in half and reads as part of the list. */
+.palette .note {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 .preset {
   padding: 4px 12px;
   font: inherit;

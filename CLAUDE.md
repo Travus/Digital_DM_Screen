@@ -207,12 +207,57 @@ starts. A test resolves each preset in full and runs every binding through
 `findConflict`. Another asserts no preset is a no-op — that is why Cursor is
 absent rather than shipped as a duplicate of VS Code.
 
-**`ActionDef.enabled` is deliberately unused.** It is for the command palette
-(#20's follow-up), which unlike a menu cannot list a command that quietly does
-nothing. Writing the predicates while the entries were being written was free;
-retrofitting them means re-deriving each guard from wherever it currently lives —
+### The action palette
+
+`Cmd/Ctrl+Shift+P`. `src/renderer/src/lib/palette.ts` decides what it shows;
+`components/ActionPalette.tsx` is only the window around that.
+
+**It is the catalogue, rendered.** Rows are `ACTIONS` filtered by `enabled`, with
+the live binding beside each one — so a command added to `actions.ts` appears in
+the palette with no further wiring, and its key cannot become a caption that
+lies. That is the same argument that collapsed the two copies of the accelerators
+in the first place.
+
+**`ActionDef.enabled` is what makes it honest**, and is no longer unused. A menu
+can carry a row that quietly does nothing; the palette is the discovery surface,
+so offering "Close panel" on a locked layout is a wrong answer rather than a dead
+one. Every predicate restates a guard that already exists somewhere imperative —
 `store.closePanel`'s early return, `PanelFrame`'s omitted rows, `App`'s
-`if (target)`.
+`if (target)`. Filtering rows out rather than greying them is deliberate and
+matches the ⋯ menu, but the palette says *why* the list is short when the layout
+is locked: half a list with no explanation reads as a broken palette.
+
+**The last query is remembered, the last row is not.** A module-level `let` in
+`ActionPalette.tsx` — outside React and outside every store, because it must
+outlive the component, is nobody's document state, and writing it must not
+render anything. Reopening lands on the same filtered list with the text
+selected, so repeating a command is two keys and a different search is just
+typing over it.
+
+Remembering the highlighted *index* as well would look like the obvious next
+step and is not: an index means a different command as soon as the context
+changes — lock the layout and the structural rows vanish — so restoring one
+hands a blind Enter to whatever moved into that position. The text re-filters
+against the current list and cannot do that.
+
+**Quit is in the catalogue, `fixed`.** The issue asked for "close the app" to be
+reachable, and a palette row needs a command to point at. `fixed` already meant
+"a key some other layer owns app-wide" — Escape belongs to the renderer, Quit to
+the system menu item — so it carries the *reason* as its value now, and the
+editor shows that rather than a hardcoded sentence about Escape.
+
+Its accelerator is written onto `role: 'quit'` from the keymap even though the
+role supplies the same key unprompted (`getDefaultRoleAccelerator()` returns
+`CommandOrControl+Q` — measured, not assumed). Left implicit it would be the one
+row in the menu where what the palette claims and what the menu fires agreed by
+coincidence.
+
+**A single-stroke accelerator cannot be smoke-tested by `press`.** Electron fires
+it before the page sees the key, so a synthetic `keydown` for `Ctrl+Shift+P` is
+correctly ignored by `advanceChord` and opens nothing. The palette shots use
+`menu:` instead. To check that an accelerator really registers, build the
+template and read it back — `Menu.buildFromTemplate([...]).items[0].accelerator`
+under `xvfb-run node_modules/.bin/electron` in the smoke container.
 
 **A panel clips anything laid out inside it.** `.panel` is `overflow: hidden`,
 so an absolutely positioned popover is cut off at the panel edge — the ⋯ menu
@@ -469,6 +514,7 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 - `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
   (focus is what reveals the condition cross-reference popovers)
+- `type` — `{ selector, text }`, for UI whose interesting state is a *query*
 - `settle` — extra dwell before capture, for anything that changes over time
 
 `menu` exists because a native menu is not something a CSS selector can reach,
@@ -476,6 +522,11 @@ and the About and Keyboard Shortcuts dialogs open from nowhere else — so until
 was added they had no coverage available to them at all. `press` is there for the
 same reason one rung down: the half-typed state of a two-stroke sequence is
 reached by a *key*, and there is no control for `click` to select.
+
+`type` writes through the **native value setter**, not `el.value`. React keeps a
+tracker on the node holding the last value it wrote; a plain assignment updates
+the DOM but leaves the tracker agreeing with it, so React discards the change
+event that follows as a no-op and the component never sees a thing.
 
 **Build before you smoke, or you are photographing the last build.**
 `scripts/smoke.mjs` launches `out/`, not `src/`. Run `npm run build` first;
@@ -485,7 +536,9 @@ screenshot and reports `ok`, exactly like the `conditions-search` empty-state
 trap above. Read the image.
 
 Picker cards carry `data-module-id`, so `.picker-card[data-module-id="timers"]`
-is a stable way into any module from an empty layout.
+is a stable way into any module from an empty layout. Palette rows carry
+`data-action-id` for the same reason — the label is user-facing prose and the
+list reorders as you type, so neither is anything to select on.
 
 ## CI
 

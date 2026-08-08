@@ -63,11 +63,29 @@ describe('the presets that exist', () => {
     expect(findConflict(applied, 'CmdOrCtrl+K CmdOrCtrl+S', 'app:shortcuts')).toBeNull()
   })
 
-  it('unbinds everything except the one binding that cannot move', () => {
+  it('unbinds everything except the bindings that cannot move', () => {
+    // Escape and Quit both belong to a layer above the keymap — the renderer's
+    // own handler and the system menu item — so "None" cannot reach them.
     const applied = resolveKeymap(findPreset('none')!.bindings)
     for (const action of ACTIONS) {
-      expect([action.id, applied[action.id]]).toEqual([action.id, action.fixed ? 'Escape' : null])
+      expect([action.id, applied[action.id]]).toEqual([
+        action.id,
+        action.fixed ? action.defaultAccelerator : null
+      ])
     }
+  })
+
+  it('states the palette key even where it matches the shipped default', () => {
+    // A preset reproduces its tool, not our defaults. Left to fall through, the
+    // VS Code keymap would quietly stop being VS Code the day we moved ours.
+    expect(findPreset('vscode')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('zed')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('sublime')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+  })
+
+  it('puts the palette on Find Action for JetBrains', () => {
+    // IntelliJ has no Ctrl+Shift+P at all; Ctrl+Shift+A is the same idea there.
+    expect(findPreset('jetbrains')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+A')
   })
 
   it('has no preset that quietly does nothing', () => {
