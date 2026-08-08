@@ -63,10 +63,15 @@ describe('the presets that exist', () => {
     expect(findConflict(applied, 'CmdOrCtrl+K CmdOrCtrl+S', 'app:shortcuts')).toBeNull()
   })
 
-  it('unbinds everything except the one binding that cannot move', () => {
+  it('unbinds everything except the bindings that cannot move', () => {
+    // Escape and Quit both belong to a layer above the keymap — the renderer's
+    // own handler and the system menu item — so "None" cannot reach them.
     const applied = resolveKeymap(findPreset('none')!.bindings)
     for (const action of ACTIONS) {
-      expect([action.id, applied[action.id]]).toEqual([action.id, action.fixed ? 'Escape' : null])
+      expect([action.id, applied[action.id]]).toEqual([
+        action.id,
+        action.fixed ? action.defaultAccelerator : null
+      ])
     }
   })
 

@@ -248,6 +248,45 @@ const shots = [
     menu: 'app:shortcuts'
   },
 
+  /* ----------------------------------------------------------- action palette */
+
+  // Every command the current layout can run, each with the key that also
+  // reaches it — and most of them with none, which is the point of having it.
+  {
+    name: 'action-palette',
+    layout: starter,
+    menu: 'app:palette'
+  },
+  // Filtering, which is the whole interaction and cannot be reached by clicking.
+  // The query has to hit real rows: an empty palette photographs exactly like a
+  // broken one, which is the trap `conditions-search` sat in for months.
+  {
+    name: 'action-palette-search',
+    layout: starter,
+    menu: 'app:palette',
+    type: { selector: '.palette-input', text: 'panel' }
+  },
+  // Locked. Splitting, closing and flipping are gone from the list, and the note
+  // underneath says why — half a list with no explanation reads as a bug.
+  {
+    name: 'action-palette-locked',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    menu: 'app:palette'
+  },
+  // Running one. Every other palette shot proves it renders; this is the only one
+  // that proves it does anything, and it picks a command with no keybinding at
+  // all — being the only route to those is the whole argument for having it.
+  // A green frame here is the palette gone and the app in light theme.
+  {
+    name: 'action-palette-run',
+    layout: starter,
+    menu: 'app:palette',
+    click: '.palette-item[data-action-id="view:toggleTheme"]'
+  },
+
   /* ----------------------------------------------------------------- big dice */
 
   // Fresh from the picker: a d20, unthrown, prompting to be clicked.
@@ -391,7 +430,7 @@ async function seedSession(layoutPath, mutate, data, keys) {
   )
 }
 
-function run(shotPath, click, settle, hover, menu, press) {
+function run(shotPath, { click, settle, hover, menu, press, type }) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
@@ -411,6 +450,7 @@ function run(shotPath, click, settle, hover, menu, press) {
           ...(menu ? { DMSCREEN_SMOKE_MENU: menu } : {}),
           ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
           ...(press ? { DMSCREEN_SMOKE_PRESS: JSON.stringify(press) } : {}),
+          ...(type ? { DMSCREEN_SMOKE_TYPE: JSON.stringify(type) } : {}),
           ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
@@ -446,7 +486,7 @@ for (const shot of shots) {
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot.click, shot.settle, shot.hover, shot.menu, shot.press)
+    const output = await run(shotPath, shot)
 
     if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
 

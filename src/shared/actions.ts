@@ -37,8 +37,10 @@ export type ActionId =
   | 'view:toggleSidebar'
   | 'data:importPack'
   | 'data:reloadPacks'
+  | 'app:palette'
   | 'app:about'
   | 'app:shortcuts'
+  | 'app:quit'
 
 export type ActionCategory = 'Layout' | 'Panel' | 'View' | 'Data' | 'Application'
 
@@ -72,23 +74,26 @@ export interface ActionDef {
    */
   defaultAccelerator: string | null
   /**
-   * Bindings the user cannot take over. Only Escape, and only because a menu
-   * accelerator for Escape swallows the key application-wide — including inside
-   * text fields — which is why the renderer owns it in `App.tsx`. Listing it
-   * here rather than hiding it is the point: it shows up in the editor as fixed,
-   * so nobody goes looking for where it went.
+   * Why this binding is not the user's to change. Presence is the flag; the text
+   * is what keeps "fixed" from reading as an unexplained refusal, and it is shown
+   * on the row in the editor.
+   *
+   * Both cases are keys some other layer has already claimed app-wide: Escape,
+   * because a menu accelerator for it swallows the key inside text fields too
+   * (so `App.tsx` owns it), and Quit, because it is the system's item. Listing
+   * them rather than hiding them is the point — a binding that simply vanished
+   * from the editor reads as a bug.
    */
-  fixed?: boolean
+  fixed?: string
   /**
    * Whether the action currently applies.
    *
-   * Nothing consumes this yet. It is here because the command palette in #20 is
-   * the surface that needs it — a menu can get away with listing a command that
-   * quietly does nothing, but a palette is the discovery surface and listing
-   * "Close panel" on a locked layout actively misleads. Adding it while the
-   * entries are being written is free; retrofitting it means re-deriving every
-   * guard from wherever it currently lives (`store.closePanel`'s early return,
-   * `PanelFrame`'s omitted rows, `App`'s `if (target)`).
+   * The action palette is what consumes this: a menu can get away with listing a
+   * command that quietly does nothing, but the palette is the discovery surface,
+   * and offering "Close panel" on a locked layout actively misleads. Every
+   * predicate is the same guard that already lives somewhere imperative —
+   * `store.closePanel`'s early return, `PanelFrame`'s omitted rows, `App`'s
+   * `if (target)` — restated where a list can read it before showing a row.
    */
   enabled?: (context: ActionContext) => boolean
 }
@@ -160,7 +165,7 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Leave panel fullscreen',
     category: 'Panel',
     defaultAccelerator: 'Escape',
-    fixed: true,
+    fixed: 'Escape is handled by the app itself, so the menu cannot swallow it in a text field.',
     enabled: (context) => context.maximized
   },
   {
@@ -230,12 +235,22 @@ export const ACTIONS: readonly ActionDef[] = [
   },
 
   {
+    id: 'app:palette',
+    label: 'Action palette',
+    category: 'Application',
+    // The one Application command worth a default, because it is how every other
+    // unbound command is reached. Ctrl+Shift+A rather than the editors' Ctrl+P /
+    // Ctrl+Shift+P: this app has no file switcher for those to be confused with,
+    // and A for "action" is what the thing is called here.
+    defaultAccelerator: 'CmdOrCtrl+Shift+A'
+  },
+  {
     id: 'app:shortcuts',
     label: 'Keyboard shortcuts',
     category: 'Application',
     // Unbound by default. VS Code's Ctrl+K Ctrl+S is a chord, which Electron
     // accelerators cannot express, and every single-chord candidate worth having
-    // is already spoken for.
+    // is already spoken for. The palette reaches it without one.
     defaultAccelerator: null
   },
   {
@@ -243,6 +258,17 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'About',
     category: 'Application',
     defaultAccelerator: null
+  },
+  {
+    id: 'app:quit',
+    label: 'Quit',
+    category: 'Application',
+    // Here so the palette can offer it and the editor can say what the key is,
+    // not so it can be rebound. The menu's `role: 'quit'` does the work; this
+    // entry is what stops Ctrl+Q looking unaccounted for beside every other
+    // command in the app.
+    defaultAccelerator: 'CmdOrCtrl+Q',
+    fixed: 'Quit belongs to the system menu item, which is what makes it work everywhere.'
   }
 ]
 

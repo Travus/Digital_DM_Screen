@@ -10,6 +10,7 @@ import { advanceChord, CHORD_TIMEOUT_MS } from './lib/chords'
 import { useDataStore } from './state/dataStore'
 import { useKeymapStore } from './state/keymapStore'
 import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
+import { ActionPalette } from './components/ActionPalette'
 import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 
 /** How long the layout must sit still before we stash it in userData. */
@@ -35,6 +36,7 @@ export function App(): JSX.Element {
 
   const [aboutOpen, setAboutOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [restored, setRestored] = useState(false)
   /** First half of a two-stroke sequence, while the app waits for the second. */
   const [pendingChord, setPendingChord] = useState<string | null>(null)
@@ -173,6 +175,16 @@ export function App(): JSX.Element {
       case 'app:shortcuts':
         setShortcutsOpen(true)
         break
+      // Toggles rather than opens: the palette is reached by a key, and pressing
+      // that key again is how anyone expects to put it away.
+      case 'app:palette':
+        setPaletteOpen((open) => !open)
+        break
+      // Goes through app.quit() in main so it takes the same route as the window
+      // close button — including the unsaved-changes prompt.
+      case 'app:quit':
+        void window.dmscreen.quitApp()
+        break
       // Handled in main, where the packs are read — but a sequence bound to it
       // arrives here, so the renderer needs a way to ask for it.
       case 'data:importPack':
@@ -233,6 +245,12 @@ export function App(): JSX.Element {
         setPendingChord(null)
         return
       }
+      // Above the dialogs because it is the only one of them that can be open
+      // *over* another surface the user was mid-way through.
+      if (paletteOpen) {
+        setPaletteOpen(false)
+        return
+      }
       // The shortcuts editor takes Escape first while it is recording, on the
       // capture phase, so cancelling a capture never reaches this.
       if (shortcutsOpen) {
@@ -249,7 +267,7 @@ export function App(): JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [aboutOpen, shortcutsOpen, pendingChord])
+  }, [aboutOpen, shortcutsOpen, paletteOpen, pendingChord])
 
   return (
     <div className={`app ${maximizedNodeId ? 'has-maximized' : ''}`}>
@@ -276,6 +294,8 @@ export function App(): JSX.Element {
           <span>waiting for the second key — Esc to cancel</span>
         </div>
       )}
+
+      {paletteOpen && <ActionPalette onRun={runAction} onClose={() => setPaletteOpen(false)} />}
 
       {aboutOpen && (
         <AboutDialog

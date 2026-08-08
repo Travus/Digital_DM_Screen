@@ -232,13 +232,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
 
                       {action.fixed ? (
                         // Listed, not hidden: a binding that simply vanished
-                        // from the editor reads as a bug. Escape is owned by the
-                        // renderer because a menu accelerator for it swallows
-                        // the key inside text fields too.
-                        <span
-                          className="shortcut-key fixed"
-                          title="Fixed — Escape is handled by the app itself"
-                        >
+                        // from the editor reads as a bug. The reason travels
+                        // with the entry rather than being written here — Escape
+                        // and Quit are fixed for different reasons.
+                        <span className="shortcut-key fixed" title={`Fixed — ${action.fixed}`}>
                           {binding ? formatBinding(binding, platform) : '—'}
                         </span>
                       ) : (

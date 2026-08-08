@@ -123,6 +123,24 @@ Worth knowing:
 
 ## Keyboard
 
+### The action palette
+
+`Cmd/Ctrl+Shift+A` (or **View → Action Palette…**) floats a searchable list of
+every command the app has, and runs the one you pick with Enter. Arrow keys move,
+`Esc` puts it away, and typing filters — on the command name or on the menu it
+lives under, so `data` brings up everything in the Data menu at once.
+
+It is how you reach the commands that ship with no key of their own, which is
+most of them: there are more commands than there are chords worth spending. Each
+row shows its shortcut if it has one, so the palette is also how you learn them.
+
+The list is only what applies *right now*. Lock the layout and splitting, closing
+and rearranging drop out of it, because a palette that offers a command which
+then does nothing is worse than one that is a few rows shorter — it says so
+underneath when that happens.
+
+### Shortcuts
+
 These are the defaults. **Help → Keyboard Shortcuts…** rebinds any of them:
 click a shortcut, press the combination you want, and the menu and every button
 caption follow it immediately. A combination needs Ctrl, Cmd, Alt or Super — a
@@ -138,10 +156,13 @@ exception, which is why `F2` is a default.
 | `F2` | Rename the layout |
 | `Cmd/Ctrl+L` | Lock or unlock the layout |
 | `Cmd/Ctrl+I` | Import a data pack |
+| `Cmd/Ctrl+Shift+A` | Open the action palette |
 
-`Esc` is the one that cannot be changed: it leaves panel fullscreen, and it is
-handled by the app itself rather than by the menu, because a menu shortcut for
-`Esc` would swallow the key inside text fields too. Your changes live in
+Two cannot be changed. `Esc` leaves panel fullscreen, and it is handled by the
+app itself rather than by the menu, because a menu shortcut for `Esc` would
+swallow the key inside text fields too. `Cmd/Ctrl+Q` quits, and belongs to the
+system menu item. Both are still listed in the shortcuts window rather than
+quietly missing from it. Your changes live in
 `keybindings.json` beside the layout session, so they survive a reinstall and
 never travel inside a `.dmscreen` file.
 

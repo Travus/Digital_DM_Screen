@@ -201,5 +201,6 @@ export type MenuAction =
   | 'split:equalise'
   | 'view:toggleTheme'
   | 'view:toggleSidebar'
+  | 'app:palette'
   | 'app:about'
   | 'app:shortcuts'
