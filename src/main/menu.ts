@@ -1,8 +1,8 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import { basename } from 'node:path'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
-import { isValidAccelerator } from '../shared/accelerator'
-import type { ActionId, ResolvedKeymap } from '../shared/actions'
+import { isChordBinding, isValidBinding } from '../shared/accelerator'
+import { rendererSingles, type ActionId, type ResolvedKeymap } from '../shared/actions'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
 
@@ -45,16 +45,36 @@ export function buildMenu(
   const send = (action: MenuAction) => () => dispatch(action)
   const isMac = process.platform === 'darwin'
 
+  // Strokes the menu must not register, because a sequence needs the renderer to
+  // see them. Computed once from the same keymap the renderer reads, so the two
+  // always agree on who owns which key without talking to each other.
+  const handedOver = new Set(rendererSingles(keymap).map(([, binding]) => binding))
+
   /**
-   * Last line of defence before `Menu.buildFromTemplate`, which throws on a
-   * malformed accelerator — and a throw here means no menu at all, so no Help
-   * item, so no way to reach the editor and undo the binding that caused it.
-   * The keymap is sanitised on read and validated before saving, so this should
-   * never fire; it costs nothing to make sure it cannot.
+   * The accelerator column shows exactly what this menu will fire, and nothing
+   * else.
+   *
+   * Two kinds of binding fall outside that. A two-stroke sequence cannot go in
+   * the field at all — Electron accelerators are single-stroke — and a stroke
+   * handed to the renderer must not be registered here, or the menu would fire it
+   * before the sequence could ever use it.
+   *
+   * Both are left blank rather than written into the label. The column means one
+   * thing on every platform, and a sequence is not something it can express;
+   * spelling it out in the label instead put two different treatments in one
+   * menu, which read as a mistake. The ⋯ panel menu and the shortcuts editor both
+   * render sequences properly, and both sit closer to where they get used.
+   *
+   * The validity check is also the last line of defence before
+   * `Menu.buildFromTemplate`, which throws on a malformed accelerator — and a
+   * throw here means no menu, so no Help item, so no way to reach the editor and
+   * undo whatever caused it.
    */
-  const accel = (id: ActionId): string | undefined => {
-    const accelerator = keymap[id]
-    return accelerator && isValidAccelerator(accelerator) ? accelerator : undefined
+  const item = (id: ActionId, label: string): { label: string; accelerator?: string } => {
+    const binding = keymap[id]
+    if (!binding || !isValidBinding(binding)) return { label }
+    if (isChordBinding(binding) || handedOver.has(binding)) return { label }
+    return { label, accelerator: binding }
   }
 
   // No sublabels anywhere in this menu: Windows renders them but sizes the menu
@@ -136,11 +156,7 @@ export function buildMenu(
     {
       label: isMac ? 'Help' : '&Help',
       submenu: [
-        {
-          label: 'Keyboard Shortcuts…',
-          accelerator: accel('app:shortcuts'),
-          click: send('app:shortcuts')
-        },
+        { ...item('app:shortcuts', 'Keyboard Shortcuts…'), click: send('app:shortcuts') },
         { type: 'separator' },
         {
           label: isMac ? 'About, Shortcuts & License…' : `About ${app.getName()}`,
@@ -155,18 +171,14 @@ export function buildMenu(
     {
       label: isMac ? 'Layout' : '&Layout',
       submenu: [
-        { label: 'New Layout', accelerator: accel('layout:new'), click: send('layout:new') },
-        { label: 'Open Layout…', accelerator: accel('layout:open'), click: send('layout:open') },
+        { ...item('layout:new', 'New Layout'), click: send('layout:new') },
+        { ...item('layout:open', 'Open Layout…'), click: send('layout:open') },
         { label: 'Open Recent', submenu: recentItems },
         { type: 'separator' },
-        { label: 'Save', accelerator: accel('layout:save'), click: send('layout:save') },
-        { label: 'Save As…', accelerator: accel('layout:saveAs'), click: send('layout:saveAs') },
-        { label: 'Rename…', accelerator: accel('layout:rename'), click: send('layout:rename') },
-        {
-          label: 'Lock / Unlock Layout',
-          accelerator: accel('layout:toggleLock'),
-          click: send('layout:toggleLock')
-        },
+        { ...item('layout:save', 'Save'), click: send('layout:save') },
+        { ...item('layout:saveAs', 'Save As…'), click: send('layout:saveAs') },
+        { ...item('layout:rename', 'Rename…'), click: send('layout:rename') },
+        { ...item('layout:toggleLock', 'Lock / Unlock Layout'), click: send('layout:toggleLock') },
         ...layoutQuitItems
       ]
     },
@@ -188,35 +200,39 @@ export function buildMenu(
     {
       label: isMac ? 'Panel' : '&Panel',
       submenu: [
+        // Every bindable action needs an item here, not only for discovery: an
+        // accelerator is registered by *being* on a menu item, so a default with
+        // no row to sit on would simply never fire.
+        { ...item('panel:rename', 'Rename Panel…'), click: send('panel:rename') },
         {
-          label: 'Split Right',
-          accelerator: accel('panel:splitRight'),
-          click: send('panel:splitRight')
+          ...item('panel:changeModule', 'Change Module…'),
+          click: send('panel:changeModule')
         },
+        { type: 'separator' },
+        { ...item('panel:splitRight', 'Split Right'), click: send('panel:splitRight') },
+        { ...item('panel:splitDown', 'Split Down'), click: send('panel:splitDown') },
+        { ...item('split:flip', 'Flip Surrounding Split'), click: send('split:flip') },
         {
-          label: 'Split Down',
-          accelerator: accel('panel:splitDown'),
-          click: send('panel:splitDown')
+          ...item('split:equalise', 'Even Out Surrounding Split'),
+          click: send('split:equalise')
         },
         { type: 'separator' },
         {
-          label: 'Fullscreen Panel (Esc to exit)',
-          accelerator: accel('panel:maximize'),
+          ...item('panel:maximize', 'Fullscreen Panel (Esc to exit)'),
           click: send('panel:maximize')
         },
         { type: 'separator' },
-        { label: 'Close Panel', accelerator: accel('panel:close'), click: send('panel:close') }
+        { ...item('panel:close', 'Close Panel'), click: send('panel:close') }
       ]
     },
     {
       label: isMac ? 'Data' : '&Data',
       submenu: [
+        { ...item('data:importPack', 'Import Data Pack…'), click: () => dataActions.importPack() },
         {
-          label: 'Import Data Pack…',
-          accelerator: accel('data:importPack'),
-          click: () => dataActions.importPack()
+          ...item('data:reloadPacks', 'Reload Data Packs from Disk'),
+          click: () => dataActions.reloadPacks()
         },
-        { label: 'Reload Data Packs from Disk', click: () => dataActions.reloadPacks() },
         { type: 'separator' },
         { label: 'Data Packs', submenu: packItems },
         { type: 'separator' },
@@ -237,6 +253,15 @@ export function buildMenu(
     {
       label: isMac ? 'View' : '&View',
       submenu: [
+        {
+          ...item('view:toggleTheme', 'Switch Light / Dark Theme'),
+          click: send('view:toggleTheme')
+        },
+        {
+          ...item('view:toggleSidebar', 'Recent Layouts'),
+          click: send('view:toggleSidebar')
+        },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },

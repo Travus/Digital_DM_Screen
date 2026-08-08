@@ -39,8 +39,15 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [picking, setPicking] = useState(false)
+  /* In the store rather than local state so a keyboard command can open them —
+     a shortcut has no way into another component's `useState`. */
+  const renaming = useAppStore((state) => state.renamingNodeId === node.id)
+  const picking = useAppStore((state) => state.pickingNodeId === node.id)
+  const setRenamingNode = useAppStore((state) => state.setRenamingNode)
+  const setPickingNode = useAppStore((state) => state.setPickingNode)
+
+  const setRenaming = (open: boolean): void => setRenamingNode(open ? node.id : null)
+  const setPicking = (open: boolean): void => setPickingNode(open ? node.id : null)
 
   const shortcuts = useShortcuts()
 
@@ -146,7 +153,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
             className="panel-title"
             title="Double-click to rename this panel"
             onDoubleClick={() => setRenaming(true)}
-            onClick={() => setPicking((open) => !open)}
+            onClick={() => setPicking(!picking)}
           >
             {title}
           </button>
@@ -370,7 +377,7 @@ function PanelMenu({
                   item.onSelect?.()
                 }}
               >
-                <span>{item.label}</span>
+                <span className="menu-label">{item.label}</span>
                 {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
               </button>
             )

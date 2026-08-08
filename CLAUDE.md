@@ -121,6 +121,92 @@ paste app-wide. They are reserved in all three spellings of the primary modifier
 since a user recording on macOS produces `Cmd` and on Windows `Ctrl` while the
 catalogue stores `CmdOrCtrl`.
 
+### Two-stroke sequences
+
+A binding is one stroke or two, space-separated in `keybindings.json`:
+`"CmdOrCtrl+K CmdOrCtrl+S"`. Emacs writes that `C-x C-s`; JetBrains calls the
+second half a "second stroke".
+
+**Dispatch is split, and the split is forced.** An Electron accelerator is
+single-stroke only, so a sequence cannot be one. Single-stroke bindings stay menu
+accelerators; sequences run through `advanceChord` in
+`src/renderer/src/lib/chords.ts`. Do not "simplify" this by moving everything to
+the renderer — the menu would then show no accelerators at all, and
+`registerAccelerator: false` (display without registering) is **macOS-only**, so
+there is no cross-platform way back.
+
+**A menu accelerator beats the renderer, so the menu gives the stroke up.**
+Electron fires accelerators before the web page sees the key — the same mechanism
+as the Escape trap above. The fix is not to suppress the accelerator while a
+prefix is pending (stateful, and it gets stuck); it is `rendererSingles`: any
+single-stroke binding whose stroke is *also* used by a sequence loses its
+accelerator permanently and is dispatched by `advanceChord` instead. Both sides
+compute that set from the same keymap, so they cannot disagree about who owns a
+key.
+
+**The native accelerator column shows what the menu will fire, and nothing else.**
+So a sequence, and a stroke handed to the renderer, both leave it blank. Writing
+them into the label instead — `Split Down  (Ctrl+K Ctrl+\)` — was tried and
+reverted: it put two different treatments in one menu, native-right-aligned for
+some rows and parenthesised body text for others, which reads as a bug rather
+than as information. The column means one thing on every platform and a sequence
+is not expressible in it. The ⋯ panel menu and the shortcuts editor render
+sequences properly and sit closer to where they are used, so nothing is lost that
+a user cannot reach.
+
+**Only the opening stroke is contested.** A second stroke may reuse a stroke that
+is bound on its own, because a pending prefix says which was meant —
+`CmdOrCtrl+K CmdOrCtrl+S` and `CmdOrCtrl+S` coexist. A *first* stroke cannot,
+because pressing it would have to mean both "run that action" and "wait, a
+sequence is starting", and nothing later in time resolves it; the single-stroke
+binding would have to fire late, on a timeout, forever. `findConflict` returns
+`prefix-taken`/`prefix-blocks` for that and nothing else.
+
+This is what makes the VS Code, Zed and Sublime keymaps expressible — every one
+of them finishes a sequence on a stroke that is separately bound. The earlier
+rule refused all of them.
+
+**Only the first stroke needs a modifier; the second may be bare.** That is not
+laxity, it is the whole feature: `C-w v` and `C-b %` finish on a plain key. It
+stays safe because a sequence can only *begin* on a modified stroke, so ordinary
+typing can never open one.
+
+**Emacs cannot have its own prefix, and this is not fixable here.** `C-x` is Cut.
+On Windows and Linux that key is handled by Chromium in any editable field
+whatever the menu does, so it is not ours to give away. On macOS Cut is `Cmd+X`
+and `Ctrl+X` would in fact be free — the reservation is over-broad there — but
+freeing it only on Darwin makes one `keybindings.json` behave differently per
+platform, which is worse than the over-reservation. Left deliberately blunt.
+
+**A pending prefix times out; Emacs and VS Code wait forever.** Different stakes:
+a DM who fumbles a prefix mid-session would otherwise have the app silently eat
+whatever they typed next. Two seconds, plus a conspicuous indicator, because a
+swallowed keystroke with no explanation reads as a dropped key.
+
+**Recording waits 900 ms after the first stroke.** There is no way to tell
+`Ctrl+S` from the opening of `Ctrl+K Ctrl+S` except by waiting — they are
+identical up to that point. The alternative was an explicit "record a sequence"
+toggle, which taxes every ordinary rebinding to avoid a pause that lands once.
+
+### Presets
+
+`src/shared/presets.ts` holds the borrowed keymaps, in the spirit of Zed's base
+keymap list. Each is a **sparse** override map applied wholesale — replacing
+every override, never merging. Merging is how you end up with a prefix that still
+fires something on its own, which is the one arrangement nothing can resolve.
+
+**Every binding is sourced from the tool, not remembered.** Zed's came out of
+`assets/keymaps/default-linux.json` in their repo; VS Code's split-down is
+`workbench.action.splitEditorOrthogonal`. A preset wearing a tool's name and
+guessing at its bindings is worse than not shipping it.
+
+**A preset must not contradict itself**, and the way it does is subtle: Vim's
+window commands all sit behind `Ctrl+W`, which ships bound to Close Panel, so the
+preset has to claim that too or the menu owns the prefix and no sequence ever
+starts. A test resolves each preset in full and runs every binding through
+`findConflict`. Another asserts no preset is a no-op — that is why Cursor is
+absent rather than shipped as a duplicate of VS Code.
+
 **`ActionDef.enabled` is deliberately unused.** It is for the command palette
 (#20's follow-up), which unlike a menu cannot list a command that quietly does
 nothing. Writing the predicates while the entries were being written was free;
@@ -380,13 +466,16 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
 - `mutate(doc)` — adjust that layout for states clicking can't reach
 - `data` / `keys` — seed `datapacks.json` / `keybindings.json` in userData
 - `menu` — fire a `MenuAction` before anything is clicked
+- `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
   (focus is what reveals the condition cross-reference popovers)
 - `settle` — extra dwell before capture, for anything that changes over time
 
 `menu` exists because a native menu is not something a CSS selector can reach,
 and the About and Keyboard Shortcuts dialogs open from nowhere else — so until it
-was added they had no coverage available to them at all.
+was added they had no coverage available to them at all. `press` is there for the
+same reason one rung down: the half-typed state of a two-stroke sequence is
+reached by a *key*, and there is no control for `click` to select.
 
 **Build before you smoke, or you are photographing the last build.**
 `scripts/smoke.mjs` launches `out/`, not `src/`. Run `npm run build` first;

@@ -145,6 +145,37 @@ handled by the app itself rather than by the menu, because a menu shortcut for
 `keybindings.json` beside the layout session, so they survive a reinstall and
 never travel inside a `.dmscreen` file.
 
+### Two-key sequences
+
+A shortcut can also be two keystrokes in a row, the way Emacs, Vim and tmux work —
+press `Ctrl+B`, let go, then press `5`. To record one, press the second key
+straight after the first; the first needs a modifier, the second can be anything.
+While a sequence is half typed the app says so at the foot of the window, and
+`Esc` abandons it.
+
+Two things are worth knowing before you rebuild a keymap around them:
+
+- **A sequence cannot *start* on a key that is already a shortcut by itself.**
+  `Ctrl+W` closes a panel, so nothing can begin `Ctrl+W …` until you move it —
+  otherwise pressing it would be a coin toss. Finishing on such a key is fine:
+  `Ctrl+K Ctrl+S` works happily alongside `Ctrl+S` for save, because by then the
+  app knows a sequence is in progress.
+- **`Ctrl+X` cannot start a sequence**, so Emacs's own `C-x` prefix is out: it is
+  Cut, and the browser underneath handles that key in text boxes whatever we do.
+  `Ctrl+B` and `Ctrl+K` are both free.
+
+### Starting from another editor's keymap
+
+The shortcuts window has a **Start from** row: **Default**, **VS Code** (also
+Cursor), **Zed**, **Sublime Text**, **JetBrains**, **Vim**, **tmux**, and
+**None** to unbind everything. Each replaces every shortcut, including your own
+changes — pick **Default** to get back.
+
+They only cover what the tool has an opinion about. Vim and tmux drive panes and
+say nothing about saving files, so those keep their usual keys; Emacs is absent
+because its `C-x` prefix is unavailable, and a keymap that opens on anything else
+would not be Emacs.
+
 ## Building
 
 Windows and Linux builds run through Docker Compose — no Node or Electron on the

@@ -419,7 +419,10 @@ h4 {
      everything else. Label and shortcut on one row only stay on one row if the
      menu is told to size to its widest row. */
   width: max-content;
-  max-width: 320px;
+  /* Roomy enough that a two-stroke binding with every modifier on both halves
+     still fits on one line. Past that the shortcut wraps and the row grows —
+     see `.menu-label`. */
+  max-width: 380px;
   min-width: 180px;
   /* Only bites against the max-height a window too short for the menu forces. */
   overflow-y: auto;
@@ -469,6 +472,25 @@ h4 {
   color: var(--text-faint);
   font-size: 11px;
   white-space: nowrap;
+}
+
+/*
+  The command name is the thing being read, so it is what must never wrap. It
+  used to be the only thing that *could*: `.shortcut` is `nowrap` and the menu is
+  capped, so a long enough binding pushed the label onto two lines and left the
+  row looking broken. Bind something to Super+Ctrl+Alt+Shift and it happens
+  immediately — and that is a legal binding, so the menu has to cope with it.
+*/
+.menu-label {
+  white-space: nowrap;
+}
+
+/* Now the binding gives instead. A two-stroke sequence breaks at the space
+   between its strokes, which is where you would break it by hand anyway. */
+.menu-item .shortcut {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 /*
@@ -2058,6 +2080,28 @@ code {
   gap: 2px;
 }
 
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.preset {
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.preset:hover {
+  border-color: var(--accent);
+}
+
 /* ---------------------------------------------------------------- big dice */
 
 /*
@@ -2306,6 +2350,44 @@ code {
   .bigdice-stage.tumbling .die {
     animation: none;
   }
+}
+
+/*
+  Shown while a two-key sequence is half typed. Deliberately conspicuous and
+  centred: the app is swallowing the next keystroke, and a user who fumbled the
+  prefix needs to know that before they wonder why their typing vanished.
+*/
+.chord-pending {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.chord-pending span {
+  color: var(--text-dim);
+}
+
+kbd {
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
 
 /* --------------------------------------------------------------- scrollbar */

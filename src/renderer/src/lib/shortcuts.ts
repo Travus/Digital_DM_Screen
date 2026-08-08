@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { formatAccelerator } from '../../../shared/accelerator'
+import { formatBinding } from '../../../shared/accelerator'
 import type { ActionId, ResolvedKeymap } from '../../../shared/actions'
 import { useKeymapStore } from '../state/keymapStore'
 
@@ -20,8 +20,8 @@ export type ShortcutLabels = Record<ActionId, string | undefined>
 function toLabels(keymap: ResolvedKeymap): ShortcutLabels {
   const platform = window.dmscreen.platform
   const labels = {} as ShortcutLabels
-  for (const [id, accelerator] of Object.entries(keymap) as [ActionId, string | null][]) {
-    labels[id] = accelerator ? formatAccelerator(accelerator, platform) : undefined
+  for (const [id, binding] of Object.entries(keymap) as [ActionId, string | null][]) {
+    labels[id] = binding ? formatBinding(binding, platform) : undefined
   }
   return labels
 }

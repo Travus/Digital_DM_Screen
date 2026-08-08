@@ -15,7 +15,7 @@
  * is what the shortcuts editor shows. The menu keeps its own.
  */
 
-import { checkAccelerator, normaliseAccelerator } from './accelerator'
+import { bindingStrokes, checkBinding, isChordBinding, normaliseBinding } from './accelerator'
 
 export type ActionId =
   | 'layout:new'
@@ -29,11 +29,18 @@ export type ActionId =
   | 'panel:maximize'
   | 'panel:restore'
   | 'panel:close'
+  | 'panel:rename'
+  | 'panel:changeModule'
+  | 'split:flip'
+  | 'split:equalise'
+  | 'view:toggleTheme'
+  | 'view:toggleSidebar'
   | 'data:importPack'
+  | 'data:reloadPacks'
   | 'app:about'
   | 'app:shortcuts'
 
-export type ActionCategory = 'Layout' | 'Panel' | 'Data' | 'Application'
+export type ActionCategory = 'Layout' | 'Panel' | 'View' | 'Data' | 'Application'
 
 /**
  * What an action needs to know about the app to say whether it currently
@@ -50,6 +57,8 @@ export interface ActionContext {
   hasPanel: boolean
   /** Some panel is currently fullscreen. */
   maximized: boolean
+  /** The target panel sits inside a split, so there is one to flip or even out. */
+  hasSplit: boolean
 }
 
 export interface ActionDef {
@@ -114,7 +123,9 @@ export const ACTIONS: readonly ActionDef[] = [
     id: 'layout:rename',
     label: 'Rename layout',
     category: 'Layout',
-    defaultAccelerator: 'F2'
+    // F2 went to the panel, which is the thing you are usually looking at when
+    // you reach for a rename key. The layout keeps the same key one rung up.
+    defaultAccelerator: 'Shift+F2'
   },
   {
     id: 'layout:toggleLock',
@@ -161,10 +172,61 @@ export const ACTIONS: readonly ActionDef[] = [
   },
 
   {
+    id: 'panel:rename',
+    label: 'Rename panel',
+    category: 'Panel',
+    defaultAccelerator: 'F2',
+    enabled: (context) => context.hasPanel
+  },
+  {
+    id: 'panel:changeModule',
+    label: 'Change module',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => context.hasPanel
+  },
+  // Both ship unbound. They are occasional tidying commands rather than
+  // something reached for mid-session, and every chord worth spending is better
+  // spent elsewhere — the ⋯ menu is where these actually get used.
+  {
+    id: 'split:flip',
+    label: 'Flip surrounding split',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => !context.locked && context.hasSplit
+  },
+  {
+    id: 'split:equalise',
+    label: 'Even out surrounding split',
+    category: 'Panel',
+    defaultAccelerator: null,
+    enabled: (context) => !context.locked && context.hasSplit
+  },
+
+  {
+    id: 'view:toggleTheme',
+    label: 'Switch light or dark theme',
+    category: 'View',
+    defaultAccelerator: null
+  },
+  {
+    id: 'view:toggleSidebar',
+    label: 'Show or hide recent layouts',
+    category: 'View',
+    defaultAccelerator: null
+  },
+
+  {
     id: 'data:importPack',
     label: 'Import data pack',
     category: 'Data',
     defaultAccelerator: 'CmdOrCtrl+I'
+  },
+  {
+    id: 'data:reloadPacks',
+    label: 'Reload data packs from disk',
+    category: 'Data',
+    defaultAccelerator: null
   },
 
   {
@@ -187,6 +249,7 @@ export const ACTIONS: readonly ActionDef[] = [
 export const ACTION_CATEGORIES: readonly ActionCategory[] = [
   'Layout',
   'Panel',
+  'View',
   'Data',
   'Application'
 ]
@@ -271,33 +334,112 @@ export function sanitiseKeymap(raw: unknown): KeymapLoad {
       warnings.push(`"${key}" is not a key combination.`)
       continue
     }
-    const problem = checkAccelerator(value)
+    const problem = checkBinding(value)
     if (problem) {
       warnings.push(`"${key}" is bound to ${value}, which is ${problem}.`)
       continue
     }
-    keymap[action.id] = normaliseAccelerator(value)
+    keymap[action.id] = normaliseBinding(value)
   }
 
   return { keymap, warnings }
 }
 
 /**
- * The action already holding a chord, if any. Compared on normalised form so
- * `Shift+CmdOrCtrl+s` and `CmdOrCtrl+Shift+S` count as the clash they are.
+ * Every stroke used by a two-stroke binding, either half.
+ *
+ * This is the set that decides who dispatches what. A stroke in here cannot be a
+ * menu accelerator, because Electron fires those before the web page sees the
+ * key — the sequence would lose that stroke to the menu every time.
  */
+export function chordStrokes(keymap: ResolvedKeymap): Set<string> {
+  const strokes = new Set<string>()
+  for (const [, binding] of chordBindings(keymap)) {
+    for (const stroke of bindingStrokes(binding)) strokes.add(stroke)
+  }
+  return strokes
+}
+
+/**
+ * Single-stroke bindings the menu has to give up, because some sequence uses
+ * that same stroke.
+ *
+ * They move to the renderer, which can tell the two apart from context: with a
+ * prefix pending the stroke finishes the sequence, and with nothing pending it
+ * fires on its own. The menu cannot make that distinction — it only ever sees
+ * one key at a time — which is why the accelerator has to go rather than be
+ * cleverly suppressed. Their menu items print the binding in the label instead.
+ */
+export function rendererSingles(keymap: ResolvedKeymap): [ActionId, string][] {
+  const strokes = chordStrokes(keymap)
+  return (Object.entries(keymap) as [ActionId, string | null][])
+    .filter((entry): entry is [ActionId, string] => {
+      const binding = entry[1]
+      return !!binding && !isChordBinding(binding) && strokes.has(binding)
+    })
+    .map(([id, binding]) => [id, normaliseBinding(binding) ?? binding])
+}
+
+/**
+ * Why a binding cannot be used.
+ *
+ * Only the **first** stroke of a sequence is contested. Pressing it has to mean
+ * one thing: if some other action is bound to that stroke alone, there is no way
+ * to tell whether the user wants that action now or is opening a sequence, and
+ * no amount of waiting resolves it — the single-stroke binding would have to
+ * fire late, on a timeout, every time.
+ *
+ * A *second* stroke has no such problem and is deliberately allowed to collide.
+ * With a prefix pending the context is unambiguous, so `CmdOrCtrl+K CmdOrCtrl+S`
+ * coexists with `CmdOrCtrl+S` for Save; see `rendererSingles` for what that
+ * costs. This is what makes the VS Code, Zed and Sublime keymaps expressible at
+ * all — every one of them reuses a bound stroke as a finisher.
+ */
+export type Conflict =
+  | { kind: 'duplicate'; action: ActionId }
+  /** The candidate sequence opens on a stroke another action already owns alone. */
+  | { kind: 'prefix-taken'; action: ActionId; stroke: string }
+  /** The candidate single stroke is already how another action's sequence opens. */
+  | { kind: 'prefix-blocks'; action: ActionId; stroke: string }
+
 export function findConflict(
   keymap: ResolvedKeymap,
-  accelerator: string,
+  binding: string,
   exclude: ActionId
-): ActionId | null {
-  const wanted = normaliseAccelerator(accelerator)
+): Conflict | null {
+  const wanted = normaliseBinding(binding)
   if (!wanted) return null
+
+  const wantedStrokes = bindingStrokes(wanted)
+  const wantedIsChord = wantedStrokes.length > 1
 
   for (const action of ACTIONS) {
     if (action.id === exclude) continue
+
     const current = keymap[action.id]
-    if (current && normaliseAccelerator(current) === wanted) return action.id
+    if (!current) continue
+    const other = normaliseBinding(current)
+    if (!other) continue
+
+    if (other === wanted) return { kind: 'duplicate', action: action.id }
+
+    const otherStrokes = bindingStrokes(other)
+    const otherIsChord = otherStrokes.length > 1
+
+    if (wantedIsChord && !otherIsChord && wantedStrokes[0] === other) {
+      return { kind: 'prefix-taken', action: action.id, stroke: other }
+    }
+
+    if (!wantedIsChord && otherIsChord && otherStrokes[0] === wanted) {
+      return { kind: 'prefix-blocks', action: action.id, stroke: wanted }
+    }
   }
   return null
+}
+
+/** Bindings that need the renderer's sequence dispatcher rather than the menu. */
+export function chordBindings(keymap: ResolvedKeymap): [ActionId, string][] {
+  return (Object.entries(keymap) as [ActionId, string | null][])
+    .filter((entry): entry is [ActionId, string] => !!entry[1] && isChordBinding(entry[1]))
+    .map(([id, binding]) => [id, normaliseBinding(binding) ?? binding])
 }
