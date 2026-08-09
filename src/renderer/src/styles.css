@@ -124,9 +124,16 @@ h4 {
   cursor: pointer;
 }
 
-.layout-name:hover {
+/* Locked, the name is a label rather than a control, so it drops the hover box
+   and the pointer. Deliberately not greyed out: it is still the layout's name
+   and the unsaved-changes dot, both of which have to stay readable. */
+.layout-name:not([aria-disabled='true']):hover {
   border-color: var(--line);
   background: var(--bg-3);
+}
+
+.layout-name[aria-disabled='true'] {
+  cursor: default;
 }
 
 .layout-name-input {
