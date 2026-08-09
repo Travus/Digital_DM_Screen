@@ -4,6 +4,9 @@ Context for an AI assistant picking this up cold. Read this before changing
 anything — several of the notes below are bugs that have already been paid for
 once.
 
+**A PR that invalidates a paragraph in this file updates that paragraph.**
+Documentation is not a separate task queued behind the work.
+
 ## What it is
 
 A tiling digital DM screen for tabletop RPGs. Electron + React + TypeScript.
@@ -516,6 +519,21 @@ are monster and lineage books and carry no subclasses, metamagic or manoeuvres.
   (focus is what reveals the condition cross-reference popovers)
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
 - `settle` — extra dwell before capture, for anything that changes over time
+- `expect` — **required**: what the shot claims to show. A bare array is a list
+  of selectors that must be present; the long form takes `found`, `missing` and
+  `text`
+
+**A shot without `expect` is a shot that cannot fail**, so the harness refuses
+one — before the spawn, rather than as a mystery inside a 60-second launch. The
+check runs in the renderer, is reported over stdout as `[smoke:expect]`, and the
+driver decides; that is the same channel console errors already use. `found`
+requires a non-zero box as well as a match, because a `display: none` element is
+the same false green as photographing an absent feature. A `display: contents`
+wrapper has no box either — `.bigdice-pair` is one — so assert through a child.
+
+The capture still happens when an expectation fails. **The screenshot is the
+diagnostic, not the verdict** — assertions say a thing is on screen, and nothing
+more. Clipping, spacing, fonts and "does this look right" are still eyes only.
 
 `menu` exists because a native menu is not something a CSS selector can reach,
 and the About and Keyboard Shortcuts dialogs open from nowhere else — so until it
@@ -618,8 +636,17 @@ Match the surrounding code. Comments explain *why*, not what — most existing
 comments mark a decision or a trap, and that is the bar. British spelling in
 user-facing text.
 
-**Tests cover pure logic only.** `npm run test` is Vitest over
-`src/renderer/src/lib/*.test.ts` — functions with inputs and outputs, where a
-table of cases says something a screenshot cannot. Everything else is still the
-smoke check and typechecking. Do not reach for a component or end-to-end test
-runner; the smoke harness is that, and it works.
+## Testing
+
+New pure logic in `src/shared/` or `src/renderer/src/lib/` ships with unit tests
+in the same PR. `npm run test` is Vitest over `src/renderer/src/lib/*.test.ts`.
+
+Prefer moving logic *out* of components and into `lib/` so it can be unit-tested.
+`menuPlacement.ts` and `palette.ts` are the pattern: a component left thin enough
+to have nothing worth asserting is the goal, not a gap.
+
+New or changed UI ships with a smoke shot, and a smoke shot must assert —
+expected selectors, and text where it matters. A shot that only captures an image
+proves nothing: an absent feature photographs perfectly well.
+
+Two tiers only, unit and smoke. No component or end-to-end runner.

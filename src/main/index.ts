@@ -145,8 +145,9 @@ async function applyKeymap(overrides: Keymap): Promise<ResolvedKeymap> {
 
 /**
  * Development aid, inert unless DMSCREEN_SMOKE_SHOT is set: forwards renderer
- * console messages to stdout, then screenshots the window and exits. Used by
- * `scripts/smoke.mjs` to check the UI actually renders in a headless container.
+ * console messages to stdout, checks what the shot claims to show, then
+ * screenshots the window and exits. Used by `scripts/smoke.mjs` to check the UI
+ * actually renders in a headless container.
  */
 function installSmokeHook(window: BrowserWindow): void {
   const shotPath = process.env['DMSCREEN_SMOKE_SHOT']
@@ -277,8 +278,41 @@ function installSmokeHook(window: BrowserWindow): void {
         const settle = Number(process.env['DMSCREEN_SMOKE_SETTLE'] ?? 0)
         if (Number.isFinite(settle) && settle > 0) await wait(settle)
 
+        // What the shot claims to show. Checked before the capture but reported
+        // after it, so a failure still leaves the screenshot on disk to look at
+        // — the image is the diagnostic, not the verdict.
+        const expectations = (process.env['DMSCREEN_SMOKE_EXPECT'] ?? '').trim()
+        const failures = expectations
+          ? ((await window.webContents.executeJavaScript(
+              `(() => {
+                const spec = ${expectations}
+                const failed = []
+                // Present *and* laid out. A display:none match would otherwise
+                // pass, which is the same false green as photographing an
+                // absent feature.
+                for (const selector of spec.found ?? []) {
+                  const el = document.querySelector(selector)
+                  if (!el) failed.push('nothing matched ' + selector)
+                  else if (!el.getClientRects().length) failed.push('not visible: ' + selector)
+                }
+                for (const selector of spec.missing ?? []) {
+                  if (document.querySelector(selector)) failed.push('expected no match for ' + selector)
+                }
+                const text = document.body.innerText
+                for (const needle of spec.text ?? []) {
+                  if (!text.includes(needle)) failed.push('text not present: ' + needle)
+                }
+                return failed
+              })()`
+            )) as string[])
+          : []
+
         const image = await window.webContents.capturePage()
         await writeFile(shotPath, image.toPNG())
+
+        // Reported, not judged: `scripts/smoke.mjs` decides what a failed
+        // expectation means, exactly as it already does for console errors.
+        for (const failure of failures) console.log(`[smoke:expect] ${failure}`)
         app.exit(0)
       } catch (error) {
         console.log(`[renderer:error] smoke run failed: ${(error as Error).message}`)
