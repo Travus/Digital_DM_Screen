@@ -144,6 +144,10 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
     hasSplit: parentSplitId !== null
   }
 
+  // Read once: the title button, the ⋯ row and the row that resets the name are
+  // three ways to the same command, and they have to be off together.
+  const renameOff = actionUnavailable('panel:rename', context)
+
   return (
     <section
       className={`panel ${maximized ? 'maximized' : ''} ${active ? 'active' : ''}`}
@@ -157,6 +161,10 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
             className="panel-title-input"
             autoFocus
             defaultValue={panel.title ?? module?.name ?? ''}
+            /* Selected on arrival, so typing replaces rather than appends —
+               see the matching field in `TopBar` for why this hangs off focus
+               rather than off a ref. */
+            onFocus={(event) => event.currentTarget.select()}
             onBlur={(event) => {
               setPanelTitle(node.panelId, event.target.value)
               setRenaming(false)
@@ -169,7 +177,11 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         ) : (
           <button
             className="panel-title"
-            title="Double-click to rename this panel"
+            /* Only the rename half is off — the click that opens the module
+               picker is a change to the contents, which a lock does not touch. */
+            title={
+              renameOff ? `Cannot be renamed — ${renameOff}` : 'Double-click to rename this panel'
+            }
             onDoubleClick={() => setRenaming(true)}
             onClick={() => setPicking(!picking)}
           >
@@ -205,12 +217,22 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
             open={menuOpen}
             onOpenChange={setMenuOpen}
             items={[
-              { label: 'Change module…', onSelect: () => setPicking(true) },
-              { label: 'Rename panel…', onSelect: () => setRenaming(true) },
+              { id: 'change-module', label: 'Change module…', onSelect: () => setPicking(true) },
+              {
+                id: 'rename',
+                label: 'Rename panel…',
+                disabled: renameOff,
+                onSelect: () => setRenaming(true)
+              },
               ...(panel.title
                 ? [
                     {
+                      id: 'reset-name',
                       label: 'Reset panel name',
+                      // Resetting *is* renaming — back to the module's own name
+                      // — so it answers to that command's guard rather than to a
+                      // second one written out here.
+                      disabled: renameOff,
                       onSelect: () => setPanelTitle(node.panelId, undefined)
                     }
                   ]
@@ -223,18 +245,21 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                  have to read every time. */
               { separator: true },
               {
+                id: 'split-right',
                 label: 'Split right',
                 shortcut: shortcuts['panel:splitRight'],
                 disabled: actionUnavailable('panel:splitRight', context),
                 onSelect: () => splitPanel(node.id, 'row')
               },
               {
+                id: 'split-down',
                 label: 'Split down',
                 shortcut: shortcuts['panel:splitDown'],
                 disabled: actionUnavailable('panel:splitDown', context),
                 onSelect: () => splitPanel(node.id, 'column')
               },
               {
+                id: 'flip',
                 label: 'Flip surrounding split',
                 disabled: actionUnavailable('split:flip', context),
                 onSelect: () => {
@@ -242,6 +267,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                 }
               },
               {
+                id: 'equalise',
                 label: 'Even out surrounding split',
                 disabled: actionUnavailable('split:equalise', context),
                 onSelect: () => {
@@ -250,6 +276,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
               },
               { separator: true },
               {
+                id: 'close',
                 label: 'Close panel',
                 shortcut: shortcuts['panel:close'],
                 danger: true,
@@ -313,6 +340,13 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
 }
 
 interface MenuItem {
+  /**
+   * A stable handle for the smoke harness, since nothing selects a row by its
+   * label — the same argument as `data-module-id` on the picker cards. The
+   * tooltip used to be handle enough, but two rows can now be off for the same
+   * reason and it stopped telling them apart.
+   */
+  id?: string
   label?: string
   /** Shown faintly at the right of the row, the way a native menu does it. */
   shortcut?: string
@@ -409,6 +443,7 @@ function PanelMenu({
                 className={`menu-item ${item.danger ? 'danger' : ''} ${
                   item.disabled ? 'disabled' : ''
                 }`}
+                data-menu-item={item.id}
                 /* Not the `disabled` attribute: Chromium suppresses the
                    tooltip on a disabled control, and the tooltip is the entire
                    explanation this row has. */

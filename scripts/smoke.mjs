@@ -201,6 +201,62 @@ const shots = [
       missing: ['.splitter-grip']
     }
   },
+  // Renaming the layout. The assertion is only that the field replaced the
+  // button; that its text arrives *selected* is a looks-right question, so the
+  // capture is what carries it — the same division as every other shot here.
+  {
+    name: 'rename-layout',
+    layout: starter,
+    menu: 'layout:rename',
+    expect: { found: ['.layout-name-input'], missing: ['.layout-name'] }
+  },
+  // And a panel's, which opens on the fallback target — `panel_init`, the first
+  // panel in the tree, since nothing has been clicked to make another active.
+  {
+    name: 'rename-panel',
+    layout: starter,
+    menu: 'panel:rename',
+    // No `missing` counterpart to the layout shot above: the other two panels
+    // keep their title buttons, which is the point of renaming one of three.
+    expect: ['.panel-title-input']
+  },
+  // Locked, neither field opens at all. Refusing the *commit* alone would look
+  // identical up to the point the name was silently dropped on blur, so what is
+  // asserted is that nothing opened: the buttons are still buttons.
+  {
+    name: 'rename-locked-refused',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    steps: [{ menu: 'layout:rename' }, { menu: 'panel:rename' }],
+    expect: {
+      found: ['.layout-name', '.panel-title'],
+      missing: ['.layout-name-input', '.panel-title-input']
+    }
+  },
+  // The same lock in the ⋯ menu, where both rows that change a name grey out
+  // together. The title is seeded because "Reset panel name" only exists on a
+  // panel that has one, and it is the row most easily missed — it changes the
+  // name without going near the rename field.
+  {
+    name: 'rename-locked-menu',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+      doc.panels.panel_init.title = 'Turn order'
+    },
+    click: '.panel .icon-btn[title="Panel menu"]',
+    // Selected by id, not by tooltip: both rows are off for the same reason now,
+    // and `[title*=…]` stopped being able to tell them apart.
+    expect: {
+      found: [
+        '.menu-item[data-menu-item="rename"].disabled[title*="the layout is locked"]',
+        '.menu-item[data-menu-item="reset-name"].disabled'
+      ],
+      text: ['Rename panel', 'Reset panel name']
+    }
+  },
   // Hovering a condition named inside another condition's text pops it out.
   {
     name: 'condition-popover',

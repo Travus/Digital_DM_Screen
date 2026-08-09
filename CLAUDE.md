@@ -69,6 +69,17 @@ ids each call instantly staleness anything that persisted one. `PanelFrame`
 caches defaults per mounted module in a **ref**, not `useMemo`, which React may
 discard. Module defaults use literal ids (`'tbl_complications'`, not `uid()`).
 
+**The lock covers the names, and is enforced in the store.** `renameLayout` and
+`setPanelTitle` refuse while `doc.locked`, beside the guards the tree operations
+already carry — a check written into a component is one every later route in has
+to remember, and there are four ways to a rename.
+
+**A locked rename field must refuse to *open*, not just to commit.** Guarding
+`setPanelTitle` alone leaves a field that focuses, accepts a new name and drops
+it on blur, which reads as the app losing the edit rather than declining it —
+so `setRenamingNode` refuses too. Only in the opening direction: closing has to
+keep working, or locking while a field is already up strands it on screen.
+
 ## Rendering
 
 **Never put an emoji font in the body font stack.** Noto Color Emoji also covers

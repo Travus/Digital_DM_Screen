@@ -53,7 +53,7 @@ export type ActionCategory = 'Layout' | 'Panel' | 'View' | 'Data' | 'Application
  * struct is testable without mounting anything.
  */
 export interface ActionContext {
-  /** The layout is locked — everything structural is off. */
+  /** The layout is locked — the arrangement is frozen, and so are the names on it. */
   locked: boolean
   /** There is a panel for the command to act on. */
   hasPanel: boolean
@@ -162,7 +162,8 @@ export const ACTIONS: readonly ActionDef[] = [
     category: 'Layout',
     // F2 went to the panel, which is the thing you are usually looking at when
     // you reach for a rename key. The layout keeps the same key one rung up.
-    defaultAccelerator: 'Shift+F2'
+    defaultAccelerator: 'Shift+F2',
+    unavailable: ifLocked
   },
   {
     id: 'layout:toggleLock',
@@ -213,7 +214,10 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Rename panel',
     category: 'Panel',
     defaultAccelerator: 'F2',
-    unavailable: ifNoPanel
+    // A name is part of the arrangement, not part of the contents: a locked
+    // screen is one nothing can be knocked out of place on mid-session, and a
+    // title relabelled by a stray double-click is exactly that.
+    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
   },
   {
     id: 'panel:changeModule',

@@ -61,10 +61,28 @@ describe('what the palette offers', () => {
     expect(runnable({ locked: true })).not.toContain('panel:close')
     expect(reasonFor('panel:splitRight', locked)).toBe('the layout is locked')
     expect(reasonFor('split:flip', locked)).toBe('the layout is locked')
-    // Everything that still works stays live, including renaming a panel: the
-    // lock freezes the arrangement, not the contents.
+    // Everything the lock does not reach stays live — saving it, and the command
+    // that undoes the lock itself, which greying would strand the user behind.
     expect(runnable({ locked: true })).toEqual(
-      expect.arrayContaining(['panel:rename', 'layout:toggleLock', 'layout:save'])
+      expect.arrayContaining(['layout:toggleLock', 'layout:save', 'panel:changeModule'])
+    )
+  })
+
+  it('greys renaming as well, at both levels', () => {
+    // A name is part of the arrangement. Both used to stay live while locked, so
+    // a padlocked screen could still be relabelled by a stray double-click — and
+    // the palette said nothing about it, because there was nothing to say.
+    const locked = context({ locked: true })
+    expect(runnable({ locked: true })).not.toContain('panel:rename')
+    expect(runnable({ locked: true })).not.toContain('layout:rename')
+    expect(reasonFor('panel:rename', locked)).toBe('the layout is locked')
+    expect(reasonFor('layout:rename', locked)).toBe('the layout is locked')
+    // Unlocked they are ordinary rows, and the layout one applies with no panel
+    // in the document at all.
+    expect(runnable()).toContain('panel:rename')
+    expect(runnable({ hasPanel: false })).toContain('layout:rename')
+    expect(reasonFor('panel:rename', context({ hasPanel: false }))).toBe(
+      'this layout has no panels'
     )
   })
 
@@ -108,15 +126,16 @@ describe('what the palette offers', () => {
     expect(shown.filter((id) => id.startsWith('panel:') || id.startsWith('split:'))).toEqual([
       // Above: the catalogue's own order, which groups by category.
       'panel:maximize',
-      'panel:rename',
       'panel:changeModule',
       // Below: "Close panel", "Even out surrounding split", "Flip surrounding
-      // split", "Leave panel fullscreen", "Split panel down", "Split panel
-      // right" — a tail nobody scans in order is a tail you look a name up in.
+      // split", "Leave panel fullscreen", "Rename panel", "Split panel down",
+      // "Split panel right" — a tail nobody scans in order is a tail you look a
+      // name up in.
       'panel:close',
       'split:equalise',
       'split:flip',
       'panel:restore',
+      'panel:rename',
       'panel:splitDown',
       'panel:splitRight'
     ])

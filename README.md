@@ -27,10 +27,11 @@ window; `Esc` or the floating button at the bottom brings the tiling back.
 `Cmd/Ctrl+Enter` does the same from the keyboard.
 
 **Locking.** Once a screen is arranged the way you want it, hit the padlock in
-the top bar (or `Cmd/Ctrl+L`). Panes can no longer be resized, split or closed, and
-the drag handles between them disappear so there is nothing to catch by
-accident mid-session. Everything *inside* the panels carries on as normal —
-including dragging party tracker columns. The lock is saved with the layout.
+the top bar (or `Cmd/Ctrl+L`). Panes can no longer be resized, split, closed or
+renamed, and the drag handles between them disappear so there is nothing to
+catch by accident mid-session. Everything *inside* the panels carries on as
+normal — including dragging party tracker columns. The lock is saved with the
+layout.
 
 **Layouts.** *Save* writes a `.dmscreen` file containing the tree, every panel's
 module, its settings and its live contents — your party roster, your notes, your
@@ -39,8 +40,10 @@ lists what you have opened before. Whatever is on screen is also stashed
 automatically, so closing the app without saving costs nothing: it comes back
 exactly as you left it.
 
-Double-click a panel title to rename it; click the layout name in the top bar
-(or press `F2`) to rename the layout.
+Double-click a panel title to rename it (or press `F2`); click the layout name
+in the top bar (or press `Shift+F2`) to rename the layout. Either way the
+existing name arrives selected, so typing replaces it. Both are off while the
+layout is locked.
 
 There is a ready-made layout in [`examples/starter.dmscreen`](examples/starter.dmscreen)
 — **Open** it to see a populated screen.
@@ -138,10 +141,10 @@ It is how you reach the commands that ship with no key of their own, which is
 most of them: there are more commands than there are chords worth spending. Each
 row shows its shortcut if it has one, so the palette is also how you learn them.
 
-The list is only what applies *right now*. Lock the layout and splitting, closing
-and rearranging drop out of it, because a palette that offers a command which
-then does nothing is worse than one that is a few rows shorter — it says so
-underneath when that happens.
+The list is only what applies *right now*. Lock the layout and splitting,
+closing, renaming and rearranging drop out of it, because a palette that offers
+a command which then does nothing is worse than one that is a few rows shorter
+— it says so underneath when that happens.
 
 ### Shortcuts
 
@@ -157,7 +160,7 @@ exception, which is why `F2` is a default.
 | `Cmd/Ctrl+Enter` / `Esc` | Fullscreen the active panel / return |
 | `Cmd/Ctrl+W` | Close the active panel |
 | `Cmd/Ctrl+N` / `Cmd/Ctrl+O` / `Cmd/Ctrl+S` / `Cmd/Ctrl+Shift+S` | New / open / save / save as |
-| `F2` | Rename the layout |
+| `F2` / `Shift+F2` | Rename the active panel / the layout |
 | `Cmd/Ctrl+L` | Lock or unlock the layout |
 | `Cmd/Ctrl+I` | Import a data pack |
 | `Cmd/Ctrl+Shift+P` | Open the action palette |

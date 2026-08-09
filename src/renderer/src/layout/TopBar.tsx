@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { actionUnavailable } from '../../../shared/actions'
 import { useAppStore } from '../state/store'
 import { parenthesised, useShortcuts } from '../lib/shortcuts'
 import { ShortcutHint } from '../components/ShortcutHint'
@@ -23,6 +24,22 @@ export function TopBar(): JSX.Element {
 
   const [renaming, setRenaming] = useState(false)
 
+  /* Why the name cannot be edited, asked of the catalogue rather than written
+     here as a `locked` check — a second copy of that rule is how the menu and
+     the palette came to disagree about what a lock covers in the first place.
+
+     The panel fields are answered blank because the top bar has no panel in
+     hand. Filling them in truthfully would mean subscribing it to the whole
+     document, so that every keystroke in a notes panel re-rendered it, and
+     `layout:rename` reads the lock and nothing else. */
+  const renameOff = actionUnavailable('layout:rename', {
+    locked,
+    hasPanel: false,
+    maximized: false,
+    hasSplit: false
+  })
+  const file = filePath ?? 'Not saved to a file yet'
+
   return (
     <header className="topbar">
       <div className="brand" title="Digital DM Screen">
@@ -44,6 +61,13 @@ export function TopBar(): JSX.Element {
           className="layout-name-input"
           autoFocus
           defaultValue={name}
+          /* Renaming is nearly always replacing, so the old name arrives
+             selected and the first keystroke throws it away — keeping it means
+             one extra gesture every time. On focus rather than on mount: a ref
+             callback re-runs whenever the component re-renders, which would
+             reselect the text under someone mid-edit. Blur commits and closes
+             the field, so this can only ever fire once. */
+          onFocus={(event) => event.currentTarget.select()}
           onBlur={(event) => {
             const next = event.target.value.trim()
             if (next) renameLayout(next)
@@ -57,10 +81,21 @@ export function TopBar(): JSX.Element {
       ) : (
         <button
           className="layout-name"
-          title={`${filePath ?? 'Not saved to a file yet'} — click${
-            shortcuts['layout:rename'] ? ` or press ${shortcuts['layout:rename']}` : ''
-          } to rename`}
-          onClick={() => setRenaming(true)}
+          /* `aria-disabled`, not `disabled`: the row is still the layout's name
+             and its file path, and Chromium suppresses the tooltip — which is
+             the only place the reason can go — on a disabled control. */
+          aria-disabled={renameOff ? true : undefined}
+          title={
+            renameOff
+              ? `${file} — ${renameOff}, so the name cannot be changed`
+              : `${file} — click${
+                  shortcuts['layout:rename'] ? ` or press ${shortcuts['layout:rename']}` : ''
+                } to rename`
+          }
+          onClick={() => {
+            if (renameOff) return
+            setRenaming(true)
+          }}
         >
           {name}
           {dirty && <span className="dirty-dot" title="Unsaved changes" />}

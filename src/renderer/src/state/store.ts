@@ -178,7 +178,13 @@ export const useAppStore = create<AppState>((set, get) => {
       return true
     },
 
-    renameLayout: (name) => mutate((doc) => ({ ...doc, name })),
+    // The lock covers the names as well as the shape, and is enforced here for
+    // the same reason the tree operations below are: a guard living in the UI is
+    // one every new route in has to remember.
+    renameLayout: (name) => {
+      if (get().doc.locked) return
+      mutate((doc) => ({ ...doc, name }))
+    },
 
     toggleLock: () => mutate((doc) => ({ ...doc, locked: !doc.locked })),
 
@@ -254,14 +260,16 @@ export const useAppStore = create<AppState>((set, get) => {
         panels: { ...doc.panels, [panelId]: makePanelData(moduleId) }
       })),
 
-    setPanelTitle: (panelId, title) =>
+    setPanelTitle: (panelId, title) => {
+      if (get().doc.locked) return
       mutate((doc) => ({
         ...doc,
         panels: {
           ...doc.panels,
           [panelId]: { ...doc.panels[panelId], title: title?.trim() ? title : undefined }
         }
-      })),
+      }))
+    },
 
     updatePanelState: (panelId, patch) =>
       mutate((doc) => {
@@ -295,7 +303,19 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setActive: (nodeId) => set({ activeNodeId: nodeId }),
 
-    setRenamingNode: (nodeId) => set({ renamingNodeId: nodeId }),
+    /**
+     * Refused while locked — but only in the *opening* direction.
+     *
+     * `setPanelTitle` already refuses the commit, so guarding the open looks
+     * redundant and is not: a field that accepts a name and then drops it on
+     * blur is worse than one that never appeared, because the typing looked like
+     * it worked. Closing has to keep working whatever the lock says, or locking
+     * with a field already open would strand it there with no way to dismiss it.
+     */
+    setRenamingNode: (nodeId) => {
+      if (nodeId !== null && get().doc.locked) return
+      set({ renamingNodeId: nodeId })
+    },
     setPickingNode: (nodeId) => set({ pickingNodeId: nodeId }),
 
     setTheme: (theme) => {
