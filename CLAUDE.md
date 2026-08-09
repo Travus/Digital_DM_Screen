@@ -98,6 +98,13 @@ Escaping the clip means nothing keeps a popover inside the *window* either, so
 placement flips and clamps for itself. A smoke shot only proves this if the panel
 is too small to hold the popover.
 
+**Anything overlaying a panel has to leave the DOM, not just fade.** The
+fullscreen hint is parked over the bottom of the panel it belongs to — the dice
+history is under it — so it fades and then unmounts. Fading alone is half a fix:
+an element at `opacity: 0` still takes every click aimed at what is behind it.
+The timers in `App.tsx` and the transition in `styles.css` are two halves of one
+duration and have to agree.
+
 ## Keybindings
 
 `src/shared/actions.ts` is the catalogue: one entry per command with its default
