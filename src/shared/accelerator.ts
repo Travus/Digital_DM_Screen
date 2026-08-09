@@ -149,9 +149,10 @@ export function normaliseAccelerator(accelerator: string): string | null {
  * Cmd+C/V/X/A/Z work in a text field at all, because the OS routes those through
  * the menu. Shadowing one kills copy and paste app-wide.
  *
- * Escape is reserved in *every* combination, not just bare, because `App.tsx`
- * listens for the raw key without checking modifiers — so Ctrl+Escape would
- * leave fullscreen too, whatever it was also bound to.
+ * Bare Escape is reserved — it is fixed to `panel:restore` (see actions.ts) and
+ * `App.tsx`'s dismiss chain owns it outright. A *modified* Escape (Ctrl+Escape,
+ * Alt+Shift+Escape, ...) is a different chord and is free to bind: App.tsx's
+ * handler now ignores any keypress that carries a modifier.
  */
 const RESERVED_CHORDS: readonly string[] = [
   'CmdOrCtrl+C',
@@ -188,7 +189,7 @@ export function checkAccelerator(accelerator: string): AcceleratorProblem | null
   const parsed = parseAccelerator(accelerator)
   if (!parsed) return 'syntax'
 
-  if (parsed.key === 'Escape') return 'reserved'
+  if (parsed.key === 'Escape' && parsed.modifiers.length === 0) return 'reserved'
   if (RESERVED.has(formatParsed(parsed))) return 'reserved'
 
   // Function keys are the one safe bare binding — F2 renames the layout today,
@@ -370,8 +371,11 @@ export function checkBinding(binding: string): BindingProblem | null {
 
     // Reserved applies to *every* stroke, not just the first. A menu role is
     // registered app-wide and fires whether or not a prefix is pending, so
-    // `CmdOrCtrl+K CmdOrCtrl+C` would lose its second stroke to Copy.
-    if (parsed.key === 'Escape' || RESERVED.has(formatParsed(parsed))) return 'reserved'
+    // `CmdOrCtrl+K CmdOrCtrl+C` would lose its second stroke to Copy. Only bare
+    // Escape is reserved (see checkAccelerator above) — a modified Escape mid-
+    // sequence is just another stroke.
+    if ((parsed.key === 'Escape' && parsed.modifiers.length === 0) || RESERVED.has(formatParsed(parsed)))
+      return 'reserved'
 
     if (index === 0) {
       const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(parsed.key)

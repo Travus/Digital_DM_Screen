@@ -239,6 +239,9 @@ export function App(): JSX.Element {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      // A modified Escape (Ctrl+Escape, Alt+Shift+Escape, ...) is a bindable
+      // chord, not the dismiss key — only bare Escape runs this chain.
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
       // Abandoning a half-typed sequence outranks everything else: the user is
       // most likely correcting a fumbled prefix, not asking to leave fullscreen.
       if (pendingChord) {
