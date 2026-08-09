@@ -280,6 +280,115 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
   if (step.wait !== undefined) return wait(step.wait)
 }
 
+/** Backstop for an app that never booted, not a dwell anyone is meant to pay. */
+const READY_TIMEOUT_MS = 20_000
+const READY_POLL_MS = 50
+
+/**
+ * Block until the renderer has restored its session and painted it.
+ *
+ * This replaced a flat 1800 ms dwell, and the reason is not only that the dwell
+ * was usually longer than the wait it stood in for. It was *fixed*, and a fixed
+ * wait has no way to be right on two machines: too short and the shot drives an
+ * app still showing its pre-restore state, too long and every shot in the suite
+ * pays for the slowest. Under the parallel driver the short end stopped being
+ * theoretical
+ * — several Electrons starting at once on a 4-core runner is exactly the load
+ * that stretches a restore past a constant.
+ *
+ * The failure that avoids matters more than the seconds it saves. A dwell that
+ * expires early does not time out; it photographs the wrong screen and fails an
+ * expectation, which reads as a broken feature rather than a slow one. A poll
+ * gets slower under load instead of getting wrong.
+ *
+ * `data-ready` comes from an effect in `App.tsx`, so it cannot appear before the
+ * commit that rendered the restored layout. Fonts are awaited because the emoji
+ * font is scoped and load-bearing, and two frames because the DOM being right is
+ * not yet the window being painted — the expectations would not notice, but the
+ * screenshot is the half of this harness that only an eye checks.
+ */
+async function waitForReady(window: BrowserWindow): Promise<void> {
+  const deadline = Date.now() + READY_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    const ready = (await window.webContents.executeJavaScript(
+      `document.documentElement.dataset.ready === 'true'`
+    )) as boolean
+    if (ready) {
+      await window.webContents.executeJavaScript(
+        `(async () => {
+          await document.fonts.ready
+          // Self-limiting: a window that never gets a frame would otherwise hang
+          // here until the driver's own timeout, turning a slow shot into a
+          // mystery one.
+          await new Promise((done) => {
+            const bail = setTimeout(() => done(true), 500)
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                clearTimeout(bail)
+                done(true)
+              })
+            )
+          })
+          return true
+        })()`
+      )
+      return
+    }
+    await wait(READY_POLL_MS)
+  }
+  // Reported the way a renderer crash is, so the driver fails the shot and the
+  // screenshot still lands: an app that never restored is worth looking at.
+  console.log('[renderer:error] the app never finished restoring its session')
+}
+
+/** How long an expectation is given to come true before the shot is failed. */
+const EXPECT_TIMEOUT_MS = 3000
+const EXPECT_POLL_MS = 150
+
+/**
+ * Check what the shot claims to show, retrying until it holds or time runs out.
+ *
+ * The steps before this each dwell a fixed 400-500 ms, which is generous for a
+ * React state update and stops being generous when four shots share four cores.
+ * Retrying is what keeps that from being a flake: a UI that is merely late
+ * arrives on a later poll, and one that is actually broken still fails, having
+ * cost the run three seconds it only spends on red.
+ *
+ * The whole spec has to pass in a *single* evaluation. Accumulating passes
+ * across polls would let `found` and `missing` be satisfied at different
+ * instants, which is a state the app may never actually have been in.
+ */
+async function checkExpectations(window: BrowserWindow, spec: string): Promise<string[]> {
+  const deadline = Date.now() + EXPECT_TIMEOUT_MS
+  for (;;) {
+    const failures = (await window.webContents.executeJavaScript(
+      `(() => {
+        const spec = ${spec}
+        const failed = []
+        // Present *and* laid out. A display:none match would otherwise
+        // pass, which is the same false green as photographing an
+        // absent feature.
+        for (const selector of spec.found ?? []) {
+          const el = document.querySelector(selector)
+          if (!el) failed.push('nothing matched ' + selector)
+          else if (!el.getClientRects().length) failed.push('not visible: ' + selector)
+        }
+        for (const selector of spec.missing ?? []) {
+          if (document.querySelector(selector)) failed.push('expected no match for ' + selector)
+        }
+        const text = document.body.innerText
+        for (const needle of spec.text ?? []) {
+          if (!text.includes(needle)) failed.push('text not present: ' + needle)
+        }
+        return failed
+      })()`
+    )) as string[]
+
+    if (!failures.length || Date.now() >= deadline) return failures
+    await wait(EXPECT_POLL_MS)
+  }
+}
+
 /**
  * Development aid, inert unless DMSCREEN_SMOKE_SHOT is set: forwards renderer
  * console messages to stdout, checks what the shot claims to show, then
@@ -335,8 +444,7 @@ function installSmokeHook(window: BrowserWindow): void {
   window.webContents.once('did-finish-load', () => {
     void (async () => {
       try {
-        // Long enough for the session restore round-trip to land.
-        await wait(1800)
+        await waitForReady(window)
 
         // Everything the shot does before the capture, in the order it declared.
         // The driver has already validated the list and desugared the shorthand
@@ -354,30 +462,7 @@ function installSmokeHook(window: BrowserWindow): void {
         // after it, so a failure still leaves the screenshot on disk to look at
         // — the image is the diagnostic, not the verdict.
         const expectations = (process.env['DMSCREEN_SMOKE_EXPECT'] ?? '').trim()
-        const failures = expectations
-          ? ((await window.webContents.executeJavaScript(
-              `(() => {
-                const spec = ${expectations}
-                const failed = []
-                // Present *and* laid out. A display:none match would otherwise
-                // pass, which is the same false green as photographing an
-                // absent feature.
-                for (const selector of spec.found ?? []) {
-                  const el = document.querySelector(selector)
-                  if (!el) failed.push('nothing matched ' + selector)
-                  else if (!el.getClientRects().length) failed.push('not visible: ' + selector)
-                }
-                for (const selector of spec.missing ?? []) {
-                  if (document.querySelector(selector)) failed.push('expected no match for ' + selector)
-                }
-                const text = document.body.innerText
-                for (const needle of spec.text ?? []) {
-                  if (!text.includes(needle)) failed.push('text not present: ' + needle)
-                }
-                return failed
-              })()`
-            )) as string[])
-          : []
+        const failures = expectations ? await checkExpectations(window, expectations) : []
 
         await writeFile(shotPath, await capturePng())
 

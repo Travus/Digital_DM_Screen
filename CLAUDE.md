@@ -390,6 +390,14 @@ through a child.
 The capture still happens when an expectation fails. **The screenshot is the
 diagnostic, not the verdict.**
 
+**An expectation is retried for three seconds before it counts as failed.** Each
+step dwells a fixed 400–500 ms, which is generous for a React state update and
+stops being generous when four shots share four cores. A UI that is merely late
+arrives on a later poll; one that is actually broken still fails, having cost the
+run three seconds it only ever spends on red. The whole spec must pass in *one*
+evaluation — accumulating passes across polls would let `found` and `missing` hold
+at different instants, which is a state the app may never have been in.
+
 `menu` exists because a native menu is not reachable by CSS selector, and the
 About and Keyboard Shortcuts dialogs open from nowhere else. `press` is there for
 the same reason one rung down: the half-typed state of a sequence is reached by a
@@ -416,6 +424,48 @@ rejects with `UnknownVizError` when Chromium's compositor has no frame sink read
 other 45 passed. Asking again beats lengthening a wait every shot pays. The empty
 check is there because nothing downstream would catch a blank PNG: expectations
 run in the renderer and pass whatever the capture returned.
+
+### Shots run in parallel
+
+Four at a time by default — `min(4, cpus)`, sized for the CI runner. The suite is
+nearly all dwell rather than work, so this is the difference between ~115 s and
+~45 s. `SMOKE_CONCURRENCY=1` is the old sequential behaviour exactly, and is the
+first thing to reach for against a failure you suspect is load rather than code.
+
+**A fixed dwell is what breaks under parallelism, so there is no longer one.** The
+harness used to wait a flat 1800 ms for the session restore. A constant cannot be
+right on two machines, and it fails in the worst shape available: an expired dwell
+does not time out, it drives an app still showing its pre-restore state and fails
+an expectation, which reads as a broken feature rather than a slow one.
+`waitForReady` polls for `data-ready` — set by an effect in `App.tsx` once the
+restore has committed, so it cannot appear before the render it stands for — then
+awaits `document.fonts.ready` and two frames, because the DOM being right is not
+yet the window being painted. **Do not reintroduce a constant here.** Adding one
+to "give it a moment" is how this becomes flaky again.
+
+**Each shot gets its own userData directory.** Every shot seeds `session.json`,
+`datapacks.json` and `keybindings.json` before it starts, so on a shared directory
+they would seed over each other and photograph a neighbour's layout.
+`XDG_CONFIG_HOME` is set in each child's spawn env rather than inherited, which is
+the whole of the isolation.
+
+**Each worker slot gets its own X display range.** `xvfb-run -a` finds a free
+display by scanning for `/tmp/.X<n>-lock` and then claiming it, with no lock
+between the two, so two shots starting together choose the same number and one of
+their servers dies. Passing `-a -n <base>` per slot makes the scans disjoint —
+which removes the race rather than narrowing it — while keeping `-a` so a slot can
+still step over a display some earlier crash left locked.
+
+**Electron runs with `--disable-dev-shm-usage`.** Docker gives a container 64 MB of
+`/dev/shm`. One Chromium fits; four do not, and the one that finds it full dies as
+`render process gone: crashed`, naming neither shared memory nor the neighbour
+that took it. Moving that allocation to `/tmp` costs nothing measurable and means
+the suite does not depend on how its container was started.
+
+**A timed-out shot is killed as a process group.** Killing `xvfb-run` on its own
+orphans the Xvfb and the Electron beneath it, and a hung shot's leftovers would go
+on competing for the cores every later shot needs — one timeout would then read as
+a suite-wide collapse.
 
 **A single-stroke accelerator cannot be smoke-tested by `press`.** Electron fires
 it before the page sees the key, so a synthetic `keydown` is correctly ignored by

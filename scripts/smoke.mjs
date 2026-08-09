@@ -10,16 +10,29 @@
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { cpus } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = join(root, 'release', 'smoke')
-const configHome = join(root, 'release', 'smoke', 'config')
+const configRoot = join(root, 'release', 'smoke', 'config')
 
-// Must match the "name" field in package.json — that is what app.getName()
-// returns for an unpackaged run, and it decides the userData directory.
-const userData = join(configHome, 'digital-dm-screen')
+/**
+ * Where one shot's userData lives.
+ *
+ * Per shot, because shots run several at a time and every one of them seeds
+ * `session.json`, `datapacks.json` and `keybindings.json` before it starts —
+ * sharing one directory, they would seed over each other and photograph a
+ * neighbour's layout. `XDG_CONFIG_HOME` is set in each child's spawn env rather
+ * than inherited, so a directory per shot is the whole of the isolation.
+ *
+ * The last segment must match the "name" field in package.json — that is what
+ * app.getName() returns for an unpackaged run, and it decides the userData path.
+ */
+function userDataFor(name) {
+  return join(configRoot, name, 'digital-dm-screen')
+}
 
 const starter = join(root, 'examples', 'starter.dmscreen')
 const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
@@ -648,7 +661,8 @@ const shots = [
   }
 ]
 
-async function seedSession(layoutPath, mutate, data, keys) {
+async function seedSession(name, layoutPath, mutate, data, keys) {
+  const userData = userDataFor(name)
   await rm(userData, { recursive: true, force: true })
   await mkdir(userData, { recursive: true })
 
@@ -761,7 +775,51 @@ function normaliseSteps(shot, name) {
   ]
 }
 
-function run(shotPath, shot, name) {
+const SHOT_TIMEOUT_MS = 60_000
+
+/**
+ * Every child still running, so an interrupted run does not strand them.
+ *
+ * `detached` puts each shot in its own process group, which is what makes the
+ * timeout path able to take Xvfb down with Electron — but it also stops Ctrl-C
+ * reaching them, so the group has to be killed deliberately here too.
+ */
+const live = new Set()
+
+function killTree(child) {
+  try {
+    process.kill(-child.pid, 'SIGKILL')
+  } catch {
+    // Already gone, or never got a group of its own. Either way the direct kill
+    // is the whole remaining obligation.
+    child.kill('SIGKILL')
+  }
+}
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    for (const child of live) killTree(child)
+    process.exit(1)
+  })
+}
+
+/**
+ * The X display a worker slot uses, as a starting point rather than a fixture.
+ *
+ * `xvfb-run -a` finds a free display by scanning for `/tmp/.X<n>-lock` and then
+ * starting a server on the first gap — a check and a claim with no lock between
+ * them, so two shots starting together both see the same gap and one of their
+ * servers dies. Handing each slot its own base makes the scans disjoint, which
+ * removes the race rather than narrowing its window, and keeping `-a` leaves
+ * each slot able to step over a display some earlier crash left locked.
+ *
+ * The stride only has to exceed the number of displays one slot could ever burn
+ * through in a run.
+ */
+const DISPLAY_BASE = 99
+const DISPLAY_STRIDE = 10
+
+function run(shotPath, shot, name, slot) {
   // Before the spawn, so a malformed shot fails on its own terms rather than as
   // a mystery inside a 60-second Electron launch.
   const expectations = JSON.stringify(normaliseExpect(shot.expect, name))
@@ -773,74 +831,166 @@ function run(shotPath, shot, name) {
       'xvfb-run',
       [
         '-a',
+        '-n',
+        String(DISPLAY_BASE + slot * DISPLAY_STRIDE),
         '--server-args=-screen 0 1600x1000x24',
         'node_modules/.bin/electron',
         '--no-sandbox',
+        // Chromium puts its renderer's shared memory in /dev/shm, which Docker
+        // gives a container 64 MB of. One Electron fits; four do not, and the
+        // one that finds it full dies as `render process gone: crashed` —
+        // naming neither shared memory nor the neighbour that took it. This
+        // moves that allocation to /tmp instead of asking every caller to pass
+        // --shm-size, so the suite does not depend on how its container was
+        // started. It cost nothing measurable: /tmp here is the container's own
+        // layer, not a bind mount.
+        '--disable-dev-shm-usage',
         '.'
       ],
       {
         cwd: root,
         env: {
           ...process.env,
-          XDG_CONFIG_HOME: configHome,
+          XDG_CONFIG_HOME: join(configRoot, name),
           DMSCREEN_SMOKE_SHOT: shotPath,
           DMSCREEN_SMOKE_STEPS: steps,
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           DMSCREEN_SMOKE_EXPECT: expectations,
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
         },
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true
       }
     )
+    live.add(child)
 
     let output = ''
     child.stdout.on('data', (chunk) => (output += chunk))
     child.stderr.on('data', (chunk) => (output += chunk))
 
     const timer = setTimeout(() => {
-      child.kill('SIGKILL')
+      // The group, not the child. Killing xvfb-run alone orphans the Xvfb and
+      // the Electron under it, and a hung shot's leftovers would go on competing
+      // for the cores every later shot in the run needs — one timeout would read
+      // as a suite-wide collapse.
+      killTree(child)
       reject(new Error(`Timed out.\n${output}`))
-    }, 60_000)
+    }, SHOT_TIMEOUT_MS)
 
     child.on('exit', (code) => {
       clearTimeout(timer)
+      live.delete(child)
       if (code !== 0) return reject(new Error(`Electron exited with ${code}.\n${output}`))
       resolvePromise(output)
     })
   })
 }
 
-await mkdir(outDir, { recursive: true })
-
-let failed = false
-for (const shot of shots) {
+/**
+ * One shot, start to verdict. Returns the failure text, or null for a pass.
+ *
+ * Nothing here touches state another shot can see: the seed goes to this shot's
+ * own userData and the capture to its own file, which is what lets the pool
+ * below run several at once.
+ */
+async function runShot(shot, slot) {
   const shotPath = join(outDir, `${shot.name}.png`)
   await rm(shotPath, { force: true })
-  await seedSession(shot.layout, shot.mutate, shot.data, shot.keys)
+  await seedSession(shot.name, shot.layout, shot.mutate, shot.data, shot.keys)
 
-  process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot, shot.name)
+    const output = await run(shotPath, shot, shot.name, slot)
 
-    if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
+    if (!existsSync(shotPath)) return `no screenshot written.\n${output}`
 
     // The renderer forwards console errors to stdout via the main process.
     const problems = output
       .split('\n')
       .filter((line) => /\[renderer:(error)\]|Uncaught|ERR_FILE_NOT_FOUND/.test(line))
-    if (problems.length) throw new Error(`renderer reported problems:\n${problems.join('\n')}`)
+    if (problems.length) return `renderer reported problems:\n${problems.join('\n')}`
 
     // The shot rendered without complaint but is not showing what it claims to.
     // Still written to disk — look at it.
     const unmet = output.split('\n').filter((line) => line.includes('[smoke:expect]'))
-    if (unmet.length) throw new Error(`not showing what it claims:\n${unmet.join('\n')}`)
+    if (unmet.length) return `not showing what it claims:\n${unmet.join('\n')}`
 
-    console.log(`ok → ${shotPath}`)
+    return null
   } catch (error) {
-    failed = true
-    console.log('FAILED')
-    console.error(String(error.message ?? error))
+    return String(error.message ?? error)
   }
 }
 
-process.exit(failed ? 1 : 0)
+/**
+ * How many shots run at once.
+ *
+ * A shot is one Electron and one Xvfb that spend nearly all of their life
+ * asleep — a startup burst, then dwell — so what bounds this is how many cold
+ * starts can overlap, not anything steady-state. Four is what the CI runner has,
+ * and the runner is the machine that has to stay honest; a bigger box gains
+ * little, because past this the suite is waiting on dwells no amount of parallel
+ * makes shorter.
+ *
+ * Overridable for bisecting a suspected load-related failure: SMOKE_CONCURRENCY=1
+ * is the old sequential behaviour exactly.
+ */
+function resolveConcurrency() {
+  const override = Number(process.env['SMOKE_CONCURRENCY'])
+  if (Number.isInteger(override) && override > 0) return Math.min(override, shots.length)
+  return Math.max(1, Math.min(4, cpus().length, shots.length))
+}
+
+// Stale userData from an earlier run, including any shot since renamed. Once,
+// here, rather than per shot: a worker clearing this mid-run would be deleting
+// directories its neighbours are using.
+await rm(configRoot, { recursive: true, force: true })
+await mkdir(outDir, { recursive: true })
+
+const concurrency = resolveConcurrency()
+console.log(`Running ${shots.length} shots, ${concurrency} at a time.\n`)
+
+const failures = new Map()
+let nextShot = 0
+
+/**
+ * A worker takes the next unclaimed shot until there are none left, so a slow
+ * shot costs its own slot and not the ones beside it.
+ *
+ * The slot number is the worker's identity for the whole run, which is what the
+ * X display base is drawn from.
+ */
+async function worker(slot) {
+  for (;;) {
+    const index = nextShot++
+    if (index >= shots.length) return
+    const shot = shots[index]
+
+    const failure = await runShot(shot, slot)
+    if (failure) failures.set(shot.name, failure)
+    // One write per line, so lines from different workers cannot interleave.
+    // Completion order, not declaration order — the summary below restores that.
+    console.log(`${failure ? '✗' : '▸'} ${shot.name}${failure ? ' FAILED' : ''}`)
+  }
+}
+
+await Promise.all(Array.from({ length: concurrency }, (_, slot) => worker(slot)))
+
+// Reported at the end and in declaration order: with the run interleaved, a
+// failure printed where it happened would be somewhere in the middle of the
+// output, under whichever other shots happened to finish alongside it.
+if (failures.size) {
+  console.error(`\n${failures.size} of ${shots.length} shots failed:\n`)
+  for (const shot of shots) {
+    const failure = failures.get(shot.name)
+    if (failure) console.error(`✗ ${shot.name}: ${failure}\n`)
+  }
+} else {
+  console.log(`\nAll ${shots.length} shots passed → ${outDir}`)
+}
+
+// Set rather than `process.exit()`, which does not wait for a piped stdout to
+// drain — and CI pipes it. The summary above is the last thing written and would
+// be the first thing truncated, which is the one line a red run is read for.
+// Dropping the signal handlers is what then lets the process end on its own.
+process.exitCode = failures.size ? 1 : 0
+process.removeAllListeners('SIGINT')
+process.removeAllListeners('SIGTERM')

@@ -61,6 +61,12 @@ docker compose run --rm build npm run build   # smoke launches out/, not src/
 docker compose run --rm smoke
 ```
 
+Shots run four at a time, which puts the suite around 45 seconds rather than two minutes. Each one gets its own userData directory and its own virtual display, so they cannot see each other. If a shot fails and you suspect load rather than code, run them one at a time — that is exactly the old behaviour:
+
+```sh
+docker compose run --rm -e SMOKE_CONCURRENCY=1 smoke
+```
+
 Every shot must declare `expect`, or the harness refuses it. A shot that cannot fail is worse than no shot, because an absent feature photographs exactly as cleanly as a present one. A bare array is a list of selectors that must be present and visible:
 
 ```js
