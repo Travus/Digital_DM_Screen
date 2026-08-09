@@ -51,6 +51,30 @@ const shots = [
     click: '.panel .icon-btn[title^="Fullscreen"]',
     expect: ['.app.has-maximized', '.restore-hint']
   },
+  // The hint above, dwelt past its own timer. Seeded with the dice history
+  // because that strip is what the hint was found sitting on top of, so the
+  // capture shows the thing it used to cover. `missing` rather than a check on
+  // opacity: a faded hint still takes the clicks meant for the row beneath it,
+  // so leaving the DOM is the fix and being invisible is only half of it.
+  {
+    name: 'maximized-hint-fades',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = {
+        sides: 20,
+        value: 14,
+        history: [
+          { id: 'throw_a', sides: 20, value: 14 },
+          { id: 'throw_b', sides: 20, value: 3 },
+          { id: 'throw_c', sides: 20, value: 19 }
+        ]
+      }
+    },
+    click: '.panel:has(.bigdice) .icon-btn[title^="Fullscreen"]',
+    settle: 5000,
+    expect: { found: ['.app.has-maximized', '.bigdice-past'], missing: ['.restore-hint'] }
+  },
   {
     name: 'light-theme',
     layout: starter,

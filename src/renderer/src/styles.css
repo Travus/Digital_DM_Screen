@@ -387,6 +387,11 @@ h4 {
   color: var(--text-dim);
 }
 
+/*
+  Transient by design — App.tsx pulls it after a few seconds. It is parked over
+  the bottom of the fullscreened panel, so anything living down there is behind
+  it until it goes.
+*/
 .restore-hint {
   position: fixed;
   bottom: 14px;
@@ -402,10 +407,20 @@ h4 {
   box-shadow: var(--shadow);
   cursor: pointer;
   opacity: 0.85;
+  transition: opacity 300ms ease;
 }
 
 .restore-hint:hover {
   opacity: 1;
+}
+
+/* On its way out, and still mounted for the length of the fade. `pointer-events`
+   because a faded button is not a gone one: at `opacity: 0` it would go on
+   swallowing every click aimed at what it is sitting over. Below `:hover` on
+   purpose — same specificity, so the later rule is what wins the argument. */
+.restore-hint.fading {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------------- menu */

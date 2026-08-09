@@ -16,6 +16,12 @@ import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 /** How long the layout must sit still before we stash it in userData. */
 const SESSION_DEBOUNCE_MS = 700
 
+/** How long the fullscreen hint holds before it starts fading. */
+const RESTORE_HINT_MS = 4000
+
+/** Length of that fade — must match the transition on `.restore-hint`. */
+const RESTORE_HINT_FADE_MS = 300
+
 /**
  * Everything `runAction` can be asked to do, from either of its two callers.
  *
@@ -51,6 +57,8 @@ export function App(): JSX.Element {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [restored, setRestored] = useState(false)
+  /** How far the fullscreen hint is through saying its piece and leaving. */
+  const [restoreHint, setRestoreHint] = useState<'up' | 'fading' | 'gone'>('gone')
   /** First half of a two-stroke sequence, while the app waits for the second. */
   const [pendingChord, setPendingChord] = useState<string | null>(null)
 
@@ -296,6 +304,32 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [aboutOpen, shortcutsOpen, paletteOpen, pendingChord])
 
+  /* The hint says its piece and then gets out of the way. Parked at the bottom
+     centre it sits on top of whatever the fullscreened module put there — the
+     dice history today, and whatever a later module lands in the same strip —
+     and a panel given the whole window is one the user means to look at.
+
+     Two timers rather than one because it fades before it goes: an element at
+     `opacity: 0` still takes the click meant for what is underneath it, so the
+     fade only stops it being *seen* and the unmount is what stops it being in
+     the way. Keyed on the id, so fullscreening a second panel says it again. */
+  useEffect(() => {
+    if (!maximizedNodeId) {
+      setRestoreHint('gone')
+      return
+    }
+    setRestoreHint('up')
+    const fade = window.setTimeout(() => setRestoreHint('fading'), RESTORE_HINT_MS)
+    const hide = window.setTimeout(
+      () => setRestoreHint('gone'),
+      RESTORE_HINT_MS + RESTORE_HINT_FADE_MS
+    )
+    return () => {
+      window.clearTimeout(fade)
+      window.clearTimeout(hide)
+    }
+  }, [maximizedNodeId])
+
   return (
     <div className={`app ${maximizedNodeId ? 'has-maximized' : ''}`}>
       <TopBar />
@@ -307,9 +341,12 @@ export function App(): JSX.Element {
         {sidebarOpen && <RecentsPanel />}
       </div>
 
-      {maximizedNodeId && (
-        <button className="restore-hint" onClick={() => useAppStore.getState().maximize(null)}>
-          Esc to return to the full screen
+      {maximizedNodeId && restoreHint !== 'gone' && (
+        <button
+          className={`restore-hint ${restoreHint === 'fading' ? 'fading' : ''}`}
+          onClick={() => useAppStore.getState().maximize(null)}
+        >
+          Esc to exit fullscreen
         </button>
       )}
 
