@@ -78,6 +78,18 @@ export function App(): JSX.Element {
     })()
   }, [])
 
+  /* The app's ready line, published to the DOM.
+
+     The smoke harness waits on this rather than on a fixed dwell, because a
+     dwell can only be tuned for one machine: too short and a shot drives an app
+     still showing its pre-restore state, too long and every shot in the suite
+     pays for the slowest. Set from an effect, so it cannot land before the
+     commit that rendered the restored layout — see `waitForReady` in
+     `src/main/index.ts`. */
+  useEffect(() => {
+    if (restored) document.documentElement.dataset.ready = 'true'
+  }, [restored])
+
   /* Stash the working state so a crash or an accidental quit costs nothing. */
   useEffect(() => {
     if (!restored) return
