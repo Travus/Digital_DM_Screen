@@ -388,6 +388,13 @@ tracker agreeing with the DOM, so React discards the change event as a no-op.
 **Build before you smoke, or you are photographing the last build.** It launches
 `out/`, not `src/`.
 
+**The capture is retried, and an empty image is a failure.** `capturePage()`
+rejects with `UnknownVizError` when Chromium's compositor has no frame sink ready
+— a cold-start problem that has killed the *first* shot of a CI run while the
+other 45 passed. Asking again beats lengthening a wait every shot pays. The empty
+check is there because nothing downstream would catch a blank PNG: expectations
+run in the renderer and pass whatever the capture returned.
+
 **A single-stroke accelerator cannot be smoke-tested by `press`.** Electron fires
 it before the page sees the key, so a synthetic `keydown` is correctly ignored by
 `advanceChord`. Use `menu:`. To check an accelerator really registers, build the
