@@ -298,12 +298,13 @@ something the package can supply. The AppStream metainfo in `build/` is for afte
 the install; its `<launchable>` must match the installed `.desktop` filename,
 which electron-builder names after `linux.executableName`.
 
-**Check the metainfo against `ubuntu:20.04` as well as 24.04.** Focal ships
-AppStream 0.12, where a newer tag is not an error but an *info* saying
-`unknown-tag` — the value is silently dropped. That is how `<developer>` left the
-author name off every 20.04 machine while validating perfectly on 24.04. The file
-carries both spellings. Use `appstreamcli dump <id>`, not `get`, which prints a
-fixed summary and would hide this. CONTRIBUTING.md has the command.
+**The metainfo must parse on an old AppStream as well as a new one.** A tag newer
+than the parser is not an error — it is an *info* saying `unknown-tag`, and the
+value is silently dropped. That is how `<developer>` (1.0 syntax) left the author
+name off older machines while validating perfectly on 24.04, so the file carries
+both spellings. The Linux build job asserts the name survives on `ubuntu:24.04`
+and `ubuntu:22.04`; presence in the deb is not the failure mode. Use `appstreamcli
+dump <id>`, not `get`, which prints a fixed summary and would hide this.
 
 **macOS must be built on macOS.** Measured against electron-builder 26.15.3 in the
 Wine container: `--mac dmg` fails on `sips process failed ENOENT`, and `--mac zip`
