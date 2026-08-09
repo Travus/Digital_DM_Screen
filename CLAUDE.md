@@ -438,6 +438,13 @@ line documenting that separator.
 non-zero on any finding, and a pipe reports only the last command's status. The
 summary script is a formatter; the gate is a separate `--audit-level=high` step.
 
+**Never pipe a long output into `grep -q`.** An Actions step runs under
+`pipefail`, and `grep -q` exits on its first match — the writer upstream then
+dies on a write error and *that* becomes the pipeline's status. A match early in
+a long stream therefore fails the step, and the `||` branch reports the thing as
+missing. `dpkg-deb -c | grep -q` said the hicolor icons were absent from a deb
+that contained them. Capture once, then search with `<<<`.
+
 **The release tag goes on after the merge**, not via `npm version` — its own tag
 points at the pre-merge commit, which a squash merge leaves off `main`.
 
