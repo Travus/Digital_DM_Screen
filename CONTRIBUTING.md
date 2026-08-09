@@ -73,9 +73,20 @@ The long form takes `found`, `missing` and `text`:
 expect: { found: ['.card'], missing: ['.empty'], text: ['Paralyzed'] }
 ```
 
+A shot drives the UI with `menu`, `click`, `press` and `type`, which run in that fixed order. When the behaviour under test *is* a transition — two inputs deep, or two of one kind — write them out instead:
+
+```js
+steps: [
+  { menu: 'app:palette' },
+  { type: { selector: '.palette-input', text: 'panel' } },
+  { press: { key: 'End' } },
+  { press: { key: 'Enter' } }
+]
+```
+
 The screenshots are diagnostics for a failure, not the verification itself. Assertions say a thing is on screen; whether it *looks* right, has correct spacing, fonts, and doesn't clip still needs manual verification.
 
-There is no component or end-to-end test runner, deliberately. jsdom cannot see the layout and overflow bugs that the smoke harness exists to catch, and the smoke harness already fills the end-to-end slot.
+There is no component or end-to-end test runner, deliberately, and the pressure that keeps it unnecessary is worth naming: logic gets pushed out into pure functions until what remains in a component is thin enough for the smoke harness to reach from outside. When something resists — when a decision only makes sense inside the render — that is usually the signal to move it out, not the signal to add a runner. jsdom also cannot see the layout and overflow bugs the smoke harness exists to catch, and that harness already fills the end-to-end slot.
 
 ## Adding a module
 

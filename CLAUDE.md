@@ -362,9 +362,23 @@ paths distinct.
 - `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
+- `steps` — those four as an ordered list, for a shot that needs two of a kind
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
   long form taking `found`, `missing` and `text`
+
+**The shorthand fields are sugar for `steps`, desugared in the driver.** There is
+one executor in `src/main/index.ts` and one list for it to read, so the two
+spellings cannot come to mean different things — `menu`, `click`, `press`, `type`,
+`hover` are one step each in that fixed order, which is what most shots want.
+Declaring both is refused rather than merged: a shot writing `steps` has an order
+in mind, and prepending a shorthand field to it would put a click somewhere
+nobody wrote. Steps also take `wait` for a mid-sequence dwell.
+
+**The fixed order is why `steps` exists.** `type` always ran after `press`, so
+"narrow a list, then walk it" could not be written, and neither could any state
+two inputs deep — the palette showing a greyed row's reason and then a fresh
+query typed over it. Reach for `steps` when the behaviour *is* the transition.
 
 **A shot without `expect` is a shot that cannot fail**, so the harness refuses one
 before the spawn. The check runs in the renderer and is reported over stdout as
@@ -380,6 +394,14 @@ diagnostic, not the verdict.**
 About and Keyboard Shortcuts dialogs open from nowhere else. `press` is there for
 the same reason one rung down: the half-typed state of a sequence is reached by a
 key, and there is no control to select.
+
+**`press` dispatches at `document.activeElement`, not at `window`.** A real
+keydown starts at the focused element and bubbles, so an app-wide `window`
+listener — the chord dispatcher, the Escape chain — hears it either way, while a
+React `onKeyDown` on the focused control only hears it this way: React listens at
+the root, which is *below* `window` and never on the path of an event whose target
+is `window`. Dispatching at `window` reached the app-wide listeners and nothing
+else, which put the action palette's own arrow keys beyond the harness entirely.
 
 `type` writes through the **native value setter**, not `el.value`. React keeps a
 tracker on the node holding the last value it wrote; a plain assignment leaves the
