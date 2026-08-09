@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PanelNode } from '../../../shared/types'
+import { actionUnavailable, type ActionContext } from '../../../shared/actions'
 import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
@@ -36,6 +37,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const flipSplit = useAppStore((state) => state.flipSplit)
   const equalise = useAppStore((state) => state.equalise)
   const locked = useAppStore((state) => state.doc.locked)
+  const anyMaximized = useAppStore((state) => state.maximizedNodeId !== null)
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -126,6 +128,22 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
 
   const title = panel.title ?? module?.name ?? 'Choose a module'
 
+  /**
+   * The same struct the palette asks its questions of, answered for this panel:
+   * a menu row on a panel is always acting on that panel, whichever one the
+   * keyboard would have picked.
+   *
+   * The rows themselves are hand-ordered here, but *why* a row is off comes from
+   * the catalogue. A lock check written in this file is how the menu and the
+   * palette come to disagree about what a locked layout allows.
+   */
+  const context: ActionContext = {
+    locked,
+    hasPanel: true,
+    maximized: anyMaximized,
+    hasSplit: parentSplitId !== null
+  }
+
   return (
     <section
       className={`panel ${maximized ? 'maximized' : ''} ${active ? 'active' : ''}`}
@@ -197,41 +215,47 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                     }
                   ]
                 : []),
-              // Everything structural disappears while the layout is locked.
-              ...(locked
-                ? []
-                : [
-                    { separator: true },
-                    {
-                      label: 'Split right',
-                      shortcut: shortcuts['panel:splitRight'],
-                      onSelect: () => splitPanel(node.id, 'row')
-                    },
-                    {
-                      label: 'Split down',
-                      shortcut: shortcuts['panel:splitDown'],
-                      onSelect: () => splitPanel(node.id, 'column')
-                    },
-                    ...(parentSplitId
-                      ? [
-                          {
-                            label: 'Flip surrounding split',
-                            onSelect: () => flipSplit(parentSplitId)
-                          },
-                          {
-                            label: 'Even out surrounding split',
-                            onSelect: () => equalise(parentSplitId)
-                          }
-                        ]
-                      : []),
-                    { separator: true },
-                    {
-                      label: 'Close panel',
-                      shortcut: shortcuts['panel:close'],
-                      danger: true,
-                      onSelect: () => closePanel(node.id)
-                    }
-                  ])
+              /* The structural rows used to disappear — while the layout was
+                 locked, and Flip and Even Out whenever the panel stood alone.
+                 They stay and grey out instead, keeping every row at the
+                 position it is reached at, and each carrying the reason it is
+                 off. A menu whose length changes with the state is a menu you
+                 have to read every time. */
+              { separator: true },
+              {
+                label: 'Split right',
+                shortcut: shortcuts['panel:splitRight'],
+                disabled: actionUnavailable('panel:splitRight', context),
+                onSelect: () => splitPanel(node.id, 'row')
+              },
+              {
+                label: 'Split down',
+                shortcut: shortcuts['panel:splitDown'],
+                disabled: actionUnavailable('panel:splitDown', context),
+                onSelect: () => splitPanel(node.id, 'column')
+              },
+              {
+                label: 'Flip surrounding split',
+                disabled: actionUnavailable('split:flip', context),
+                onSelect: () => {
+                  if (parentSplitId) flipSplit(parentSplitId)
+                }
+              },
+              {
+                label: 'Even out surrounding split',
+                disabled: actionUnavailable('split:equalise', context),
+                onSelect: () => {
+                  if (parentSplitId) equalise(parentSplitId)
+                }
+              },
+              { separator: true },
+              {
+                label: 'Close panel',
+                shortcut: shortcuts['panel:close'],
+                danger: true,
+                disabled: actionUnavailable('panel:close', context),
+                onSelect: () => closePanel(node.id)
+              }
             ]}
           />
         </div>
@@ -292,6 +316,17 @@ interface MenuItem {
   label?: string
   /** Shown faintly at the right of the row, the way a native menu does it. */
   shortcut?: string
+  /**
+   * Why the row cannot be used, from the catalogue, or null when it can.
+   * Presence is the flag — there is no separate boolean to fall out of step
+   * with it, for the same reason `ActionDef.unavailable` has none.
+   *
+   * A menu row has nowhere to put an explanation the way the palette does, so
+   * this becomes the row's tooltip. That is also why the row is greyed at all:
+   * without the reason it would be a dead row with no account of itself, which
+   * is what dropping it avoided.
+   */
+  disabled?: string | null
   onSelect?: () => void
   danger?: boolean
   separator?: boolean
@@ -371,8 +406,18 @@ function PanelMenu({
             ) : (
               <button
                 key={item.label}
-                className={`menu-item ${item.danger ? 'danger' : ''}`}
+                className={`menu-item ${item.danger ? 'danger' : ''} ${
+                  item.disabled ? 'disabled' : ''
+                }`}
+                /* Not the `disabled` attribute: Chromium suppresses the
+                   tooltip on a disabled control, and the tooltip is the entire
+                   explanation this row has. */
+                aria-disabled={item.disabled ? true : undefined}
+                title={item.disabled ? `Unavailable — ${item.disabled}` : undefined}
                 onClick={() => {
+                  // Left open on purpose. A menu that closed on a dead row
+                  // would take the tooltip with it before it could be read.
+                  if (item.disabled) return
                   onOpenChange(false)
                   item.onSelect?.()
                 }}

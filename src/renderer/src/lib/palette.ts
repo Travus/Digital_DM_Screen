@@ -3,12 +3,16 @@
  * decisions are a table of cases rather than something you have to open a window
  * to see.
  *
- * Two of them matter. The palette lists **only commands that currently apply**,
- * using the `enabled` predicates in the catalogue: a menu can carry a row that
- * quietly does nothing, but the palette is where a user goes to find out what
- * they *can* do, and "Close panel" on a locked layout is a wrong answer to that
- * question. And it lists **every** applicable command, bound or not — reaching
- * the ones with no key is the point of having it at all.
+ * Two of them matter. The palette lists **every** command, bound or not —
+ * reaching the ones with no key is the point of having it at all. And a command
+ * that cannot run right now is listed **with the reason it cannot**, from the
+ * `unavailable` predicates in the catalogue, rather than dropped: a row that
+ * disappears takes its own explanation with it, so a locked layout looked like a
+ * palette missing half its commands. The reason is why greying out is possible
+ * at all — "Close panel" needs to say *which* guard is holding it.
+ *
+ * Those rows sort to the bottom, so what the user can actually do stays at the
+ * top of the list and under the cursor Enter starts on.
  */
 
 import { formatBinding } from '../../../shared/accelerator'
@@ -29,6 +33,11 @@ export interface PaletteEntry {
   category: ActionCategory
   /** Written for the platform already, or undefined when the action has no key. */
   binding?: string
+  /**
+   * Why running it now would do nothing, or undefined when it applies. A
+   * lowercase fragment, as the catalogue defines it — the component prefixes it.
+   */
+  unavailable?: string
 }
 
 /**
@@ -54,13 +63,18 @@ export function actionContext(
 }
 
 /**
- * The rows to show, in catalogue order, filtered by `query`.
+ * The rows to show, in catalogue order but with the unavailable ones after the
+ * rest, filtered by `query`.
  *
  * Matching follows the module picker: an exact substring pass over the label and
  * the category name, and only if that finds nothing does the typo-tolerant pass
  * run — over labels alone, since there are five category names and a fuzzy match
  * against one of them would drag in a whole category for a query that was aimed
  * at a single command.
+ *
+ * A greyed row is matched by the same query as any other. Filtering it out
+ * instead would put "Close panel" back to vanishing on a locked layout, one
+ * search box further in.
  */
 export function paletteEntries(
   keymap: ResolvedKeymap,
@@ -68,27 +82,48 @@ export function paletteEntries(
   query: string,
   platform: string
 ): PaletteEntry[] {
-  const available = ACTIONS.filter((action) => {
+  const all = ACTIONS
     // The palette does not offer the command that opens the palette. It is the
-    // one row that could never do anything from in here.
-    if (action.id === 'app:palette') return false
-    return action.enabled ? action.enabled(context) : true
-  }).map<PaletteEntry>((action) => {
-    const binding = keymap[action.id]
-    return {
-      id: action.id,
-      label: action.label,
-      category: action.category,
-      binding: binding ? formatBinding(binding, platform) : undefined
-    }
-  })
+    // one row that could never do anything from in here — and unlike a locked
+    // command, no change of state makes it useful, so there is nothing to grey.
+    .filter((action) => action.id !== 'app:palette')
+    .map<PaletteEntry>((action) => {
+      const binding = keymap[action.id]
+      return {
+        id: action.id,
+        label: action.label,
+        category: action.category,
+        binding: binding ? formatBinding(binding, platform) : undefined,
+        unavailable: action.unavailable?.(context) ?? undefined
+      }
+    })
 
+  return sink(matching(all, query))
+}
+
+/** The rows `query` selects, or all of them for an empty query. */
+function matching(entries: PaletteEntry[], query: string): PaletteEntry[] {
   const needle = query.trim().toLowerCase()
-  if (!needle) return available
+  if (!needle) return entries
 
-  const exact = available.filter(
+  const exact = entries.filter(
     (entry) =>
       entry.label.toLowerCase().includes(needle) || entry.category.toLowerCase().includes(needle)
   )
-  return exact.length > 0 ? exact : searchFilter(query, available, (entry) => entry.label)
+  return exact.length > 0 ? exact : searchFilter(query, entries, (entry) => entry.label)
+}
+
+/**
+ * Unavailable rows to the bottom, everything else left as it came.
+ *
+ * A stable partition, so catalogue order survives inside each half and the fuzzy
+ * pass's ranking survives inside the top one. Last rather than first because the
+ * cursor starts at the top: the first Enter after typing has to land on
+ * something that runs.
+ */
+function sink(entries: PaletteEntry[]): PaletteEntry[] {
+  return [
+    ...entries.filter((entry) => !entry.unavailable),
+    ...entries.filter((entry) => entry.unavailable)
+  ]
 }

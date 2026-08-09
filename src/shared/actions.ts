@@ -86,17 +86,49 @@ export interface ActionDef {
    */
   fixed?: string
   /**
-   * Whether the action currently applies.
+   * Why the action does not currently apply, or `null` when it does.
    *
-   * The action palette is what consumes this: a menu can get away with listing a
-   * command that quietly does nothing, but the palette is the discovery surface,
-   * and offering "Close panel" on a locked layout actively misleads. Every
-   * predicate is the same guard that already lives somewhere imperative —
-   * `store.closePanel`'s early return, `PanelFrame`'s omitted rows, `App`'s
-   * `if (target)` — restated where a list can read it before showing a row.
+   * The action palette and the ⋯ panel menu consume this: a menu can get away
+   * with listing a command that quietly does nothing, but the palette is the
+   * discovery surface, and offering "Close panel" on a locked layout actively
+   * misleads. Every predicate is the same guard that already lives somewhere
+   * imperative — `store.closePanel`'s early return, `App`'s `if (target)` —
+   * restated where a list can read it before drawing a row.
+   *
+   * **It returns the reason rather than a boolean, and there is deliberately no
+   * second field beside it.** `!locked && hasPanel` cannot say which half
+   * failed, so a surface showing a greyed row would have to guess between "the
+   * layout is locked" and "there are no panels" — and a `disabledReason` field
+   * sitting next to a predicate is two things that must agree with nothing
+   * enforcing it. The first condition added without its reason updated produces
+   * a row that states the wrong cause. Same argument as the accelerators
+   * collapsing into this catalogue.
+   *
+   * The text is a **sentence fragment, lowercase and unpunctuated**, because
+   * every consumer prefixes it: the palette says "“Close panel” is unavailable —
+   * …" and the ⋯ menu tooltip says "Unavailable — …".
    */
-  enabled?: (context: ActionContext) => boolean
+  unavailable?: (context: ActionContext) => string | null
 }
+
+/*
+ * One guard per condition, so a predicate is its reasons in priority order and
+ * the reason cannot drift from the test that produced it.
+ *
+ * The lock comes first wherever it competes: it is the one of these the user can
+ * undo on the spot, so it is the more useful answer when both hold.
+ */
+const ifLocked = (context: ActionContext): string | null =>
+  context.locked ? 'the layout is locked' : null
+
+const ifNoPanel = (context: ActionContext): string | null =>
+  context.hasPanel ? null : 'this layout has no panels'
+
+const ifNoSplit = (context: ActionContext): string | null =>
+  context.hasSplit ? null : 'this panel is not inside a split'
+
+const ifNotFullscreen = (context: ActionContext): string | null =>
+  context.maximized ? null : 'no panel is fullscreen'
 
 /** Display order — the shortcuts editor groups on `category` and keeps this. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -144,21 +176,21 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Split panel right',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+\\',
-    enabled: (context) => !context.locked && context.hasPanel
+    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
   },
   {
     id: 'panel:splitDown',
     label: 'Split panel down',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+Shift+\\',
-    enabled: (context) => !context.locked && context.hasPanel
+    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
   },
   {
     id: 'panel:maximize',
     label: 'Fullscreen panel',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+Enter',
-    enabled: (context) => context.hasPanel
+    unavailable: ifNoPanel
   },
   {
     id: 'panel:restore',
@@ -166,14 +198,14 @@ export const ACTIONS: readonly ActionDef[] = [
     category: 'Panel',
     defaultAccelerator: 'Escape',
     fixed: 'Escape is handled by the app itself, so the menu cannot swallow it in a text field.',
-    enabled: (context) => context.maximized
+    unavailable: ifNotFullscreen
   },
   {
     id: 'panel:close',
     label: 'Close panel',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+W',
-    enabled: (context) => !context.locked && context.hasPanel
+    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
   },
 
   {
@@ -181,14 +213,14 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Rename panel',
     category: 'Panel',
     defaultAccelerator: 'F2',
-    enabled: (context) => context.hasPanel
+    unavailable: ifNoPanel
   },
   {
     id: 'panel:changeModule',
     label: 'Change module',
     category: 'Panel',
     defaultAccelerator: null,
-    enabled: (context) => context.hasPanel
+    unavailable: ifNoPanel
   },
   // Both ship unbound. They are occasional tidying commands rather than
   // something reached for mid-session, and every chord worth spending is better
@@ -198,14 +230,14 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Flip surrounding split',
     category: 'Panel',
     defaultAccelerator: null,
-    enabled: (context) => !context.locked && context.hasSplit
+    unavailable: (context) => ifLocked(context) ?? ifNoSplit(context)
   },
   {
     id: 'split:equalise',
     label: 'Even out surrounding split',
     category: 'Panel',
     defaultAccelerator: null,
-    enabled: (context) => !context.locked && context.hasSplit
+    unavailable: (context) => ifLocked(context) ?? ifNoSplit(context)
   },
 
   {
@@ -284,6 +316,19 @@ const BY_ID = new Map<ActionId, ActionDef>(ACTIONS.map((action) => [action.id, a
 
 export function findAction(id: ActionId): ActionDef | undefined {
   return BY_ID.get(id)
+}
+
+/**
+ * Why one command cannot run right now, for a surface that asks by id.
+ *
+ * The palette walks the whole catalogue and reads `unavailable` itself; the ⋯
+ * panel menu has a hand-written row order and asks about five commands by name.
+ * Both get their reasons from here rather than restating any guard locally —
+ * that restatement is exactly what put a lock check in `PanelFrame` deciding
+ * which rows to omit.
+ */
+export function actionUnavailable(id: ActionId, context: ActionContext): string | null {
+  return BY_ID.get(id)?.unavailable?.(context) ?? null
 }
 
 /**

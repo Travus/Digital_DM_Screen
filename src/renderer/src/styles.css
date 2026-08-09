@@ -458,6 +458,21 @@ h4 {
   color: var(--danger);
 }
 
+/*
+  Present but inert, with the reason in its tooltip. After `.danger`, so a
+  greyed "Close panel" reads as unavailable rather than as a live danger row —
+  being off is the more urgent of the two things to say.
+*/
+.menu-item.disabled,
+.menu-item.disabled.danger {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.menu-item.disabled:hover {
+  background: none;
+}
+
 .menu-sep {
   height: 1px;
   margin: 4px 6px;
@@ -2157,6 +2172,31 @@ code {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/*
+  A command the layout cannot run right now. Dimmed to `--text-dim` rather than
+  all the way to `--text-faint`, which is where the category and the binding
+  already sit: a row where every part is the same grey stops reading as a
+  command with context beside it and starts reading as decoration.
+
+  It keeps the cursor highlight — these rows are landed on, and a cursor that
+  became invisible on half the list would be worse than one that lands on an
+  inert row.
+*/
+.palette-item.disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* The reason, in answer to activating one. Boxed rather than left as a bare
+   note, because it arrives in response to a keypress and has to be noticed on
+   the way past — a faint line under a scroll region would not be. */
+.palette-reason {
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--bg-3);
+  border-radius: var(--radius-sm);
+}
+
 .palette-label {
   white-space: nowrap;
 }
@@ -2166,13 +2206,6 @@ code {
 .palette-category {
   font-size: 11px;
   color: var(--text-faint);
-}
-
-/* Ruled off, because the list above it is a scroll region: without a line the
-   note butts against a row cut in half and reads as part of the list. */
-.palette .note {
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
 }
 
 .preset {
