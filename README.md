@@ -204,8 +204,10 @@ would not be Emacs. The one that moves the palette is **JetBrains**, onto
 
 ## Building
 
-Windows and Linux builds run through Docker Compose — no Node or Electron on the
-host.
+Released installers are built by CI, natively, one runner per platform. What
+follows is the local development path — Windows and Linux through Docker Compose,
+with no Node or Electron on the host. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+the fuller setup, testing and PR guide.
 
 ```sh
 docker compose run --rm build npm install       # first time, and after dependency changes
@@ -272,7 +274,7 @@ attack looks like, and it never shows up in a diff of `package.json`.
 
 The audit report is written to a file first rather than piped, because `npm
 audit` exits non-zero on any finding and a pipe would report only the formatter's
-exit code. The gate is `npm audit --audit-level=critical`, run separately.
+exit code. The gate is `npm audit --audit-level=high`, run separately.
 
 ## CI
 
@@ -281,14 +283,16 @@ push to `main`:
 
 | Workflow | Runs | Does |
 |---|---|---|
-| `ci.yml` | every PR and push | `check` (lint, format, typecheck) and `smoke`, which uploads its screenshots as an artifact so they can be reviewed on the PR |
-| `package.yml` | pushes to `main`, and PRs touching packaging inputs | Windows/Linux `dist:all` plus a native arm64 Mac build; launches the packaged Mac app and checks all five installers |
+| `ci.yml` | every PR and push | `check` (lint, format, typecheck, tests), then `smoke`, then the installers — rendering gates packaging |
+| `render-check.yml` | called by `ci.yml` and `release.yml` | launches the built app on a virtual display and asserts against the real DOM, uploading its screenshots as an artifact |
+| `build-installers.yml` | called by `ci.yml` and `release.yml` | one native job per platform, one artifact each |
 | `audit.yml` | weekly, on demand, and PRs touching the lockfile | the supply-chain gate above |
-| `release.yml` | pushing a `v*.*.*` tag | builds and opens a **draft** release with the installers attached |
+| `release.yml` | pushing a `v*.*.*` tag | checks the tag, renders, builds, opens a **draft** release with the installers attached |
 
-`check` runs directly on the runner. Windows and Linux installers use the same
-`builder:wine` image as local builds; the Mac installer uses the native runner
-required for a valid app bundle and DMG.
+**CI uses no Docker.** Every installer is built on the system it targets —
+Windows on `windows-latest`, Linux on `ubuntu-latest`, macOS on the native arm64
+`macos-15` runner required for a valid app bundle and DMG. The Docker toolchain
+is the local development path; CI is what builds the binaries users install.
 
 Installers built for a pull request are labelled with its number —
 `Digital-DM-Screen-0.3.0-PR-17-amd64.deb`. A PR build carries the same version

@@ -74,6 +74,28 @@ jobs:
           dpkg-deb -c "${deb[0]}" | grep -q 'hicolor/256x256/apps/' \
             || { echo '::error::hicolor icon set missing from the deb'; exit 1; }
 
+      # Presence is not the failure mode that actually happened. `<developer>` is
+      # AppStream 1.0 syntax, and an older parser does not error on it — it emits
+      # an *info* and drops the value, which is how the author name went missing
+      # on every older machine while validating perfectly on a new one. So the
+      # metainfo carries both spellings, and this asserts the outcome on an old
+      # parser and a new one rather than trusting either.
+      - name: Check the metainfo parses on old and new AppStream
+        run: |
+          for image in ubuntu:24.04 ubuntu:22.04; do
+            echo "::group::$image"
+            out=$(docker run --rm -v "$PWD/release:/r:ro" "$image" bash -c '
+              apt-get update -qq && apt-get install -y -qq appstream >/dev/null
+              dpkg-deb -x /r/*.deb /
+              appstreamcli dump dev.travus.dmscreen')
+            echo "$out"
+            echo '::endgroup::'
+            grep -q 'Digital DM Screen' <<<"$out" \
+              || { echo "::error::component name missing on $image"; exit 1; }
+            grep -q 'Travus' <<<"$out" \
+              || { echo "::error::developer name dropped on $image"; exit 1; }
+          done
+
       - name: Check both Linux installers exist
         run: |
           shopt -s nullglob
