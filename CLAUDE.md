@@ -208,10 +208,17 @@ rather than `disabled`, because Chromium suppresses the tooltip on a disabled
 control.
 
 **Quit is in the catalogue, `fixed`.** `fixed` means "a key some other layer owns
-app-wide" and carries the reason as its value. Quit's accelerator is written onto
-`role: 'quit'` from the keymap even though the role supplies the same key
-unprompted — left implicit, it would be the one row where the palette and the
-menu agreed by coincidence.
+app-wide" and carries the reason as its value. Quit's item is built from the
+keymap like every other, so that the palette, the editor and the menu cannot
+disagree about its key.
+
+**Quit is also the one place that rule does not hold, and the tests say so.**
+`CmdOrCtrl+Q` is on the reserved list, so `isValidBinding` rejects it and the
+menu item ends up bare — `role: 'quit'` then supplies the same key unprompted, so
+the three surfaces agree by coincidence. Nothing is broken and nothing to fix
+blind: `menuTemplate.test.ts` pins it, and undoing it means teaching the
+accelerator column that an action's *own* reserved chord is not a reason to drop
+it.
 
 ## Search
 
@@ -381,6 +388,13 @@ tracker agreeing with the DOM, so React discards the change event as a no-op.
 **Build before you smoke, or you are photographing the last build.** It launches
 `out/`, not `src/`.
 
+**The capture is retried, and an empty image is a failure.** `capturePage()`
+rejects with `UnknownVizError` when Chromium's compositor has no frame sink ready
+— a cold-start problem that has killed the *first* shot of a CI run while the
+other 45 passed. Asking again beats lengthening a wait every shot pays. The empty
+check is there because nothing downstream would catch a blank PNG: expectations
+run in the renderer and pass whatever the capture returned.
+
 **A single-stroke accelerator cannot be smoke-tested by `press`.** Electron fires
 it before the page sees the key, so a synthetic `keydown` is correctly ignored by
 `advanceChord`. Use `menu:`. To check an accelerator really registers, build the
@@ -391,12 +405,17 @@ labels are user-facing prose and the palette reorders as you type.
 
 ## Testing
 
-New pure logic in `src/shared/` or `src/renderer/src/lib/` ships with unit tests in
-the same PR. `npm run test` is Vitest over `src/renderer/src/lib/*.test.ts`.
+New pure logic ships with unit tests in the same PR. `npm run test` is Vitest over
+every `*.test.ts` in `src/`, beside the file it covers — `src/shared/`,
+`src/renderer/src/lib/`, `src/renderer/src/data/` and `src/main/` all carry some.
+There is no vitest config; the default glob is what finds them.
 
-Prefer moving logic *out* of components and into `lib/` so it can be unit-tested.
-`menuPlacement.ts` and `palette.ts` are the pattern: a component left thin enough
-to have nothing worth asserting is the goal, not a gap.
+Prefer moving logic *out* of components — and out of anything holding an Electron
+handle — so it can be unit-tested. `menuPlacement.ts`, `palette.ts` and
+`menuTemplate.ts` are the pattern: the last builds the whole application menu as
+data, taking `platform` and `appName` as arguments, so `menu.ts` is left with the
+two lines that hand it to Electron and every macOS branch is checkable off a Mac.
+A file left thin enough to have nothing worth asserting is the goal, not a gap.
 
 New or changed UI ships with a smoke shot, and a smoke shot must assert.
 

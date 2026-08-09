@@ -45,14 +45,14 @@ Docker covers Linux and Windows from any host, including a Mac. macOS targets ca
 
 Two tiers, and no others.
 
-**Unit tests**: Vitest over `src/renderer/src/lib/*.test.ts`. Pure functions with inputs and outputs. New logic in `src/shared/` or `src/renderer/src/lib/` ships with tests in the same PR.
+**Unit tests**: Vitest over every `*.test.ts` under `src/`, which lives beside the file it covers. Pure functions with inputs and outputs. New logic ships with tests in the same PR.
 
 ```sh
 docker compose run --rm build npm run test
 docker compose run --rm build npm run test:watch
 ```
 
-Prefer moving logic *out* of components and into `lib/` so it can be tested here. `menuPlacement.ts` and `palette.ts` are the pattern, the placement maths and the palette's row selection both live outside their components. A component left thin enough to have nothing worth asserting is the goal.
+Prefer moving logic *out* of components — and out of anything holding an Electron handle — so it can be tested here. `menuPlacement.ts`, `palette.ts` and `menuTemplate.ts` are the pattern: the placement maths, the palette's row selection and the whole application menu all live outside the thing that renders them, so `menu.ts` is two lines and every macOS branch of that menu is checkable without a Mac. A file left thin enough to have nothing worth asserting is the goal.
 
 **Smoke shots** — `scripts/smoke.mjs` launches the built app on a virtual display, drives it, asserts against the real DOM and screenshots the result into `release/smoke/`. New or changed UI ships with a shot.
 

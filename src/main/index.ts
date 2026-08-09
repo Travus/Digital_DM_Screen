@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import type { NativeImage } from 'electron'
 import { join, basename } from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
 import type {
@@ -165,6 +164,39 @@ function installSmokeHook(window: BrowserWindow): void {
 
   const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms))
 
+  /**
+   * The screenshot, retried.
+   *
+   * `capturePage()` rejects with `UnknownVizError` when Chromium's compositor
+   * has no frame sink ready yet. It is a cold-start problem — it has taken out
+   * the *first* shot of a CI run twice, while the other 45 passed — so the fix
+   * is to ask again rather than to lengthen the fixed wait every shot already
+   * pays.
+   *
+   * An empty image counts as a failure too. Nothing downstream would catch one:
+   * the expectations are checked in the renderer and pass regardless of what the
+   * capture returned, so a blank PNG is the exact false green this harness
+   * exists to prevent.
+   *
+   * Logged as `[smoke:retry]`, which the driver prints but does not fail on — a
+   * shot that needed two goes is worth seeing without being worth failing.
+   */
+  const capturePng = async (): Promise<Buffer> => {
+    let last: Error | null = null
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        const image = await window.webContents.capturePage()
+        if (image.isEmpty()) throw new Error('capturePage returned an empty image')
+        return image.toPNG()
+      } catch (error) {
+        last = error as Error
+        console.log(`[smoke:retry] capture attempt ${attempt} failed: ${last.message}`)
+        await wait(600)
+      }
+    }
+    throw last ?? new Error('capturePage never returned an image')
+  }
+
   window.webContents.once('did-finish-load', () => {
     void (async () => {
       try {
@@ -308,23 +340,7 @@ function installSmokeHook(window: BrowserWindow): void {
             )) as string[])
           : []
 
-        // capturePage() reads a frame from the Viz compositor, which on the
-        // first cold launch of a fresh headless runner has not produced one
-        // yet — it rejects with UnknownVizError a second or two in. The frame
-        // lands shortly after, so retry rather than fail the shot; every later
-        // launch in the run is already warm and captures first time.
-        const capture = async (): Promise<NativeImage> => {
-          for (let attempt = 0; ; attempt++) {
-            try {
-              return await window.webContents.capturePage()
-            } catch (error) {
-              if (attempt >= 9) throw error
-              await wait(500)
-            }
-          }
-        }
-        const image = await capture()
-        await writeFile(shotPath, image.toPNG())
+        await writeFile(shotPath, await capturePng())
 
         // Reported, not judged: `scripts/smoke.mjs` decides what a failed
         // expectation means, exactly as it already does for console errors.
