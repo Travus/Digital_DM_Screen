@@ -26,6 +26,19 @@ const SESSION_DEBOUNCE_MS = 700
  */
 type RunnableAction = ActionId | MenuAction
 
+/**
+ * Only *bare* Escape is the dismiss key. A modified Escape is an ordinary
+ * bindable chord, so both keydown listeners have to agree on the distinction —
+ * the dismiss chain must ignore it, and the chord dispatcher must stop skipping
+ * it, or a binding like `CmdOrCtrl+K CmdOrCtrl+Escape` validates and then never
+ * fires.
+ */
+function isBareEscape(event: KeyboardEvent): boolean {
+  return (
+    event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+  )
+}
+
 export function App(): JSX.Element {
   const doc = useAppStore((state) => state.doc)
   const filePath = useAppStore((state) => state.filePath)
@@ -199,9 +212,11 @@ export function App(): JSX.Element {
      accelerators, which Electron fires before the renderer sees the key. */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // Escape is handled below, where cancelling a half-typed sequence is one
-      // rung of the same priority chain as leaving fullscreen.
-      if (event.key === 'Escape') return
+      // Bare Escape is handled below, where cancelling a half-typed sequence is
+      // one rung of the same priority chain as leaving fullscreen. A *modified*
+      // Escape is a normal stroke and has to reach `advanceChord`, or a sequence
+      // ending on one could be bound but never completed.
+      if (isBareEscape(event)) return
 
       const stroke = acceleratorFromChord(event, window.dmscreen.platform)
       if (!stroke) return
@@ -238,10 +253,7 @@ export function App(): JSX.Element {
      accelerator, which would swallow Escape inside text fields. */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      // A modified Escape (Ctrl+Escape, Alt+Shift+Escape, ...) is a bindable
-      // chord, not the dismiss key — only bare Escape runs this chain.
-      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      if (!isBareEscape(event)) return
       // Abandoning a half-typed sequence outranks everything else: the user is
       // most likely correcting a fumbled prefix, not asking to leave fullscreen.
       if (pendingChord) {

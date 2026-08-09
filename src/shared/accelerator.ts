@@ -154,6 +154,15 @@ export function normaliseAccelerator(accelerator: string): string | null {
  * Alt+Shift+Escape, ...) is a different chord and is free to bind: App.tsx's
  * handler now ignores any keypress that carries a modifier.
  */
+/**
+ * Bare Escape only. `App.tsx` makes the same distinction on the event side, and
+ * the two have to agree: anything this says is bindable must actually reach a
+ * dispatcher there.
+ */
+function isBareEscape(parsed: ParsedAccelerator): boolean {
+  return parsed.key === 'Escape' && parsed.modifiers.length === 0
+}
+
 const RESERVED_CHORDS: readonly string[] = [
   'CmdOrCtrl+C',
   'CmdOrCtrl+V',
@@ -189,7 +198,7 @@ export function checkAccelerator(accelerator: string): AcceleratorProblem | null
   const parsed = parseAccelerator(accelerator)
   if (!parsed) return 'syntax'
 
-  if (parsed.key === 'Escape' && parsed.modifiers.length === 0) return 'reserved'
+  if (isBareEscape(parsed)) return 'reserved'
   if (RESERVED.has(formatParsed(parsed))) return 'reserved'
 
   // Function keys are the one safe bare binding — F2 renames the layout today,
@@ -374,8 +383,7 @@ export function checkBinding(binding: string): BindingProblem | null {
     // `CmdOrCtrl+K CmdOrCtrl+C` would lose its second stroke to Copy. Only bare
     // Escape is reserved (see checkAccelerator above) — a modified Escape mid-
     // sequence is just another stroke.
-    if ((parsed.key === 'Escape' && parsed.modifiers.length === 0) || RESERVED.has(formatParsed(parsed)))
-      return 'reserved'
+    if (isBareEscape(parsed) || RESERVED.has(formatParsed(parsed))) return 'reserved'
 
     if (index === 0) {
       const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(parsed.key)
