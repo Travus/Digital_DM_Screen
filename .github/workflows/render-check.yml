@@ -1,0 +1,64 @@
+# Launches the built app on a virtual display and drives it through
+# scripts/smoke.mjs. Called by ci.yml on every PR, and by release.yml before it
+# builds anything — a release that does not render is the worst kind.
+name: Render check
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # What docker/smoke.Dockerfile installs on top of the build image: a
+      # virtual display, Electron's runtime libraries, and the emoji font.
+      #
+      # The font is not cosmetic. It is scoped to .emoji/.panel-icon/.picker-icon
+      # precisely because Noto Color Emoji also covers digits and the space
+      # character, and a runner without it would render every shot through a
+      # different fallback than the one that scoping exists to control.
+      - name: Install the virtual display and Electron's runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1 libxtst6 \
+            libatk-bridge2.0-0 libdrm2 fonts-noto-color-emoji
+
+      - run: npm ci
+
+      # scripts/smoke.mjs launches out/, not src/. Photographing the previous
+      # build is the failure mode this ordering exists to prevent.
+      - run: npm run build
+
+      # No xvfb-run here: smoke.mjs starts one per shot itself, so wrapping the
+      # script would nest a second display inside the first.
+      - name: Render check
+        run: node scripts/smoke.mjs
+
+      # Every shot asserts what it claims to show, so these are diagnostics for
+      # a failure rather than the verification itself — which is why they upload
+      # on failure too.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-screenshots
+          path: release/smoke/*.png
+          if-no-files-found: error

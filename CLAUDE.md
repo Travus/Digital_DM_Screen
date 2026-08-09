@@ -27,8 +27,14 @@ docker compose run --rm build npm run dist:all  # installers -> ./release
 docker compose run --rm smoke                   # headless render check
 ```
 
-The rule is about *this* machine, not about ephemeral CI runners — see the CI
-section below for where it does and does not carry over.
+The rule is about *this* machine, not about ephemeral CI runners — CI installs
+Node and builds natively, on one runner per platform.
+
+So **a local `dist:*` is a development convenience, not the shipping path**. What
+users install is built by `ci.yml` and `release.yml`. Docker covers Linux and
+Windows from any host, including a Mac; macOS targets need a Mac and are guarded
+by `dist:mac:host`. The Wine path is unverified under Apple Silicon emulation —
+say so rather than promising it.
 
 `node_modules` lives in a named volume, so Linux-only binaries never touch the
 Windows checkout. `release/` is a bind mount so installers land in the tree.
@@ -560,10 +566,36 @@ list reorders as you type, so neither is anything to select on.
 
 ## CI
 
-Four workflows in `.github/`. Traps found while building them, all paid for once:
+Five workflows in `.github/`, and **CI runs natively — no Docker at all**.
+`ci.yml` (check, then render, then installers), `release.yml`, `audit.yml`, and
+two called by the others: `render-check.yml` and `build-installers.yml`.
 
-**`docker compose run` needs `-T` in CI.** The `build` service sets
-`stdin_open`/`tty`, so without it every invocation dies on a missing TTY.
+**Each installer is built on the system it targets.** Windows on
+`windows-latest`, Linux on `ubuntu-latest`, macOS on `macos-15`. CI is what
+produces the binaries users install, so nothing there is cross-built.
+
+**Packaging lives in `ci.yml` rather than its own workflow**, because a render
+check can only gate it from inside the same run — two workflows cannot depend on
+each other, and the alternative was rendering twice per PR. It also has no
+`paths` filter any more, which is what makes it requirable: a skipped check never
+reports, so a filtered workflow can never be a required status check.
+
+**A `workflow_call` renames the check to `<caller job> / <called job>`**, and the
+two-part name cannot be flattened. Extracting the render check into
+`render-check.yml` turned the check named `smoke` into `smoke / smoke`, so the
+required check no longer existed and every PR blocked on something that would
+never report — the same dead end as a skipped check, reached by renaming rather
+than skipping. Moving a job into a reusable workflow means updating the ruleset
+in the same breath. The required set is now `check`, `smoke / smoke`,
+`build / linux`, `build / windows`, `build / macos-arm64`.
+
+Rulesets are read with GET and written with **PUT**, not PATCH — a PATCH there
+returns 404, which reads like a permissions problem and is not one.
+
+To build installers by hand, dispatch `ci.yml` against the branch — `gh workflow
+run ci.yml --ref <branch>`. `scripts/resolve-pr.sh` looks up whether that branch
+has an open PR so the artifacts are still labelled; with no PR open it returns
+empty and the labelling step skips rather than guessing.
 
 **The hook rules in `eslint.config.mjs` are named one by one on purpose.**
 `eslint-plugin-react-hooks` also ships the React Compiler rules — `refs`,
@@ -581,21 +613,7 @@ README for nothing. The three markdown files here are hand-wrapped and fine.
 non-zero on any finding, and in a pipe the shell reports only the last command's
 status, so `npm audit --json | node scripts/audit-summary.mjs` silently swallowed
 it. The summary script is a formatter; the gate is a separate
-`npm audit --audit-level=critical` step. `critical` and not `high` because
-nothing here has a `dependencies` block — a dev-server advisory cannot reach a
-user, and a gate that cries wolf is decoration.
-
-**`package.yml` must never become a required status check.** It is
-`paths`-filtered, and a skipped check never reports, which would block every
-unrelated PR permanently.
-
-The same filter means a PR touching only `src/**` never builds installers. To
-build one by hand, dispatch the workflow against the branch — `gh workflow run
-package.yml --ref <branch>`, or the Run workflow button. `scripts/resolve-pr.sh`
-then looks up whether that branch has an open PR, so a dispatched build still
-labels its artifacts; with no PR open it returns empty and the labelling step
-skips rather than guessing. Releases never reach it — they run from `release.yml`
-on a tag.
+`npm audit --audit-level=high` step.
 
 **The release tag goes on after the merge**, not via `npm version`. Its own tag
 points at the pre-merge commit, which a squash merge leaves off `main` — cutting
@@ -606,29 +624,22 @@ the release from something no branch contains.
 pins the broken copy. Recovering means deleting and re-cutting the tag, which the
 tag ruleset blocks by design, so it needs the ruleset disabled for a moment.
 
-**The compose services run as root, so anything they write is root-owned.** The
-bind mount means `release/`, `out/` and `.cache/` come out owned by uid 0, mode
-755. Reading them afterwards is fine — which is why this stayed invisible for so
-long — but a later step running as the runner's own user cannot *write* into
-them.
+**`release.yml` calls the same workflows `ci.yml` does**, so the build path a
+release takes is the one every PR already exercised. What is still unique to it —
+the tag/`package.json` check, and `gh release create` — gets no PR coverage and
+is unverified until the moment it matters.
 
-It surfaced as `actions/download-artifact` failing with "Artifact download failed
-after 5 retries", which reads like a network problem and is nothing of the kind:
-it was `EACCES` on a root-owned `release/`, five times, in 26 seconds. The macOS
-DMG is therefore downloaded into `release-mac/`, a directory Docker never
-touches. Anything else added to `release.yml` that writes into the workspace
-after a compose step needs the same care.
+**Docker still ran as root**, so anything the compose services wrote into the
+bind mount came out owned by uid 0. That is why `release.yml` used to download
+the macOS DMG into `release-mac/`: `actions/download-artifact` hit `EACCES` on a
+root-owned `release/` and reported it as "Artifact download failed after 5
+retries", which reads like a network problem and is nothing of the kind. Nothing
+in CI runs in a container now, so the trap is gone — but it is the reason to be
+careful if one is ever reintroduced.
 
-**Nothing catches a `release.yml` bug before a release**, because it only runs on
-a tag. It gets no PR coverage at all, so a change there is unverified until the
-moment it matters.
-
-**CI runners are not "the host".** The Docker rule above exists because this
-machine has no Node and should keep it that way; a runner is destroyed when the
-job ends. What does carry over is that anything a user *installs* comes out of
-`builder:wine`, because that is the only place the Wine cross-build and the
-Linux icon set are known to work. So lint and typecheck run natively in CI;
-smoke and packaging do not.
+**CI runners are not "the host".** The Docker rule at the top exists because
+*this machine* has no Node and should keep it that way. A runner is destroyed
+when the job ends, so it installs Node and builds directly.
 
 ## Style
 

@@ -53,11 +53,6 @@ jobs:
           node scripts/audit-summary.mjs < audit.json
 
       - name: Vulnerability gate
-        # critical, not high. There is no `dependencies` block in this project —
-        # everything is a devDependency, and electron-builder ships only out/**
-        # plus package.json. A high-severity advisory in a bundler or dev server
-        # cannot reach a user, so gating at `high` would produce failures you
-        # learn to click past, which is the decoration CLAUDE.md warns about.
-        # Anything that genuinely ships (react, zustand) is bundled into out/,
-        # and a critical there is worth stopping for.
-        run: npm audit --audit-level=critical
+        # Lower this back to critical rather than muting it if it starts crying
+        # wolf — a gate nobody reads is decoration.
+        run: npm audit --audit-level=high

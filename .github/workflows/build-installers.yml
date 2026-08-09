@@ -1,0 +1,197 @@
+# Builds the installers for every platform, natively. Called by package.yml and
+# release.yml, which differ only in what they do with the artifacts afterwards.
+#
+# Each platform builds on its own runner rather than cross-building through the
+# Wine container. That container is still the local development path and is
+# still the only way to produce a Windows installer from a Linux or Windows
+# host without Windows tooling — but CI is what produces the binaries users
+# install, so it builds each one on the system it targets.
+#
+# One job per platform, one artifact per job, named `installers-<platform>`.
+# Release adds nothing of its own; it downloads these.
+name: Build installers
+
+on:
+  workflow_call:
+    inputs:
+      label:
+        description: >-
+          A PR number, or empty. When set, installer filenames are stamped with
+          it — a PR build carries the same package.json version as a release, so
+          the filename is the only thing that can tell them apart. Resolved once
+          by the caller rather than three times here.
+        required: false
+        default: ''
+        type: string
+      retention-days:
+        description: 'Short for PR builds, long for releases.'
+        required: false
+        default: 7
+        type: number
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    name: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the AppImage and deb
+        run: npm run dist:linux
+
+      # The .deb ships an AppStream metainfo file and a hicolor icon set, and
+      # both are silently droppable — a bad <launchable> or a missing size
+      # produces a package that installs fine and shows up as a nameless entry
+      # with no icon. Checking the control file here is far cheaper than
+      # noticing on someone's desktop.
+      - name: Check the package metadata survived
+        run: |
+          shopt -s nullglob
+          deb=(release/*.deb)
+          if [ "${#deb[@]}" -ne 1 ]; then
+            printf '::error::expected 1 deb, got %d\n' "${#deb[@]}"
+            exit 1
+          fi
+          dpkg-deb -I "${deb[0]}"
+          dpkg-deb -c "${deb[0]}" | grep -q 'metainfo/dev.travus.dmscreen.metainfo.xml' \
+            || { echo '::error::metainfo missing from the deb'; exit 1; }
+          dpkg-deb -c "${deb[0]}" | grep -q 'hicolor/256x256/apps/' \
+            || { echo '::error::hicolor icon set missing from the deb'; exit 1; }
+
+      - name: Check both Linux installers exist
+        run: |
+          shopt -s nullglob
+          assets=(release/*.AppImage release/*.deb)
+          printf '%s\n' "${assets[@]}"
+          if [ "${#assets[@]}" -ne 2 ]; then
+            printf '::error::expected 2 Linux installers, got %d\n' "${#assets[@]}"
+            exit 1
+          fi
+
+      - name: Label the installers with the PR number
+        if: inputs.label != ''
+        run: bash ./scripts/label-pr-build.sh release "${{ inputs.label }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  windows:
+    name: windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # NSIS runs natively here. The portable target cannot collide with a
+      # running copy of the app the way it does on a development machine — the
+      # runner's release/ starts empty and nothing is holding the exe open.
+      - name: Build the installer and portable exe
+        run: npm run dist:win
+
+      - name: Check both Windows installers exist
+        run: |
+          shopt -s nullglob
+          assets=(release/*.exe)
+          printf '%s\n' "${assets[@]}"
+          if [ "${#assets[@]}" -ne 2 ]; then
+            printf '::error::expected 2 Windows installers, got %d\n' "${#assets[@]}"
+            exit 1
+          fi
+
+      - name: Label the installers with the PR number
+        if: inputs.label != ''
+        run: bash ./scripts/label-pr-build.sh release "${{ inputs.label }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-windows
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  macos:
+    name: macos-arm64
+    # macos-15 is Apple silicon. Building on the target architecture is what
+    # avoids the invalid framework symlinks a Linux cross-build produced.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the ad-hoc signed app
+        # electron-builder skips all signing for fork PRs by default, even when
+        # identity "-" is explicit. No signing secrets are used here: opting in
+        # only enables the requested local ad-hoc signature.
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
+        run: npm run dist:mac:adhoc
+
+      # Not a render check. This launches the *packaged* .app, so what it
+      # catches is a broken signature or a malformed bundle — failures that can
+      # only exist after packaging. Rendering is covered by the smoke job in
+      # ci.yml, which gates this workflow.
+      - name: Verify the signature and launch the packaged app
+        run: |
+          codesign --verify --deep --strict --verbose=2 'release/mac-arm64/Digital DM Screen.app'
+          npm run smoke:mac
+
+      - name: Check the macOS installer exists
+        run: |
+          shopt -s nullglob
+          assets=(release/*.dmg)
+          printf '%s\n' "${assets[@]}"
+          if [ "${#assets[@]}" -ne 1 ]; then
+            printf '::error::expected 1 macOS installer, got %d\n' "${#assets[@]}"
+            exit 1
+          fi
+
+      # After the launch test and the signature check, both of which resolve the
+      # .app by its real name.
+      - name: Label the installer with the PR number
+        if: inputs.label != ''
+        run: bash ./scripts/label-pr-build.sh release "${{ inputs.label }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-macos-arm64
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

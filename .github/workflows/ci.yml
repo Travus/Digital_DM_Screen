@@ -1,22 +1,32 @@
-# Gates every PR and every push to main.
+# Gates every PR and every push to main: checks, then rendering, then the
+# installers themselves.
 #
-# `check` runs on the runner directly: lint, formatting and typecheck are
-# host-independent, and pulling the ~2GB builder image to check text would cost
-# minutes for nothing. CLAUDE.md's "never run node on the host" rule is about
-# Travus's Windows machine — a runner is destroyed when the job ends. What does
-# carry over is that anything users *install* comes out of the builder image,
-# which is why `smoke` and the packaging build stay in Docker.
+# Everything here runs natively. The Docker toolchain is the local development
+# path — it exists so this project needs no Node on the host — but a runner is
+# destroyed when the job ends, so there is nothing to keep clean and no reason
+# to pull a 2GB image to do it.
+#
+# Packaging lives here rather than in a workflow of its own because a render
+# check can only gate it from inside the same run: two workflows cannot depend
+# on each other, and the alternative was rendering twice per PR. It used to be
+# separate and paths-filtered so a ~2GB Wine image was not pulled for a one-line
+# change; native builds are cheap enough that the filter bought less than it
+# cost. A skipped check never reports, so that filter was also the thing that
+# made packaging unrequirable.
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
-# Nothing here writes to the repo. The release workflow escalates on its own.
 permissions:
   contents: read
+  # Only so a manual run can ask whether its branch has an open PR, and name the
+  # artifacts after it. Nothing here writes.
+  pull-requests: read
 
 defaults:
   run:
@@ -37,8 +47,6 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # Matches the node in electronuserland/builder:wine, so the two lanes
-          # cannot disagree about what compiles.
           node-version: 24
           cache: npm
 
@@ -54,65 +62,37 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      # Unit tests cover the pure logic in src/renderer/src/lib/ only — the sort
-      # of thing a screenshot cannot assert. Everything else is still the smoke
-      # check's job.
       - run: npm run test
 
   smoke:
     name: smoke
+    uses: ./.github/workflows/render-check.yml
+
+  # Resolved once, here, rather than in each of the three build jobs.
+  resolve-pr:
+    name: resolve-pr
     runs-on: ubuntu-latest
-    env:
-      # The compose file points these at named volumes, which do not survive a
-      # runner. Redirect them under the bind-mounted workspace so actions/cache
-      # can see them. These -e flags override the compose values.
-      CACHE_ENV: >-
-        -e npm_config_cache=/project/.cache/npm
-        -e ELECTRON_CACHE=/project/.cache/electron
-        -e ELECTRON_BUILDER_CACHE=/project/.cache/electron-builder
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/cache@v6
-        with:
-          path: .cache
-          # The lockfile hash changes exactly when the Electron version does,
-          # which is the only thing in here worth re-downloading for.
-          #
-          # Namespaced per job, and that matters: cache keys are immutable, so
-          # when smoke and package shared one, whichever finished first saved and
-          # the other logged "not saving cache" forever. They need different
-          # things — smoke the Electron npm binary, package the platform dists —
-          # so the shared key froze at whatever the first run happened to hold.
-          key: dmscreen-smoke-${{ hashFiles('package-lock.json') }}
-          restore-keys: dmscreen-smoke-
+      - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PR: ${{ github.event.number }}
+        run: bash ./scripts/resolve-pr.sh
 
-      - name: Build the smoke image
-        run: docker compose build smoke
-
-      # -T is mandatory: the build service sets stdin_open/tty, and without it
-      # every invocation dies on the missing TTY.
-      - name: Install and bundle
-        run: |
-          docker compose run --rm -T $CACHE_ENV build npm ci
-          docker compose run --rm -T $CACHE_ENV build npm run build
-
-      - name: Render check
-        run: docker compose run --rm -T smoke
-
-      # See the note in package.yml — the cache degraded silently once already.
-      - name: What actually got cached
-        if: always()
-        run: du -sh .cache/* 2>/dev/null || echo '.cache is empty — the -e overrides are not landing'
-
-      # CLAUDE.md says to verify UI changes by looking at them. This is what
-      # makes that possible on someone else's machine.
-      - name: Upload screenshots
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: smoke-screenshots
-          path: release/smoke/*.png
-          if-no-files-found: error
+  build:
+    name: build
+    # Rendering gates packaging: there is no point producing installers of a
+    # build that does not draw.
+    needs: [check, smoke, resolve-pr]
+    uses: ./.github/workflows/build-installers.yml
+    with:
+      label: ${{ needs.resolve-pr.outputs.number }}
+      # Big, and only useful while the PR is open. Releases build fresh from the
+      # tag rather than reaching for these.
+      retention-days: 7
