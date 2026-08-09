@@ -64,10 +64,13 @@ describe('what may be bound', () => {
     }
   })
 
-  it('reserves Escape however it is modified, because App.tsx ignores modifiers', () => {
+  it('reserves bare Escape only — it is fixed to panel:restore', () => {
     expect(checkAccelerator('Escape')).toBe('reserved')
-    expect(checkAccelerator('CmdOrCtrl+Escape')).toBe('reserved')
-    expect(checkAccelerator('Alt+Shift+Esc')).toBe('reserved')
+  })
+
+  it('allows a modified Escape, since App.tsx now ignores it with a modifier held', () => {
+    expect(checkAccelerator('CmdOrCtrl+Escape')).toBeNull()
+    expect(checkAccelerator('Alt+Shift+Esc')).toBeNull()
   })
 
   it('does not over-reserve a role key that carries a different modifier', () => {

@@ -89,9 +89,11 @@ fallback is not enough; it must be scoped.
 key application-wide, including inside text fields. Panel fullscreen exits via
 a `keydown` listener in `App.tsx`.
 
-That listener does not check modifiers, so `Ctrl+Escape` leaves fullscreen too.
-Escape is therefore reserved in *every* combination, not just bare — see
-`checkAccelerator`.
+**Only *bare* Escape is reserved.** A modified Escape is an ordinary bindable
+chord, and both keydown listeners in `App.tsx` share one `isBareEscape` test to
+stay agreed on that: the dismiss chain ignores a modified Escape, and the chord
+dispatcher stops skipping it. Guard only one of them and `CmdOrCtrl+K
+CmdOrCtrl+Escape` validates, appears in the editor, and never fires.
 
 ## Keybindings
 
