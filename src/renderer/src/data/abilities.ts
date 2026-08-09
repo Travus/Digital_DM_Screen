@@ -15,7 +15,8 @@
  * `meta` always leads with the source, then any further qualifiers, separated by
  * " · " and never parenthesised — "SRD · Cleric · Life". Packs follow the same
  * shape but name a real book, preferring a core book or core expansion over the
- * setting book an option happened to debut in. See CLAUDE.md.
+ * setting book an option happened to debut in: a setting book you do not own is
+ * a worse pointer than an expansion you do.
  */
 
 import type { AbilityGroup, ReferenceEntry } from '../../../shared/types'

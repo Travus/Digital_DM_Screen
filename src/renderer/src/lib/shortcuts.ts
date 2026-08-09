@@ -7,10 +7,9 @@ import { useKeymapStore } from '../state/keymapStore'
  * Shortcut captions for the in-app surfaces: the top bar buttons, their hover
  * hints, the ⋯ menu rows and the About dialog's list.
  *
- * This file used to be a literal table that had to be kept in step with the
- * accelerators in `src/main/menu.ts` by hand — its own comment said so. Now both
- * read the same keymap, so a rebinding shows up on the menu item and on every
- * caption at once, which is the only way the two can be trusted to agree.
+ * Read off the keymap, never written here: a caption and the menu accelerator
+ * have to come from one source or the copy that is not the keymap becomes a
+ * caption that lies.
  *
  * `undefined` rather than null for an unbound action, so it drops straight into
  * the optional `shortcut` prop on a menu row.
