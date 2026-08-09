@@ -118,8 +118,10 @@ shortcuts dialog, the about dialog, leave fullscreen), only the last of which is
 a catalogue action. Do not move it onto the keymap: "dismiss whatever is topmost"
 is contextual and a keymap entry cannot express it.
 
-That listener does not check modifiers, so Escape is reserved in *every*
-combination rather than just bare.
+**Only *bare* Escape is reserved**, and both `App.tsx` listeners share one
+`isBareEscape` test to stay agreed on that — the dismiss chain ignores a modified
+Escape, and the chord dispatcher stops skipping it. Guard only one of them and
+`CmdOrCtrl+K CmdOrCtrl+Escape` validates, shows in the editor, and never fires.
 
 **`Ctrl+X` is reserved on macOS too**, where Cut is `Cmd+X` and it would in fact
 be free. Deliberately blunt: freeing it only on Darwin makes one

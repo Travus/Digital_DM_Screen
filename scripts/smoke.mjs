@@ -278,6 +278,26 @@ const shots = [
     press: { code: 'KeyB', ctrlKey: true },
     expect: { found: ['.chord-pending'], text: ['Ctrl+B'] }
   },
+  // A modified Escape is a bindable chord, not the dismiss key, so it must leave
+  // fullscreen alone. `key` is set as well as `code` because the dismiss chain
+  // reads `event.key` — a shot sending only `code` would pass without ever
+  // reaching the branch it claims to test.
+  {
+    name: 'escape-modified-ignored',
+    layout: starter,
+    click: '.panel .icon-btn[title^="Fullscreen"]',
+    press: { key: 'Escape', code: 'Escape', ctrlKey: true },
+    expect: ['.app.has-maximized', '.restore-hint']
+  },
+  // The control for the shot above: bare Escape still dismisses. Without this,
+  // a handler that ignored *every* Escape would pass the one above.
+  {
+    name: 'escape-bare-dismisses',
+    layout: starter,
+    click: '.panel .icon-btn[title^="Fullscreen"]',
+    press: { key: 'Escape', code: 'Escape' },
+    expect: { found: ['.panel'], missing: ['.app.has-maximized', '.restore-hint'] }
+  },
   // Every modifier on both strokes — a legal binding, and the one that used to
   // wrap "Split right" onto two lines because the label was the only thing in
   // the row allowed to give. The label must stay on one line here.

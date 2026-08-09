@@ -46,6 +46,11 @@ describe('validating a two-stroke binding', () => {
     expect(checkBinding('CmdOrCtrl+K Escape')).toBe('reserved')
   })
 
+  it('allows a modified Escape stroke, since only bare Escape is reserved', () => {
+    expect(checkBinding('CmdOrCtrl+Escape')).toBeNull()
+    expect(checkBinding('CmdOrCtrl+K CmdOrCtrl+Escape')).toBeNull()
+  })
+
   it('normalises each stroke independently', () => {
     expect(normaliseBinding('ctrl+b 3')).toBe('Ctrl+B 3')
     expect(normaliseBinding('shift+cmdorctrl+k cmdorctrl+s')).toBe('CmdOrCtrl+Shift+K CmdOrCtrl+S')
