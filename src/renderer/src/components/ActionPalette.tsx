@@ -32,8 +32,9 @@ let lastQuery = ''
  * there appears here with no further wiring, and the key shown beside it is the
  * live one rather than a caption that has to be kept in step.
  *
- * A command the current layout cannot run is greyed and sunk to the bottom
- * rather than dropped, and activating one says why. The list is the app's own
+ * A command the current layout cannot run is greyed and sunk to the bottom —
+ * where those rows are name-ordered — rather than dropped, and activating one
+ * says why. The list is the app's own
  * inventory of what it can do; a row that vanishes when it stops applying takes
  * the explanation with it, and half a list is indistinguishable from a broken
  * palette.

@@ -195,8 +195,9 @@ accelerators came to lie before they collapsed into one catalogue.
 takes its own explanation with it, and half a list reads as a broken palette. They
 sort to the bottom so the cursor's first Enter lands on something that runs, they
 are landed on rather than skipped by the arrows, and activating one shows the
-reason instead of firing. `sink()` in `palette.ts` is a stable partition, so
-catalogue order — and the fuzzy pass's ranking — survives inside each half.
+reason instead of firing. `sink()` in `palette.ts` leaves the top half alone, so
+catalogue order — and the fuzzy pass's ranking — survives there, and **sorts the
+tail by name**: that half is not scanned in order, it is looked one row up in.
 
 **The ⋯ panel menu greys the same rows**, from the same predicates via
 `actionUnavailable`, with the reason as a `title` tooltip: a menu row has nowhere

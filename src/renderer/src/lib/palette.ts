@@ -11,8 +11,8 @@
  * palette missing half its commands. The reason is why greying out is possible
  * at all — "Close panel" needs to say *which* guard is holding it.
  *
- * Those rows sort to the bottom, so what the user can actually do stays at the
- * top of the list and under the cursor Enter starts on.
+ * Those rows sort to the bottom, alphabetically, so what the user can actually
+ * do stays at the top of the list and under the cursor Enter starts on.
  */
 
 import { formatBinding } from '../../../shared/accelerator'
@@ -41,7 +41,7 @@ export interface PaletteEntry {
 }
 
 /**
- * The state the `enabled` predicates ask about, read off the document rather
+ * The state the `unavailable` predicates ask about, read off the document rather
  * than off the store, so this stays a function of its inputs.
  *
  * `targetNodeId` is whatever `resolveTargetNodeId()` says — the panel a command
@@ -63,8 +63,8 @@ export function actionContext(
 }
 
 /**
- * The rows to show, in catalogue order but with the unavailable ones after the
- * rest, filtered by `query`.
+ * The rows to show, in catalogue order but with the unavailable ones sorted by
+ * name after the rest, filtered by `query`.
  *
  * Matching follows the module picker: an exact substring pass over the label and
  * the category name, and only if that finds nothing does the typo-tolerant pass
@@ -114,16 +114,21 @@ function matching(entries: PaletteEntry[], query: string): PaletteEntry[] {
 }
 
 /**
- * Unavailable rows to the bottom, everything else left as it came.
+ * Unavailable rows to the bottom, alphabetically; everything else left as it
+ * came.
  *
- * A stable partition, so catalogue order survives inside each half and the fuzzy
- * pass's ranking survives inside the top one. Last rather than first because the
- * cursor starts at the top: the first Enter after typing has to land on
- * something that runs.
+ * Last rather than first because the cursor starts at the top: the first Enter
+ * after typing has to land on something that runs. The top half is untouched, so
+ * catalogue order — and the fuzzy pass's ranking — survives there.
+ *
+ * The tail is sorted by name instead, because it is not read the way the list
+ * above it is. Catalogue order is a reading order, grouped by category; once the
+ * rows are only the ones that are off, nobody scans them — they come here to
+ * check on one command they expected to find, and a name is what they have.
  */
 function sink(entries: PaletteEntry[]): PaletteEntry[] {
   return [
     ...entries.filter((entry) => !entry.unavailable),
-    ...entries.filter((entry) => entry.unavailable)
+    ...entries.filter((entry) => entry.unavailable).sort((a, b) => a.label.localeCompare(b.label))
   ]
 }

@@ -103,19 +103,22 @@ describe('what the palette offers', () => {
     expect(firstOff).toBeGreaterThan(lastLive)
   })
 
-  it('keeps catalogue order inside each half', () => {
+  it('keeps catalogue order above and sorts the greyed tail by name', () => {
     const shown = list({ locked: true, hasSplit: false })
-    // Both halves read as the catalogue wrote them, not as they failed.
     expect(shown.filter((id) => id.startsWith('panel:') || id.startsWith('split:'))).toEqual([
+      // Above: the catalogue's own order, which groups by category.
       'panel:maximize',
       'panel:rename',
       'panel:changeModule',
-      'panel:splitRight',
-      'panel:splitDown',
-      'panel:restore',
+      // Below: "Close panel", "Even out surrounding split", "Flip surrounding
+      // split", "Leave panel fullscreen", "Split panel down", "Split panel
+      // right" — a tail nobody scans in order is a tail you look a name up in.
       'panel:close',
+      'split:equalise',
       'split:flip',
-      'split:equalise'
+      'panel:restore',
+      'panel:splitDown',
+      'panel:splitRight'
     ])
   })
 
