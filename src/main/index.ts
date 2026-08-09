@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import type { NativeImage } from 'electron'
 import { join, basename } from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
 import type {
@@ -307,7 +308,22 @@ function installSmokeHook(window: BrowserWindow): void {
             )) as string[])
           : []
 
-        const image = await window.webContents.capturePage()
+        // capturePage() reads a frame from the Viz compositor, which on the
+        // first cold launch of a fresh headless runner has not produced one
+        // yet — it rejects with UnknownVizError a second or two in. The frame
+        // lands shortly after, so retry rather than fail the shot; every later
+        // launch in the run is already warm and captures first time.
+        const capture = async (): Promise<NativeImage> => {
+          for (let attempt = 0; ; attempt++) {
+            try {
+              return await window.webContents.capturePage()
+            } catch (error) {
+              if (attempt >= 9) throw error
+              await wait(500)
+            }
+          }
+        }
+        const image = await capture()
         await writeFile(shotPath, image.toPNG())
 
         // Reported, not judged: `scripts/smoke.mjs` decides what a failed
