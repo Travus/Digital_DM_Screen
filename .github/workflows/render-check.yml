@@ -43,6 +43,16 @@ jobs:
 
       - run: npm ci
 
+      # Electron 43 dropped the postinstall that used to fetch its binary, so
+      # `npm ci` leaves it absent and the first `electron` launch downloads it
+      # lazily. Under Docker that download was warm in a persistent node_modules
+      # volume; on a fresh runner it lands inside the first shot's 60s window,
+      # and a capturePage() that fires before the download-and-first-paint
+      # finishes rejects with UnknownVizError. Fetch it here, outside any timed
+      # shot, so every shot starts against a warm binary.
+      - name: Fetch the Electron binary
+        run: node node_modules/electron/install.js
+
       # scripts/smoke.mjs launches out/, not src/. Photographing the previous
       # build is the failure mode this ordering exists to prevent.
       - run: npm run build
