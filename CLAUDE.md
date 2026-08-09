@@ -580,6 +580,18 @@ each other, and the alternative was rendering twice per PR. It also has no
 `paths` filter any more, which is what makes it requirable: a skipped check never
 reports, so a filtered workflow can never be a required status check.
 
+**A `workflow_call` renames the check to `<caller job> / <called job>`**, and the
+two-part name cannot be flattened. Extracting the render check into
+`render-check.yml` turned the check named `smoke` into `smoke / smoke`, so the
+required check no longer existed and every PR blocked on something that would
+never report — the same dead end as a skipped check, reached by renaming rather
+than skipping. Moving a job into a reusable workflow means updating the ruleset
+in the same breath. The required set is now `check`, `smoke / smoke`,
+`build / linux`, `build / windows`, `build / macos-arm64`.
+
+Rulesets are read with GET and written with **PUT**, not PATCH — a PATCH there
+returns 404, which reads like a permissions problem and is not one.
+
 To build installers by hand, dispatch `ci.yml` against the branch — `gh workflow
 run ci.yml --ref <branch>`. `scripts/resolve-pr.sh` looks up whether that branch
 has an open PR so the artifacts are still labelled; with no PR open it returns
