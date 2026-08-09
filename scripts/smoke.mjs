@@ -423,6 +423,74 @@ const shots = [
       text: ['the layout is locked']
     }
   },
+  // The cursor on a greyed row. Landing on them rather than skipping them is the
+  // argued-for behaviour, and End is the cheapest proof: the unavailable rows
+  // sink, so the last row is one of them whenever any exist. A cursor that
+  // skipped them would stop short and leave `.active` on a live row.
+  //
+  // Narrowed first so both kinds are in frame — which is also why this needs an
+  // ordered list. The old fixed order ran every `press` before every `type`, so
+  // "narrow the list, then walk it" could not be written at all.
+  {
+    name: 'action-palette-cursor-on-greyed',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: 'panel' } },
+      { press: { key: 'End' } }
+    ],
+    expect: ['.palette-item.disabled.active']
+  },
+  // Enter on that row. `action-palette-unavailable` proves a *click* on a greyed
+  // row explains itself; both routes go through one `activate()`, and this is
+  // the half that says so from the keyboard.
+  {
+    name: 'action-palette-enter-on-greyed',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: 'panel' } },
+      { press: { key: 'End' } },
+      { press: { key: 'Enter' } }
+    ],
+    // Still open is the assertion. Enter on a greyed row running the command
+    // would close it, and Enter doing nothing at all would leave no reason.
+    expect: { found: ['.palette', '.palette-reason'], text: ['is unavailable'] }
+  },
+  // A new query drops the reason. It answers one question about one row, and a
+  // message still sitting under a list the user has since retyped is worse than
+  // no message — it reads as describing the results now on screen.
+  //
+  // The second query deliberately still matches the blocked row. Narrowing to
+  // something that filters it away would pass on the lookup that resolves the
+  // message against the live list, and never reach the reset that is what
+  // actually runs here.
+  {
+    name: 'action-palette-reason-cleared',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: 'panel' } },
+      { click: '.palette-item.disabled[data-action-id="panel:close"]' },
+      { type: { selector: '.palette-input', text: 'close' } }
+    ],
+    // The row is what proves the retype landed *and* that the reason went
+    // despite its subject still being listed. Without it this would pass just as
+    // well on a palette that had closed.
+    expect: {
+      found: ['.palette-item.disabled[data-action-id="panel:close"]'],
+      missing: ['.palette-reason']
+    }
+  },
   // Running one. Every other palette shot proves it renders; this is the only one
   // that proves it does anything, and it picks a command with no keybinding at
   // all — being the only route to those is the whole argument for having it.
@@ -630,10 +698,75 @@ function normaliseExpect(expect, name) {
   return spec
 }
 
-function run(shotPath, { click, settle, hover, menu, press, type, expect }, name) {
+/** The actions a step may carry. Exactly one, which is what makes it ordered. */
+const STEP_KINDS = ['menu', 'click', 'press', 'type', 'hover', 'wait']
+
+/**
+ * What a shot does before its screenshot, as one ordered list.
+ *
+ * Most shots want one menu command, or a run of clicks, and say so with the
+ * shorthand fields — `menu`, `click`, `press`, `type`, `hover` — which are sugar
+ * for one step each in that fixed order. A shot needing two of a kind, or needing
+ * them interleaved, declares `steps` instead.
+ *
+ * **The shorthand is desugared here, not executed separately.** There is one
+ * executor in `src/main/index.ts` and one thing for it to read, so the two
+ * spellings cannot come to mean different things — the fixed order is a default,
+ * not a second mechanism.
+ *
+ * Declaring both is refused rather than merged: a shot that says `steps` has an
+ * order in mind, and quietly prepending a shorthand field to it would put a
+ * click somewhere the author did not write.
+ */
+function normaliseSteps(shot, name) {
+  const shorthand = STEP_KINDS.filter((kind) => kind !== 'wait' && shot[kind] !== undefined)
+
+  if (shot.steps) {
+    if (!Array.isArray(shot.steps) || shot.steps.length === 0) {
+      throw new Error(`shot "${name}" declares an empty steps list`)
+    }
+    if (shorthand.length) {
+      throw new Error(`shot "${name}" declares steps and also ${shorthand.join(', ')}`)
+    }
+    for (const [index, step] of shot.steps.entries()) {
+      const set = STEP_KINDS.filter((kind) => step[kind] !== undefined)
+      const unknown = Object.keys(step).filter((key) => !STEP_KINDS.includes(key))
+      if (unknown.length) {
+        throw new Error(
+          `shot "${name}" step ${index + 1} has no such action: ${unknown.join(', ')}`
+        )
+      }
+      if (set.length !== 1) {
+        throw new Error(
+          `shot "${name}" step ${index + 1} sets ${set.length} actions, expected exactly 1`
+        )
+      }
+    }
+    return shot.steps
+  }
+
+  return [
+    ...(shot.menu ? [{ menu: shot.menu }] : []),
+    // Newline-separated, which predates `steps` and stays: a run of clicks is
+    // the commonest sequence there is, and one string reads better than five
+    // objects.
+    ...(shot.click ?? '')
+      .split('\n')
+      .map((selector) => selector.trim())
+      .filter(Boolean)
+      .map((click) => ({ click })),
+    ...(shot.press ? [{ press: shot.press }] : []),
+    ...(shot.type ? [{ type: shot.type }] : []),
+    ...(shot.hover ? [{ hover: shot.hover }] : [])
+  ]
+}
+
+function run(shotPath, shot, name) {
   // Before the spawn, so a malformed shot fails on its own terms rather than as
   // a mystery inside a 60-second Electron launch.
-  const expectations = JSON.stringify(normaliseExpect(expect, name))
+  const expectations = JSON.stringify(normaliseExpect(shot.expect, name))
+  const steps = JSON.stringify(normaliseSteps(shot, name))
+  const { settle } = shot
 
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
@@ -651,11 +784,7 @@ function run(shotPath, { click, settle, hover, menu, press, type, expect }, name
           ...process.env,
           XDG_CONFIG_HOME: configHome,
           DMSCREEN_SMOKE_SHOT: shotPath,
-          ...(menu ? { DMSCREEN_SMOKE_MENU: menu } : {}),
-          ...(click ? { DMSCREEN_SMOKE_CLICK: click } : {}),
-          ...(press ? { DMSCREEN_SMOKE_PRESS: JSON.stringify(press) } : {}),
-          ...(type ? { DMSCREEN_SMOKE_TYPE: JSON.stringify(type) } : {}),
-          ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
+          DMSCREEN_SMOKE_STEPS: steps,
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           DMSCREEN_SMOKE_EXPECT: expectations,
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'

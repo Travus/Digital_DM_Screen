@@ -143,6 +143,143 @@ async function applyKeymap(overrides: Keymap): Promise<ResolvedKeymap> {
   return resolved
 }
 
+const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms))
+
+/**
+ * One thing a smoke shot does before its screenshot. Exactly one field is set —
+ * `scripts/smoke.mjs` rejects a step with none or several before the spawn, so
+ * this side dispatches on whichever it finds and needs no fallback.
+ */
+interface SmokeStep {
+  menu?: string
+  click?: string
+  press?: Record<string, unknown>
+  type?: { selector: string; text: string }
+  hover?: string
+  wait?: number
+}
+
+/**
+ * The steps as the driver compiled them.
+ *
+ * Ordered, and repeatable per kind, because the interesting states are the ones
+ * two inputs apart: a reason shown for a greyed palette row and then a fresh
+ * query typed over it is a transition no single input reaches. Five separate
+ * environment variables fired in a fixed order could not express it — `type`
+ * always ran after `press`, so "narrow the list, then walk it" was unreachable.
+ */
+function readSteps(): SmokeStep[] {
+  const raw = (process.env['DMSCREEN_SMOKE_STEPS'] ?? '').trim()
+  return raw ? (JSON.parse(raw) as SmokeStep[]) : []
+}
+
+async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
+  // A menu command, for UI that has no other way in. The About and Keyboard
+  // Shortcuts dialogs open from the native menu only, and a native menu is not
+  // something a CSS selector can reach — without this they had no coverage.
+  if (step.menu !== undefined) {
+    window.webContents.send('menu:action', step.menu)
+    return wait(400)
+  }
+
+  if (step.click !== undefined) {
+    // Focus as well as click, so hover/focus-revealed UI (the condition
+    // cross-reference popovers) can be captured too.
+    // executeJavaScript resolves as `any`; the script below returns a boolean
+    // and nothing else can change that, so name the type here.
+    const found = (await window.webContents.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(step.click)})
+        el?.focus?.()
+        el?.click?.()
+        return !!el
+      })()`
+    )) as boolean
+    if (!found) console.log(`[renderer:error] no element matched ${step.click}`)
+    return wait(500)
+  }
+
+  // A synthetic keypress. The only way to photograph a half-typed two-stroke
+  // sequence: its prefix is a key, not a control, so there is nothing for
+  // `click` to select.
+  //
+  // Dispatched at the focused element rather than at `window`. A real keydown
+  // starts there and bubbles, so a window listener — the chord dispatcher, the
+  // Escape chain — hears it either way, while a React `onKeyDown` on the
+  // focused control only hears it this way: React listens at the root, which is
+  // below `window` and never on an event's path when `window` is the target.
+  // Dispatching at `window` therefore reached the app-wide listeners and
+  // nothing else, which put the action palette's own arrow keys out of reach.
+  if (step.press !== undefined) {
+    await window.webContents.executeJavaScript(
+      `(() => {
+        const init = ${JSON.stringify(step.press)}
+        const target = document.activeElement ?? window
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+        )
+        return true
+      })()`
+    )
+    return wait(400)
+  }
+
+  // Type into one field. Needed for anything whose interesting state is a
+  // *query* — the action palette filtering itself, say — where clicking gets
+  // you to the box and no further.
+  //
+  // The write goes through the native value setter rather than `el.value`
+  // because React tracks the last value it wrote on the node itself: a plain
+  // assignment updates the DOM but leaves the tracker agreeing with it, so the
+  // change event that follows is discarded as a no-op.
+  if (step.type !== undefined) {
+    const typed = (await window.webContents.executeJavaScript(
+      `(() => {
+        const { selector, text } = ${JSON.stringify(step.type)}
+        const el = document.querySelector(selector)
+        if (!el) return false
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value'
+        ).set
+        setter.call(el, text)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`
+    )) as boolean
+    if (!typed) console.log(`[renderer:error] nothing to type into: ${step.type.selector}`)
+    return wait(400)
+  }
+
+  // Park the pointer on one control, for UI that only a hover reveals.
+  // Dispatched as `pointerover`, not `pointerenter`: React listens at the root
+  // and synthesises enter from the bubbling event, so an enter event sent
+  // straight to the element goes unheard.
+  if (step.hover !== undefined) {
+    const found = (await window.webContents.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(step.hover)})
+        if (!el) return false
+        const box = el.getBoundingClientRect()
+        const init = {
+          bubbles: true,
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+          pointerType: 'mouse'
+        }
+        el.dispatchEvent(new PointerEvent('pointerover', init))
+        el.dispatchEvent(new MouseEvent('mouseover', init))
+        return true
+      })()`
+    )) as boolean
+    if (!found) console.log(`[renderer:error] no element matched ${step.hover}`)
+    return
+  }
+
+  // A dwell mid-sequence, for a step whose effect is on a timer. The shot-level
+  // `settle` is the same thing at the end, where most shots want it.
+  if (step.wait !== undefined) return wait(step.wait)
+}
+
 /**
  * Development aid, inert unless DMSCREEN_SMOKE_SHOT is set: forwards renderer
  * console messages to stdout, checks what the shot claims to show, then
@@ -161,8 +298,6 @@ function installSmokeHook(window: BrowserWindow): void {
     console.log(`[renderer:error] render process gone: ${details.reason}`)
     app.exit(1)
   })
-
-  const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms))
 
   /**
    * The screenshot, retried.
@@ -203,107 +338,11 @@ function installSmokeHook(window: BrowserWindow): void {
         // Long enough for the session restore round-trip to land.
         await wait(1800)
 
-        // Fire a menu command first, for UI that has no other way in. The About
-        // and Keyboard Shortcuts dialogs open from the native menu only, and a
-        // native menu is not something a CSS selector can reach — so without
-        // this they had no smoke coverage at all.
-        const menuAction = (process.env['DMSCREEN_SMOKE_MENU'] ?? '').trim()
-        if (menuAction) {
-          window.webContents.send('menu:action', menuAction)
-          await wait(400)
-        }
-
-        // Optionally drive controls through the real UI before capturing.
-        // Newline-separated so several can be clicked in sequence.
-        const selectors = (process.env['DMSCREEN_SMOKE_CLICK'] ?? '')
-          .split('\n')
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-
-        for (const selector of selectors) {
-          // Focus as well as click, so hover/focus-revealed UI (the condition
-          // cross-reference popovers) can be captured too.
-          // executeJavaScript resolves as `any`; the script below returns a
-          // boolean and nothing else can change that, so name the type here.
-          const found = (await window.webContents.executeJavaScript(
-            `(() => {
-              const el = document.querySelector(${JSON.stringify(selector)})
-              el?.focus?.()
-              el?.click?.()
-              return !!el
-            })()`
-          )) as boolean
-          if (!found) console.log(`[renderer:error] no element matched ${selector}`)
-          await wait(500)
-        }
-
-        // Send one synthetic keypress. The only way to photograph a half-typed
-        // two-stroke sequence: its prefix is a key, not a control, so there is
-        // nothing for `click` to select.
-        const press = (process.env['DMSCREEN_SMOKE_PRESS'] ?? '').trim()
-        if (press) {
-          await window.webContents.executeJavaScript(
-            `(() => {
-              const init = ${press}
-              window.dispatchEvent(
-                new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
-              )
-              return true
-            })()`
-          )
-          await wait(400)
-        }
-
-        // Type into one field. Needed for anything whose interesting state is a
-        // *query* — the action palette filtering itself, say — where clicking
-        // gets you to the box and no further.
-        //
-        // The write goes through the native value setter rather than `el.value`
-        // because React tracks the last value it wrote on the node itself: a
-        // plain assignment updates the DOM but leaves the tracker agreeing with
-        // it, so the change event that follows is discarded as a no-op.
-        const typing = (process.env['DMSCREEN_SMOKE_TYPE'] ?? '').trim()
-        if (typing) {
-          const typed = (await window.webContents.executeJavaScript(
-            `(() => {
-              const { selector, text } = ${typing}
-              const el = document.querySelector(selector)
-              if (!el) return false
-              const setter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-              ).set
-              setter.call(el, text)
-              el.dispatchEvent(new Event('input', { bubbles: true }))
-              return true
-            })()`
-          )) as boolean
-          if (!typed) console.log(`[renderer:error] nothing to type into: ${typing}`)
-          await wait(400)
-        }
-
-        // Park the pointer on one control, for UI that only a hover reveals.
-        // Dispatched as `pointerover`, not `pointerenter`: React listens at the
-        // root and synthesises enter from the bubbling event, so an enter event
-        // sent straight to the element goes unheard.
-        const hover = (process.env['DMSCREEN_SMOKE_HOVER'] ?? '').trim()
-        if (hover) {
-          const found = (await window.webContents.executeJavaScript(
-            `(() => {
-              const el = document.querySelector(${JSON.stringify(hover)})
-              if (!el) return false
-              const box = el.getBoundingClientRect()
-              const init = {
-                bubbles: true,
-                clientX: box.left + box.width / 2,
-                clientY: box.top + box.height / 2,
-                pointerType: 'mouse'
-              }
-              el.dispatchEvent(new PointerEvent('pointerover', init))
-              el.dispatchEvent(new MouseEvent('mouseover', init))
-              return true
-            })()`
-          )) as boolean
-          if (!found) console.log(`[renderer:error] no element matched ${hover}`)
+        // Everything the shot does before the capture, in the order it declared.
+        // The driver has already validated the list and desugared the shorthand
+        // fields into it, so each step here has exactly one action set.
+        for (const step of readSteps()) {
+          await runStep(window, step)
         }
 
         // Extra dwell for shots of something that changes over time — and for a
