@@ -25,11 +25,28 @@ const starter = join(root, 'examples', 'starter.dmscreen')
 const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
 
 const shots = [
-  { name: 'starter', layout: starter },
-  { name: 'empty', layout: null },
+  {
+    name: 'starter',
+    layout: starter,
+    expect: ['.panel', '.split', '.table.resizable', '.splitter-grip']
+  },
+  { name: 'empty', layout: null, expect: ['.picker', '.picker-card'] },
   // Drives one control through the real UI before capturing.
-  { name: 'maximized', layout: starter, click: '.panel .icon-btn[title^="Fullscreen"]' },
-  { name: 'light-theme', layout: starter, click: '.topbar .icon-btn[title*="light theme"]' },
+  {
+    name: 'maximized',
+    layout: starter,
+    click: '.panel .icon-btn[title^="Fullscreen"]',
+    expect: ['.app.has-maximized', '.restore-hint']
+  },
+  {
+    name: 'light-theme',
+    layout: starter,
+    click: '.topbar .icon-btn[title*="light theme"]',
+    // `applyTheme` writes the choice to the root element's dataset, so this is
+    // the one assertion that says the click reached the store rather than just
+    // repainting something.
+    expect: ['html[data-theme="light"]', '.panel']
+  },
   // `:has` picks the party panel specifically — it is the one with a resizable
   // table. Fullscreen it first so the settings drawer has room to show fully.
   {
@@ -38,31 +55,39 @@ const shots = [
     click: [
       '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]',
       '.panel:has(.table.resizable) .icon-btn[title="Panel settings"]'
-    ].join('\n')
+    ].join('\n'),
+    expect: ['.panel-settings', '.panel-settings-head', '.settings-section']
   },
   // Regression: selecting the second starter table used to do nothing, because
   // the module's defaults were rebuilt (with fresh ids) on every render.
   {
     name: 'tables-second-tab',
     layout: null,
-    click: ['.picker-card[data-module-id="tables"]', '.tabs .tab:nth-of-type(2)'].join('\n')
+    click: ['.picker-card[data-module-id="tables"]', '.tabs .tab:nth-of-type(2)'].join('\n'),
+    // The regression was that clicking the second tab did nothing, so the
+    // assertion has to be that *that* tab is the active one — `.tab.active`
+    // alone would be just as true of the first.
+    expect: ['.tabs .tab:nth-of-type(2).active']
   },
   // Party panel fullscreened: row actions pinned right, numbers centred.
   {
     name: 'party-wide',
     layout: starter,
-    click: '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]'
+    click: '.panel:has(.table.resizable) .icon-btn[title^="Fullscreen"]',
+    expect: ['.app.has-maximized', '.table.resizable', '.col-actions']
   },
   // Searching auto-expands every match; can't be reached by clicking, so seed it.
   // The query must hit a condition *name* — the list deliberately does not search
   // body text. This shot previously seeded "saving throw", which no name contains,
-  // so it had been quietly capturing the empty state instead.
+  // so it had been quietly capturing the empty state instead. The `missing` line
+  // is what makes that unrepeatable.
   {
     name: 'conditions-search',
     layout: starter,
     mutate: (doc) => {
       doc.panels.panel_ref.state.query = 'ned'
-    }
+    },
+    expect: { found: ['.card'], missing: ['.empty'], text: ['Stunned'] }
   },
   // The typo-tolerant fallback: "paralzyed" transposes two letters and matches
   // nothing exactly, so this shot goes red if the fuzzy path ever stops working.
@@ -71,14 +96,16 @@ const shots = [
     layout: starter,
     mutate: (doc) => {
       doc.panels.panel_ref.state.query = 'paralzyed'
-    }
+    },
+    expect: { found: ['.card'], missing: ['.empty'], text: ['Paralyzed'] }
   },
   {
     name: 'timers',
     layout: null,
     click: ['.picker-card[data-module-id="timers"]', '.timer .btn.primary'].join('\n'),
     // Dwell so the capture shows the clock has actually moved, not just started.
-    settle: 3000
+    settle: 3000,
+    expect: ['.tracker-grid', '.timer', '.timer-readout']
   },
   // Add a countdown, then focus its readout to show it editing in place.
   {
@@ -88,13 +115,15 @@ const shots = [
       '.picker-card[data-module-id="timers"]',
       '.toolbar .btn:nth-of-type(2)',
       '.tracker-grid .timer:nth-of-type(2) .timer-readout.editable'
-    ].join('\n')
+    ].join('\n'),
+    expect: ['.tracker-grid .timer:nth-of-type(2)', '.timer-readout.editable']
   },
   // The panel menu unlocked, where the rows that have a shortcut show it.
   {
     name: 'panel-menu',
     layout: starter,
-    click: '.panel .icon-btn[title="Panel menu"]'
+    click: '.panel .icon-btn[title="Panel menu"]',
+    expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
   // The same menu on a panel too short to hold it: every row has to be visible,
   // spilling over the panel below. The shot above never showed this — it opens
@@ -105,7 +134,11 @@ const shots = [
     mutate: (doc) => {
       doc.root.children[1].sizes = [0.16, 0.84]
     },
-    click: '.panel:has(.table.resizable) .icon-btn[title="Panel menu"]'
+    click: '.panel:has(.table.resizable) .icon-btn[title="Panel menu"]',
+    // "Close panel" is the last row, and the one that used to be clipped off by
+    // the panel's own overflow. Asserting the text is what proves the menu is
+    // not merely present but complete.
+    expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
   // And near the foot of the window, where it has to open upwards instead.
   {
@@ -114,14 +147,16 @@ const shots = [
     mutate: (doc) => {
       doc.root.children[1].sizes = [0.84, 0.16]
     },
-    click: '.split.column > .pane:last-child .icon-btn[title="Panel menu"]'
+    click: '.split.column > .pane:last-child .icon-btn[title="Panel menu"]',
+    expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
   // The top bar says nothing until hovered; settle has to outlast the delay.
   {
     name: 'topbar-hint',
     layout: starter,
     hover: '.topbar-actions .hint-anchor .btn.primary',
-    settle: 900
+    settle: 900,
+    expect: ['.hint']
   },
   // Locked layout: splitter grips gone, structural menu items gone.
   {
@@ -130,7 +165,9 @@ const shots = [
     click: [
       '.topbar .icon-btn[title*="Lock the layout"]',
       '.panel .icon-btn[title="Panel menu"]'
-    ].join('\n')
+    ].join('\n'),
+    // The absences are the whole shot, so they are what gets asserted.
+    expect: { found: ['.menu', '.lock-icon'], missing: ['.splitter-grip'] }
   },
   // Hovering a condition named inside another condition's text pops it out.
   {
@@ -139,7 +176,8 @@ const shots = [
     mutate: (doc) => {
       doc.panels.panel_ref.state.query = 'paralyzed'
     },
-    click: '.condition-ref'
+    click: '.condition-ref',
+    expect: ['.condition-ref', '.condition-pop', '.condition-pop-title']
   },
   {
     name: 'abilities',
@@ -148,18 +186,23 @@ const shots = [
       '.picker-card[data-module-id="abilities"]',
       '.tabs .tab:nth-of-type(1)',
       '.card .star'
-    ].join('\n')
+    ].join('\n'),
+    expect: { found: ['.card', '.card-title', '.star'], missing: ['.empty'] }
   },
   {
     name: 'diseases',
     layout: null,
-    click: ['.picker-card[data-module-id="diseases"]', '.card .star'].join('\n')
+    click: ['.picker-card[data-module-id="diseases"]', '.card .star'].join('\n'),
+    expect: { found: ['.card', '.card-title', '.star'], missing: ['.empty'] }
   },
   // The second tab — proves tab switching, and shows the source labelling.
   {
     name: 'abilities-cd',
     layout: null,
-    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(2)'].join('\n')
+    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(2)'].join('\n'),
+    // `.card-meta` is the source label, and SRD is what all shipped content
+    // reads — so this is also the shot that would catch the labelling vanishing.
+    expect: { found: ['.card', '.card-meta'], text: ['SRD'] }
   },
   {
     name: 'names',
@@ -169,7 +212,8 @@ const shots = [
       '.toolbar .btn.primary',
       '.btn[title*="quirk"]',
       '.npc-card .btn.primary'
-    ].join('\n')
+    ].join('\n'),
+    expect: ['.npc-card', '.npc-name', '.npc-line']
   },
 
   /* -------------------------------------------------------------- shortcuts */
@@ -179,7 +223,13 @@ const shots = [
   {
     name: 'shortcuts-editor',
     layout: starter,
-    menu: 'app:shortcuts'
+    menu: 'app:shortcuts',
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row', '.shortcut-key'],
+      // Shown as fixed rather than simply missing — the row vanishing entirely
+      // is the regression this guards.
+      text: ['Leave panel fullscreen']
+    }
   },
   // Mid-capture. Also the shot that would catch the recording state failing to
   // announce itself, which matters because it is swallowing every keypress.
@@ -187,7 +237,10 @@ const shots = [
     name: 'shortcuts-recording',
     layout: starter,
     menu: 'app:shortcuts',
-    click: '.shortcut-row:nth-of-type(3) .shortcut-key'
+    click: '.shortcut-row:nth-of-type(3) .shortcut-key',
+    // The recording class *and* the prompt: the state is swallowing every
+    // keypress, so a row that has entered it silently is the failure mode.
+    expect: { found: ['.shortcut-key.recording'], text: ['Press keys…'] }
   },
   // The point of the whole change: one entry in keybindings.json, and the ⋯
   // menu row says the new chord. Before this PR the row read from a literal
@@ -197,7 +250,11 @@ const shots = [
     name: 'shortcuts-rebound',
     layout: starter,
     keys: { 'panel:close': 'CmdOrCtrl+Alt+K', 'panel:splitRight': null },
-    click: '.panel .icon-btn[title="Panel menu"]'
+    click: '.panel .icon-btn[title="Panel menu"]',
+    // The rebound key must be the one the row prints. Before the catalogue
+    // collapsed the two copies of the accelerators, this row went on saying
+    // Ctrl+W — which is exactly what a caption that lies looks like.
+    expect: { found: ['.menu'], text: ['Ctrl+Alt+K'] }
   },
   // Two-stroke sequences, tmux-style: a modified prefix and a bare finish. The ⋯
   // menu has to print both halves, which is the whole visible difference between
@@ -206,7 +263,10 @@ const shots = [
     name: 'shortcuts-chords',
     layout: starter,
     keys: { 'panel:splitRight': 'CmdOrCtrl+B 5', 'panel:splitDown': 'CmdOrCtrl+B 2' },
-    click: '.panel .icon-btn[title="Panel menu"]'
+    click: '.panel .icon-btn[title="Panel menu"]',
+    // Both halves, because a sequence silently truncated to its prefix still
+    // renders a perfectly plausible row.
+    expect: { found: ['.menu'], text: ['Ctrl+B 5', 'Ctrl+B 2'] }
   },
   // Half-typed. The indicator has to be visible and say what it is waiting for —
   // the app is swallowing the next keystroke, and silence there reads as a
@@ -215,7 +275,8 @@ const shots = [
     name: 'chord-pending',
     layout: starter,
     keys: { 'panel:splitRight': 'CmdOrCtrl+B 5' },
-    press: { code: 'KeyB', ctrlKey: true }
+    press: { code: 'KeyB', ctrlKey: true },
+    expect: { found: ['.chord-pending'], text: ['Ctrl+B'] }
   },
   // Every modifier on both strokes — a legal binding, and the one that used to
   // wrap "Split right" onto two lines because the label was the only thing in
@@ -226,14 +287,23 @@ const shots = [
     keys: {
       'panel:splitRight': 'Super+CmdOrCtrl+Alt+Shift+J Super+CmdOrCtrl+Alt+Shift+4'
     },
-    click: '.panel .icon-btn[title="Panel menu"]'
+    click: '.panel .icon-btn[title="Panel menu"]',
+    // Whether the label stayed on one line is still eyes-only; that both are
+    // present at all is not.
+    expect: { found: ['.menu'], text: ['Split right'] }
   },
   // The preset list, which is also the shot that would catch a preset going
   // missing or a blurb overflowing its row.
   {
     name: 'shortcuts-presets',
     layout: starter,
-    menu: 'app:shortcuts'
+    menu: 'app:shortcuts',
+    // Named, so a preset going missing fails here rather than looking like a
+    // slightly shorter list.
+    expect: {
+      found: ['.preset-row', '.preset'],
+      text: ['Default', 'VS Code', 'Zed', 'Sublime Text', 'JetBrains', 'Vim', 'tmux', 'None']
+    }
   },
   // The VS Code keymap applied. Split Down and Keyboard Shortcuts both read as
   // sequences, and Save keeps Ctrl+S even though the sequence ends on it — the
@@ -245,7 +315,13 @@ const shots = [
       'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S'
     },
-    menu: 'app:shortcuts'
+    menu: 'app:shortcuts',
+    // Ctrl+S survives alongside a sequence that ends on it — the arrangement
+    // that was impossible before the renderer learned to arbitrate.
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+K Ctrl+\\', 'Ctrl+K Ctrl+S', 'Ctrl+S']
+    }
   },
 
   /* ----------------------------------------------------------- action palette */
@@ -255,16 +331,18 @@ const shots = [
   {
     name: 'action-palette',
     layout: starter,
-    menu: 'app:palette'
+    menu: 'app:palette',
+    expect: ['.palette', '.palette-input', '.palette-list', '.palette-item', '.palette-category']
   },
   // Filtering, which is the whole interaction and cannot be reached by clicking.
   // The query has to hit real rows: an empty palette photographs exactly like a
-  // broken one, which is the trap `conditions-search` sat in for months.
+  // broken one, which is the trap `conditions-search` sat in.
   {
     name: 'action-palette-search',
     layout: starter,
     menu: 'app:palette',
-    type: { selector: '.palette-input', text: 'panel' }
+    type: { selector: '.palette-input', text: 'panel' },
+    expect: { found: ['.palette-item'], missing: ['.empty'] }
   },
   // Locked. Splitting, closing and flipping are gone from the list, and the note
   // underneath says why — half a list with no explanation reads as a bug.
@@ -274,7 +352,14 @@ const shots = [
     mutate: (doc) => {
       doc.locked = true
     },
-    menu: 'app:palette'
+    menu: 'app:palette',
+    // The note is the point: half a list with no explanation reads as a broken
+    // palette rather than a locked layout. The structural rows must be gone.
+    expect: {
+      found: ['.palette-item', '.note'],
+      missing: ['.palette-item[data-action-id="panel:close"]'],
+      text: ['The layout is locked']
+    }
   },
   // Running one. Every other palette shot proves it renders; this is the only one
   // that proves it does anything, and it picks a command with no keybinding at
@@ -284,7 +369,10 @@ const shots = [
     name: 'action-palette-run',
     layout: starter,
     menu: 'app:palette',
-    click: '.palette-item[data-action-id="view:toggleTheme"]'
+    click: '.palette-item[data-action-id="view:toggleTheme"]',
+    // The only shot proving the palette *does* anything: the command ran, so
+    // the theme flipped and the palette closed behind it.
+    expect: { found: ['html[data-theme="light"]'], missing: ['.palette'] }
   },
 
   /* ----------------------------------------------------------------- big dice */
@@ -293,7 +381,13 @@ const shots = [
   {
     name: 'bigdice',
     layout: null,
-    click: '.picker-card[data-module-id="bigdice"]'
+    click: '.picker-card[data-module-id="bigdice"]',
+    // `.bigdice-readout` is the container and is always present; the prompt and
+    // the total are the two things that swap inside it.
+    expect: {
+      found: ['.bigdice', '.bigdice-stage', '.bigdice-prompt'],
+      missing: ['.bigdice-total']
+    }
   },
   // A real click on the die, dwelt past the tumble so the shot catches a settled
   // result rather than a mid-animation frame. The value is random by nature —
@@ -302,7 +396,10 @@ const shots = [
     name: 'bigdice-thrown',
     layout: null,
     click: ['.picker-card[data-module-id="bigdice"]', '.bigdice-stage'].join('\n'),
-    settle: 1400
+    settle: 1400,
+    // The value is random; that the throw path ran at all is not. The prompt
+    // going away is what says a result landed.
+    expect: { found: ['.bigdice-readout'], missing: ['.bigdice-prompt'] }
   },
   // Seeded rather than rolled, because a natural 20 cannot be arranged by
   // clicking. Shows the flourish and the history strip together.
@@ -320,7 +417,8 @@ const shots = [
           { id: 'throw_c', sides: 20, value: 13 }
         ]
       }
-    }
+    },
+    expect: { found: ['.bigdice-flourish', '.bigdice-history', '.bigdice-past'], text: ['20'] }
   },
   // Percentile renders as the two ten-sided dice it physically is, so this is
   // the shot that would catch it collapsing back to one. Seeded at 100 — the one
@@ -340,6 +438,14 @@ const shots = [
           { id: 'throw_r', sides: 100, value: 62 }
         ]
       }
+    },
+    // Percentile must still render as the two physical dice it is, rather than
+    // collapsing back to one. Asserted through a child: `.bigdice-pair` is
+    // `display: contents` so the dice can join the stage's flex layout, which
+    // leaves the wrapper itself with no box to be visible in.
+    expect: {
+      found: ['.bigdice-pair .die', '.bigdice-total', '.bigdice-history'],
+      text: ['100']
     }
   },
   // The two numbers that came closest to overflowing their faces, at two very
@@ -353,7 +459,10 @@ const shots = [
       doc.panels.panel_init.state = { sides: 4, value: 4, history: [] }
       doc.panels.panel_ref.moduleId = 'bigdice'
       doc.panels.panel_ref.state = { sides: 12, value: 12, history: [] }
-    }
+    },
+    // Whether either number clips its face is eyes-only; that both dice
+    // rendered with a face at all is not.
+    expect: { found: ['.die-face', '.bigdice-readout'], text: ['12', '4'] }
   },
 
   /* --------------------------------------------------------------- data packs */
@@ -368,7 +477,10 @@ const shots = [
     data: {
       refs: [],
       enabled: { conditions: false, rules: false, abilities: false, diseases: false }
-    }
+    },
+    // Reaching the assertion at all is most of the point — the hang this guards
+    // never got as far as rendering anything.
+    expect: { found: ['.empty'], missing: ['.card'] }
   },
   // Says "no data loaded" and points at the Data menu, rather than blaming the
   // panel's own settings, which have nothing to fix.
@@ -376,7 +488,10 @@ const shots = [
     name: 'abilities-empty',
     layout: null,
     data: { refs: [], enabled: { abilities: false } },
-    click: '.picker-card[data-module-id="abilities"]'
+    click: '.picker-card[data-module-id="abilities"]',
+    // "Not loaded" and "hidden in this panel" both leave the list empty, and
+    // pointing at the panel's own settings is actively wrong here.
+    expect: { found: ['.empty'], missing: ['.card'], text: ['Data menu'] }
   },
   // Both pack behaviours in one frame: the tab bar shows "Fixture Tricks", a tab
   // the pack created, while Metamagic shows the pack's entry merged in among the
@@ -385,14 +500,21 @@ const shots = [
     name: 'pack-loaded',
     layout: null,
     data: { refs: [{ id: 'smoke-fixture', name: 'Smoke Fixture', path: fixturePack }] },
-    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(1)'].join('\n')
+    click: ['.picker-card[data-module-id="abilities"]', '.tabs .tab:nth-of-type(1)'].join('\n'),
+    // Both pack behaviours: a tab the pack created, and the pack's entry merged
+    // in among the bundled ones rather than replacing them — so Metamagic being
+    // present is as load-bearing as the new tab.
+    expect: { found: ['.tabs .tab', '.card'], text: ['Fixture Tricks', 'Metamagic'] }
   },
   // A pack whose file has moved. The app must still render, and say so.
   {
     name: 'pack-broken',
     layout: starter,
     data: { refs: [{ id: 'gone', name: 'Missing Pack', path: '/nonexistent/gone.dmpack.json' }] },
-    click: '.topbar .btn[title="Recent layouts"]'
+    click: '.topbar .btn[title="Recent layouts"]',
+    // `resolve()` is total, so the app renders — and has to say so rather than
+    // failing silently to a normal-looking screen.
+    expect: ['.panel', '.data-status', '.data-status-warn']
   }
 ]
 
@@ -430,7 +552,27 @@ async function seedSession(layoutPath, mutate, data, keys) {
   )
 }
 
-function run(shotPath, { click, settle, hover, menu, press, type }) {
+/**
+ * A shot's `expect` is either a bare list of selectors — the common case, "these
+ * must be on screen" — or an object with `found`, `missing` and `text`.
+ *
+ * Every shot must declare one. A shot with nothing to assert is a shot that
+ * cannot fail, and this harness spent a long time full of those: an absent
+ * feature photographs exactly as cleanly as a present one.
+ */
+function normaliseExpect(expect, name) {
+  if (!expect) throw new Error(`shot "${name}" declares no expect`)
+  const spec = Array.isArray(expect) ? { found: expect } : expect
+  const total = (spec.found?.length ?? 0) + (spec.missing?.length ?? 0) + (spec.text?.length ?? 0)
+  if (!total) throw new Error(`shot "${name}" declares an empty expect`)
+  return spec
+}
+
+function run(shotPath, { click, settle, hover, menu, press, type, expect }, name) {
+  // Before the spawn, so a malformed shot fails on its own terms rather than as
+  // a mystery inside a 60-second Electron launch.
+  const expectations = JSON.stringify(normaliseExpect(expect, name))
+
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       'xvfb-run',
@@ -453,6 +595,7 @@ function run(shotPath, { click, settle, hover, menu, press, type }) {
           ...(type ? { DMSCREEN_SMOKE_TYPE: JSON.stringify(type) } : {}),
           ...(hover ? { DMSCREEN_SMOKE_HOVER: hover } : {}),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
+          DMSCREEN_SMOKE_EXPECT: expectations,
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
         },
         stdio: ['ignore', 'pipe', 'pipe']
@@ -486,7 +629,7 @@ for (const shot of shots) {
 
   process.stdout.write(`▸ ${shot.name} … `)
   try {
-    const output = await run(shotPath, shot)
+    const output = await run(shotPath, shot, shot.name)
 
     if (!existsSync(shotPath)) throw new Error(`no screenshot written.\n${output}`)
 
@@ -495,6 +638,11 @@ for (const shot of shots) {
       .split('\n')
       .filter((line) => /\[renderer:(error)\]|Uncaught|ERR_FILE_NOT_FOUND/.test(line))
     if (problems.length) throw new Error(`renderer reported problems:\n${problems.join('\n')}`)
+
+    // The shot rendered without complaint but is not showing what it claims to.
+    // Still written to disk — look at it.
+    const unmet = output.split('\n').filter((line) => line.includes('[smoke:expect]'))
+    if (unmet.length) throw new Error(`not showing what it claims:\n${unmet.join('\n')}`)
 
     console.log(`ok → ${shotPath}`)
   } catch (error) {
