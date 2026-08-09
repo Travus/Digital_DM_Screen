@@ -140,6 +140,20 @@ const shots = [
     // not merely present but complete.
     expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
+  // The one panel in a fresh window, which is inside no split. Flip and Even Out
+  // used to be absent here; they are now rows carrying the reason in a tooltip,
+  // so the menu is the same shape whatever the layout is.
+  {
+    name: 'panel-menu-lone',
+    layout: null,
+    click: '.panel .icon-btn[title="Panel menu"]',
+    // The tooltip is the row's whole explanation, so its text is asserted from
+    // the attribute — `innerText` never sees it.
+    expect: {
+      found: ['.menu', '.menu-item.disabled[title*="not inside a split"]'],
+      text: ['Flip surrounding split']
+    }
+  },
   // And near the foot of the window, where it has to open upwards instead.
   {
     name: 'panel-menu-flipped',
@@ -158,7 +172,7 @@ const shots = [
     settle: 900,
     expect: ['.hint']
   },
-  // Locked layout: splitter grips gone, structural menu items gone.
+  // Locked layout: splitter grips gone, structural menu items greyed in place.
   {
     name: 'locked',
     layout: starter,
@@ -166,8 +180,13 @@ const shots = [
       '.topbar .icon-btn[title*="Lock the layout"]',
       '.panel .icon-btn[title="Panel menu"]'
     ].join('\n'),
-    // The absences are the whole shot, so they are what gets asserted.
-    expect: { found: ['.menu', '.lock-icon'], missing: ['.splitter-grip'] }
+    // The grips going and the rows staying are both the shot. A menu that keeps
+    // its length is the point of greying rather than dropping, so "Close panel"
+    // present and disabled is what proves it.
+    expect: {
+      found: ['.menu', '.lock-icon', '.menu-item.disabled.danger'],
+      missing: ['.splitter-grip']
+    }
   },
   // Hovering a condition named inside another condition's text pops it out.
   {
@@ -364,8 +383,8 @@ const shots = [
     type: { selector: '.palette-input', text: 'panel' },
     expect: { found: ['.palette-item'], missing: ['.empty'] }
   },
-  // Locked. Splitting, closing and flipping are gone from the list, and the note
-  // underneath says why — half a list with no explanation reads as a bug.
+  // Locked. Splitting, closing and flipping are still listed, greyed and sunk to
+  // the bottom, which is what a full list plus an obvious "not now" looks like.
   {
     name: 'action-palette-locked',
     layout: starter,
@@ -373,12 +392,35 @@ const shots = [
       doc.locked = true
     },
     menu: 'app:palette',
-    // The note is the point: half a list with no explanation reads as a broken
-    // palette rather than a locked layout. The structural rows must be gone.
+    // Narrowed to the Panel category, which is where the lock bites: without a
+    // query the live rows fill the window and every greyed one is below the
+    // fold, so the shot would photograph an ordinary palette. This puts both
+    // kinds in one frame, which is the only way the greying is eyes-checkable.
+    type: { selector: '.palette-input', text: 'panel' },
+    // Present *and* greyed, both asserted: either half alone is the old
+    // behaviour. Nothing under the list, because nothing has been activated —
+    // standing text explaining rows that already explain themselves is what
+    // this replaced.
     expect: {
-      found: ['.palette-item', '.note'],
-      missing: ['.palette-item[data-action-id="panel:close"]'],
-      text: ['The layout is locked']
+      found: ['.palette-item.disabled[data-action-id="panel:close"]'],
+      missing: ['.palette .note']
+    }
+  },
+  // Activating a greyed row. Nothing happening is the wrong answer to a
+  // deliberate Enter, so the palette stays open and says which guard is on.
+  {
+    name: 'action-palette-unavailable',
+    layout: starter,
+    mutate: (doc) => {
+      doc.locked = true
+    },
+    menu: 'app:palette',
+    click: '.palette-item.disabled[data-action-id="panel:close"]',
+    // The palette surviving the click is as load-bearing as the message: a
+    // greyed row must not close the window it is being explained in.
+    expect: {
+      found: ['.palette', '.palette-reason'],
+      text: ['the layout is locked']
     }
   },
   // Running one. Every other palette shot proves it renders; this is the only one

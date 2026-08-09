@@ -69,9 +69,16 @@ jobs:
             exit 1
           fi
           dpkg-deb -I "${deb[0]}"
-          dpkg-deb -c "${deb[0]}" | grep -q 'metainfo/dev.travus.dmscreen.metainfo.xml' \
+          # Taken once and searched in memory, never piped into `grep -q`. That
+          # grep exits on its first match, dpkg-deb's tar then dies on a write
+          # error, and `pipefail` — on by default in an Actions step — makes
+          # that the pipeline's status. So a match early in a long listing fails
+          # the step and reports the entry as *missing*: the icon check said the
+          # hicolor set was absent from a deb that contained it.
+          listing=$(dpkg-deb -c "${deb[0]}")
+          grep -q 'metainfo/dev.travus.dmscreen.metainfo.xml' <<<"$listing" \
             || { echo '::error::metainfo missing from the deb'; exit 1; }
-          dpkg-deb -c "${deb[0]}" | grep -q 'hicolor/256x256/apps/' \
+          grep -q 'hicolor/256x256/apps/' <<<"$listing" \
             || { echo '::error::hicolor icon set missing from the deb'; exit 1; }
 
       # Presence is not the failure mode that actually happened. `<developer>` is

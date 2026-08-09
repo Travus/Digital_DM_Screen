@@ -179,15 +179,33 @@ runs every binding through `findConflict`.
 `Cmd/Ctrl+Shift+P`. `lib/palette.ts` decides what it shows;
 `components/ActionPalette.tsx` is the window around that.
 
-**It is the catalogue, rendered.** Rows are `ACTIONS` filtered by `enabled` with
-the live binding beside each, so a command added to `actions.ts` appears with no
-further wiring and its key cannot become a caption that lies.
+**It is the catalogue, rendered.** Rows are `ACTIONS` with the live binding beside
+each, so a command added to `actions.ts` appears with no further wiring and its
+key cannot become a caption that lies.
 
-**`ActionDef.enabled` is what makes it honest.** A menu can carry a row that
-quietly does nothing; the palette is the discovery surface, so "Close panel" on a
-locked layout is a wrong answer rather than a dead one. Rows are filtered out and
-a note says why the list is short — half a list with no explanation reads as a
-broken palette.
+**`ActionDef.unavailable` returns the reason, not a boolean.** A menu can carry a
+row that quietly does nothing; the palette is the discovery surface, so "Close
+panel" on a locked layout has to say it is off *and why*. `!locked && hasPanel`
+cannot say which half failed, so the predicate returns the text — a lowercase
+fragment, because every consumer prefixes it. **Do not add a `disabledReason`
+beside it**: two things that must agree, with nothing enforcing it, is how the
+accelerators came to lie before they collapsed into one catalogue.
+
+**Unavailable rows grey and sink; they are never dropped.** A row that disappears
+takes its own explanation with it, and half a list reads as a broken palette. They
+sort to the bottom so the cursor's first Enter lands on something that runs, they
+are landed on rather than skipped by the arrows, and activating one shows the
+reason instead of firing. `sink()` in `palette.ts` leaves the top half alone, so
+catalogue order — and the fuzzy pass's ranking — survives there, and **sorts the
+tail by name**: that half is not scanned in order, it is looked one row up in.
+
+**The ⋯ panel menu greys the same rows**, from the same predicates via
+`actionUnavailable`, with the reason as a `title` tooltip: a menu row has nowhere
+to put a message. Its rows keep their positions rather than sinking — a menu whose
+length changes with the state is one you have to read every time — and a greyed
+row does not close the menu, which would take the tooltip with it. `aria-disabled`
+rather than `disabled`, because Chromium suppresses the tooltip on a disabled
+control.
 
 **Quit is in the catalogue, `fixed`.** `fixed` means "a key some other layer owns
 app-wide" and carries the reason as its value. Quit's accelerator is written onto
@@ -419,6 +437,13 @@ line documenting that separator.
 **The audit report writes to a file rather than piping.** `npm audit` exits
 non-zero on any finding, and a pipe reports only the last command's status. The
 summary script is a formatter; the gate is a separate `--audit-level=high` step.
+
+**Never pipe a long output into `grep -q`.** An Actions step runs under
+`pipefail`, and `grep -q` exits on its first match — the writer upstream then
+dies on a write error and *that* becomes the pipeline's status. A match early in
+a long stream therefore fails the step, and the `||` branch reports the thing as
+missing. `dpkg-deb -c | grep -q` said the hicolor icons were absent from a deb
+that contained them. Capture once, then search with `<<<`.
 
 **The release tag goes on after the merge**, not via `npm version` — its own tag
 points at the pre-merge commit, which a squash merge leaves off `main`.

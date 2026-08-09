@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { ActionId } from '../../../shared/actions'
-import { actionContext, paletteEntries } from '../lib/palette'
+import { actionContext, paletteEntries, type PaletteEntry } from '../lib/palette'
 import { useKeymapStore } from '../state/keymapStore'
 import { resolveTargetNodeId, useAppStore } from '../state/store'
 
@@ -31,6 +31,13 @@ let lastQuery = ''
  * Rows come from the catalogue in `src/shared/actions.ts`, so a command added
  * there appears here with no further wiring, and the key shown beside it is the
  * live one rather than a caption that has to be kept in step.
+ *
+ * A command the current layout cannot run is greyed and sunk to the bottom —
+ * where those rows are name-ordered — rather than dropped, and activating one
+ * says why. The list is the app's own
+ * inventory of what it can do; a row that vanishes when it stops applying takes
+ * the explanation with it, and half a list is indistinguishable from a broken
+ * palette.
  */
 export function ActionPalette({
   onRun,
@@ -46,6 +53,15 @@ export function ActionPalette({
   const [query, setQuery] = useState(lastQuery)
   /** Highlighted row. Clamped rather than reset, so a slow deletion keeps its place. */
   const [cursor, setCursor] = useState(0)
+  /**
+   * The row whose reason is being shown, after the user activated a greyed one.
+   *
+   * Nothing happening is the wrong answer to a deliberate Enter — it reads as
+   * the palette having failed rather than the command being unavailable. Held by
+   * id so the message follows a row that re-sorts under it rather than going
+   * stale on the label it was written from.
+   */
+  const [blocked, setBlocked] = useState<ActionId | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -63,6 +79,10 @@ export function ActionPalette({
   )
 
   const active = Math.min(cursor, Math.max(entries.length - 1, 0))
+
+  /* Looked up rather than stored: a message kept as text would outlive the row
+     it came from, and survive a query that has since filtered that row away. */
+  const blockedEntry = entries.find((entry) => entry.id === blocked && entry.unavailable)
 
   /* Select the remembered query rather than putting a caret after it, so the
      next keystroke replaces it and reopening never means clearing the box
@@ -82,14 +102,33 @@ export function ActionPalette({
     listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' })
   }, [active, entries])
 
-  const run = (id: ActionId): void => {
+  /**
+   * Enter and a click both come through here, so a greyed row is inert by the
+   * same rule from either. It explains itself instead of running: the palette
+   * stays open, because the answer to "why did that not work" is only useful
+   * next to the list it was asked of.
+   */
+  const activate = (entry: PaletteEntry): void => {
+    if (entry.unavailable) {
+      setBlocked(entry.id)
+      return
+    }
     // Closed first: several commands hand focus to something they open — the
     // panel rename field, the shortcuts editor — and the palette's own input
     // must be out of the way before they do.
     onClose()
-    onRun(id)
+    onRun(entry.id)
   }
 
+  /*
+   * Greyed rows are landed on, not skipped — inert under Enter, but reachable.
+   *
+   * Skipping them was the alternative and it is worse in every direction: the
+   * keyboard would walk past rows the mouse can still reach, End would jump to
+   * some row that is not the last one, and a list of nothing but unavailable
+   * commands would have no cursor at all. Reaching a row and being told why it
+   * is off is the answer the palette exists to give.
+   */
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -108,7 +147,7 @@ export function ActionPalette({
     if (event.key === 'Enter') {
       event.preventDefault()
       const entry = entries[active]
-      if (entry) run(entry.id)
+      if (entry) activate(entry)
     }
     // Escape is not handled here. It belongs to the chain in `App.tsx`, which
     // decides between abandoning a half-typed sequence, closing this, and
@@ -134,6 +173,9 @@ export function ActionPalette({
             lastQuery = event.target.value
             setQuery(event.target.value)
             setCursor(0)
+            // The message belongs to a row the user pointed at; retyping is a
+            // new question, and the list under it is a new list.
+            setBlocked(null)
           }}
           onKeyDown={onKeyDown}
         />
@@ -142,12 +184,18 @@ export function ActionPalette({
           {entries.map((entry, index) => (
             <button
               key={entry.id}
-              className={`palette-item ${index === active ? 'active' : ''}`}
+              className={`palette-item ${index === active ? 'active' : ''} ${
+                entry.unavailable ? 'disabled' : ''
+              }`}
               data-action-id={entry.id}
+              /* `aria-disabled`, not `disabled`: the row still takes the
+                 cursor and still answers a click, it just answers with the
+                 reason instead of the command. */
+              aria-disabled={entry.unavailable ? true : undefined}
               // Pointer, not hover: a list that re-sorts under a stationary
               // mouse would otherwise move the highlight on its own.
               onPointerMove={() => setCursor(index)}
-              onClick={() => run(entry.id)}
+              onClick={() => activate(entry)}
             >
               <span className="palette-label">{entry.label}</span>
               <span className="palette-category">{entry.category}</span>
@@ -159,12 +207,12 @@ export function ActionPalette({
 
         {entries.length === 0 && <p className="empty">Nothing matches “{query}”.</p>}
 
-        {/* Says why the list is short. Structural commands are filtered out
-            while the layout is locked, and a palette that silently drops half
-            its rows reads as a broken palette rather than a locked layout. */}
-        {context.locked && (
-          <p className="note">
-            The layout is locked, so splitting, closing and rearranging panels are not listed.
+        {/* Only ever in answer to an activation. Standing text saying rows may
+            be greyed would be there on every open, explaining a thing that is
+            already visible on the rows themselves. */}
+        {blockedEntry && (
+          <p className="note palette-reason" role="status">
+            “{blockedEntry.label}” is unavailable — {blockedEntry.unavailable}.
           </p>
         )}
       </div>
