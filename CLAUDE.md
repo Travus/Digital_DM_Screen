@@ -195,16 +195,16 @@ runs every binding through `findConflict`.
 **A menu *role* owns its stroke, and nothing in the keymap can see that.**
 `role: 'reload'` registers `CmdOrCtrl+R` on every platform, and macOS's
 `role: 'windowMenu'` registers `CmdOrCtrl+M` for Minimize. Neither is a catalogue
-action, so `findConflict` passes a binding on those strokes that will then never
-fire. This is what decided Cursor's leader: Cursor uses `Ctrl+M` on Windows and
-Linux and `Cmd+R` on macOS, `CmdOrCtrl+R` is gone to reload everywhere, and a
-keymap entry is one chord for all platforms — so the preset opens on
-`CmdOrCtrl+M` and says in its blurb that macOS is not covered.
+action, so `findConflict` passes a binding on those strokes and it then never
+fires — the menu accelerator gets the key first. This is why Cursor has no
+preset: its leader is `Ctrl+M` on Windows and Linux and `Cmd+R` on macOS, both of
+those are taken here, and a keymap entry is one chord for all platforms so the
+split cannot be spelled either way round.
 
 **Two presets must differ from each other, not just from the defaults.** The test
 that claimed this only ever compared each preset against the shipped keymap,
-which a duplicate passes. Cursor is a VS Code fork and inherits everything it
-does not rebind, so that is the pair the gap was hiding.
+which a duplicate passes. An editor forked from one already listed inherits every
+binding it does not deliberately move, so that is the pair the gap was hiding.
 
 ### The action palette
 

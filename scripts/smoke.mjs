@@ -434,17 +434,7 @@ const shots = [
     // slightly shorter list.
     expect: {
       found: ['.preset-row', '.preset'],
-      text: [
-        'Default',
-        'VS Code',
-        'Cursor',
-        'Zed',
-        'Sublime Text',
-        'JetBrains',
-        'Vim',
-        'tmux',
-        'None'
-      ]
+      text: ['Default', 'VS Code', 'Zed', 'Sublime Text', 'JetBrains', 'Vim', 'tmux', 'None']
     }
   },
   // The VS Code keymap applied. Split Down and Keyboard Shortcuts both read as
@@ -465,18 +455,17 @@ const shots = [
       text: ['Ctrl+K Ctrl+\\', 'Ctrl+K Ctrl+S', 'Ctrl+S']
     }
   },
-  // The Cursor preset applied through its own button, rather than by seeding the
-  // bindings it is supposed to produce — this is the shot that would catch the
-  // two forks collapsing into one button. Cursor spends Ctrl+K on inline edit,
-  // so its leader is Ctrl+M; a preset quietly reproducing VS Code shows Ctrl+K.
+  // A preset applied through its own button rather than by seeding the bindings
+  // it is supposed to produce — the shot that covers the preset list actually
+  // being wired to the keymap, which seeding a keybindings.json cannot show.
   {
-    name: 'shortcuts-cursor',
+    name: 'shortcuts-preset-applied',
     layout: starter,
-    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="cursor"]' }],
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="vscode"]' }],
     expect: {
       found: ['.shortcuts-modal', '.shortcut-row'],
       // Ctrl+S is still Save, alongside a sequence that ends on it.
-      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+S']
+      text: ['Ctrl+K Ctrl+\\', 'Ctrl+K Ctrl+S', 'Ctrl+S']
     }
   },
 

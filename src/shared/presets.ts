@@ -10,15 +10,27 @@ import { ACTIONS, type ActionId, type Keymap } from './actions'
  * there before rather than merging — a half-applied keymap is how you end up
  * with a prefix that still fires something on its own.
  *
- * Only bindings sourced from the tool itself are here. One absence is deliberate
- * rather than an oversight:
+ * Only bindings sourced from the tool itself are here. Two absences are
+ * deliberate rather than oversights, and both are the same shape: a keymap whose
+ * *prefix* this app cannot carry has nothing left to import.
  *
  * **Emacs.** Its prefix is `C-x`, which is Cut. On Windows and Linux that key is
  * handled by Chromium in any editable field whatever the menu says, so it is not
  * ours to give away; on macOS Cut is `Cmd+X` and `Ctrl+X` would be free, but a
- * preset whose *prefix* only exists on one platform has nothing left to import
- * on the others. An Emacs keymap that opens on something other than `C-x` is not
- * an Emacs keymap.
+ * preset that only exists on one platform is worse than no button. An Emacs
+ * keymap that opens on something other than `C-x` is not an Emacs keymap.
+ *
+ * **Cursor**, for a reason worth writing down, because "it is a VS Code fork" is
+ * the wrong one and was believed here for a while. It genuinely differs: `Ctrl+K`
+ * is inline edit, so its chord leader moved — to `Ctrl+M` on Windows and Linux
+ * and `Cmd+R` on macOS. Neither reaches the renderer here. `CmdOrCtrl+R` is
+ * registered by the View menu's Reload on every platform, and `Cmd+M` is
+ * Minimize in the macOS Window menu; an Electron menu accelerator fires before
+ * the page sees the key, so a sequence opening on either is swallowed. A keymap
+ * entry is also one chord for all platforms by design, so Cursor's own split
+ * cannot be spelled at all. Until the menu can hand those strokes over, a Cursor
+ * preset is a button that works on two platforms and minimises the window on the
+ * third.
  */
 export interface KeymapPreset {
   id: string
@@ -54,39 +66,6 @@ export const PRESETS: readonly KeymapPreset[] = [
       // even though the catalogue default is the same key today: a preset
       // reproduces its tool, and one that tracked our defaults instead would
       // quietly stop being VS Code the moment we moved one.
-      'app:palette': 'CmdOrCtrl+Shift+P'
-    }
-  },
-  {
-    id: 'cursor',
-    name: 'Cursor',
-    /*
-     * A VS Code fork, and *not* the same button twice — the one thing Cursor
-     * moved is the thing the preset above is made of. `Ctrl+K` is inline edit
-     * there, so the chord leader was reassigned: `Ctrl+M` on Windows and Linux,
-     * `Cmd+R` on macOS. Cursor's own docs reach the shortcuts editor with
-     * `Cmd R` then `Cmd S`, which is that leader with VS Code's finisher.
-     *
-     * `CmdOrCtrl+M` is the only spelling this app can carry, and it is exact on
-     * Windows and Linux. Cursor's macOS leader is not available here at all:
-     * `role: 'reload'` registers `CmdOrCtrl+R` on every platform, so a sequence
-     * opening on it would reload the app instead. A keymap entry is one chord
-     * for all platforms by design, so there is no third answer.
-     *
-     * That leaves the leader on `Cmd+M` on macOS, which the Window menu's
-     * Minimize owns — the stroke never reaches the renderer, so neither sequence
-     * opens there. The blurb says so, because a preset that silently eats a key
-     * reads as the app dropping it. Unlike Emacs, the rest of the keymap is
-     * still Cursor's on every platform, which is why this ships and that does
-     * not.
-     */
-    blurb:
-      'Cursor’s Ctrl+M leader — it spends Ctrl+K on inline edit. Not on macOS: Cmd+M minimises.',
-    bindings: {
-      'panel:splitDown': 'CmdOrCtrl+M CmdOrCtrl+\\',
-      'app:shortcuts': 'CmdOrCtrl+M CmdOrCtrl+S',
-      // Inherited from VS Code unchanged, and stated for the same reason it is
-      // stated there.
       'app:palette': 'CmdOrCtrl+Shift+P'
     }
   },
