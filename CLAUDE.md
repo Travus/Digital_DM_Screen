@@ -192,6 +192,20 @@ tool's name and guessing at its bindings is worse than not shipping it.
 the menu owns the prefix and no sequence starts. A test resolves each preset and
 runs every binding through `findConflict`.
 
+**A menu *role* owns its stroke, and nothing in the keymap can see that.**
+`role: 'reload'` registers `CmdOrCtrl+R` on every platform, and macOS's
+`role: 'windowMenu'` registers `CmdOrCtrl+M` for Minimize. Neither is a catalogue
+action, so `findConflict` passes a binding on those strokes that will then never
+fire. This is what decided Cursor's leader: Cursor uses `Ctrl+M` on Windows and
+Linux and `Cmd+R` on macOS, `CmdOrCtrl+R` is gone to reload everywhere, and a
+keymap entry is one chord for all platforms — so the preset opens on
+`CmdOrCtrl+M` and says in its blurb that macOS is not covered.
+
+**Two presets must differ from each other, not just from the defaults.** The test
+that claimed this only ever compared each preset against the shipped keymap,
+which a duplicate passes. Cursor is a VS Code fork and inherits everything it
+does not rebind, so that is the pair the gap was hiding.
+
 ### The action palette
 
 `Cmd/Ctrl+Shift+P`. `lib/palette.ts` decides what it shows;

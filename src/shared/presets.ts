@@ -10,18 +10,15 @@ import { ACTIONS, type ActionId, type Keymap } from './actions'
  * there before rather than merging — a half-applied keymap is how you end up
  * with a prefix that still fires something on its own.
  *
- * Only bindings sourced from the tool itself are here. Two absences are
- * deliberate rather than oversights:
+ * Only bindings sourced from the tool itself are here. One absence is deliberate
+ * rather than an oversight:
  *
  * **Emacs.** Its prefix is `C-x`, which is Cut. On Windows and Linux that key is
  * handled by Chromium in any editable field whatever the menu says, so it is not
- * ours to give away; on macOS Cut is `Cmd+X` and `Ctrl+X` would be free, but
- * shipping a preset that works on one platform and not another is worse than not
- * shipping it. An Emacs keymap that opens on something other than `C-x` is not
+ * ours to give away; on macOS Cut is `Cmd+X` and `Ctrl+X` would be free, but a
+ * preset whose *prefix* only exists on one platform has nothing left to import
+ * on the others. An Emacs keymap that opens on something other than `C-x` is not
  * an Emacs keymap.
- *
- * **Cursor** is a VS Code fork and its defaults are identical, so it would be
- * the same button twice.
  */
 export interface KeymapPreset {
   id: string
@@ -49,7 +46,7 @@ export const PRESETS: readonly KeymapPreset[] = [
     // Ctrl+K is VS Code's prefix. Both sequences finish on a stroke that is
     // separately bound — Ctrl+\ splits right, Ctrl+S saves — which is exactly
     // the case the renderer now arbitrates.
-    blurb: 'Ctrl+K sequences for the split and the shortcut editor. Also Cursor.',
+    blurb: 'Ctrl+K sequences for the split and the shortcut editor.',
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
@@ -57,6 +54,39 @@ export const PRESETS: readonly KeymapPreset[] = [
       // even though the catalogue default is the same key today: a preset
       // reproduces its tool, and one that tracked our defaults instead would
       // quietly stop being VS Code the moment we moved one.
+      'app:palette': 'CmdOrCtrl+Shift+P'
+    }
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    /*
+     * A VS Code fork, and *not* the same button twice — the one thing Cursor
+     * moved is the thing the preset above is made of. `Ctrl+K` is inline edit
+     * there, so the chord leader was reassigned: `Ctrl+M` on Windows and Linux,
+     * `Cmd+R` on macOS. Cursor's own docs reach the shortcuts editor with
+     * `Cmd R` then `Cmd S`, which is that leader with VS Code's finisher.
+     *
+     * `CmdOrCtrl+M` is the only spelling this app can carry, and it is exact on
+     * Windows and Linux. Cursor's macOS leader is not available here at all:
+     * `role: 'reload'` registers `CmdOrCtrl+R` on every platform, so a sequence
+     * opening on it would reload the app instead. A keymap entry is one chord
+     * for all platforms by design, so there is no third answer.
+     *
+     * That leaves the leader on `Cmd+M` on macOS, which the Window menu's
+     * Minimize owns — the stroke never reaches the renderer, so neither sequence
+     * opens there. The blurb says so, because a preset that silently eats a key
+     * reads as the app dropping it. Unlike Emacs, the rest of the keymap is
+     * still Cursor's on every platform, which is why this ships and that does
+     * not.
+     */
+    blurb:
+      'Cursor’s Ctrl+M leader — it spends Ctrl+K on inline edit. Not on macOS: Cmd+M minimises.',
+    bindings: {
+      'panel:splitDown': 'CmdOrCtrl+M CmdOrCtrl+\\',
+      'app:shortcuts': 'CmdOrCtrl+M CmdOrCtrl+S',
+      // Inherited from VS Code unchanged, and stated for the same reason it is
+      // stated there.
       'app:palette': 'CmdOrCtrl+Shift+P'
     }
   },

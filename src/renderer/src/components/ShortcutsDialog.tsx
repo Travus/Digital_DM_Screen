@@ -195,6 +195,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
               <button
                 key={preset.id}
                 className="preset"
+                // Same reason the picker cards carry `data-module-id`: the label
+                // is user-facing prose, and a smoke shot that selected on it —
+                // or on position — would be asserting the wrong thing.
+                data-preset-id={preset.id}
                 title={preset.blurb}
                 onClick={() => {
                   stopRecording()
