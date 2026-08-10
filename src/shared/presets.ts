@@ -23,14 +23,15 @@ import { ACTIONS, type ActionId, type Keymap } from './actions'
  * **Cursor**, for a reason worth writing down, because "it is a VS Code fork" is
  * the wrong one and was believed here for a while. It genuinely differs: `Ctrl+K`
  * is inline edit, so its chord leader moved — to `Ctrl+M` on Windows and Linux
- * and `Cmd+R` on macOS. Neither reaches the renderer here. `CmdOrCtrl+R` is
- * registered by the View menu's Reload on every platform, and `Cmd+M` is
- * Minimize in the macOS Window menu; an Electron menu accelerator fires before
- * the page sees the key, so a sequence opening on either is swallowed. A keymap
- * entry is also one chord for all platforms by design, so Cursor's own split
- * cannot be spelled at all. Until the menu can hand those strokes over, a Cursor
- * preset is a button that works on two platforms and minimises the window on the
- * third.
+ * and `Cmd+R` on macOS. That is one keymap with two leaders, and an entry here is
+ * one chord for every platform by design, so Cursor's own split cannot be spelled
+ * at all. `CmdOrCtrl+M` comes closest: exact on Windows and Linux, and on macOS a
+ * key Cursor does not use, since `CmdOrCtrl+R` resolves to the Reload role's
+ * stroke rather than to `Cmd+R`.
+ *
+ * The strokes are all reachable — the menu's roles hand a claimed one over — so
+ * this is a judgement about fidelity, not a limit. A preset wearing a tool's name
+ * and guessing at a third of its keymap is worse than not shipping it.
  */
 export interface KeymapPreset {
   id: string
