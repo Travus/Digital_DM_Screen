@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkBinding } from '../../../shared/accelerator'
+import { bindingStrokes, checkBinding } from '../../../shared/accelerator'
 import { ACTIONS, findConflict, resolveKeymap, type ActionId } from '../../../shared/actions'
 import { PRESETS, findPreset } from '../../../shared/presets'
 
@@ -79,6 +79,7 @@ describe('the presets that exist', () => {
     // A preset reproduces its tool, not our defaults. Left to fall through, the
     // VS Code keymap would quietly stop being VS Code the day we moved ours.
     expect(findPreset('vscode')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('cursor')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
     expect(findPreset('zed')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
     expect(findPreset('sublime')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
   })
@@ -89,12 +90,36 @@ describe('the presets that exist', () => {
   })
 
   it('has no preset that quietly does nothing', () => {
-    // A button that changes no binding is worse than no button — which is why
-    // Cursor is absent rather than shipped as a duplicate of VS Code.
+    // A button that changes no binding is worse than no button.
     const defaults = resolveKeymap({})
     for (const preset of PRESETS) {
       if (preset.id === 'default') continue
       expect([preset.id, resolveKeymap(preset.bindings)]).not.toEqual([preset.id, defaults])
+    }
+  })
+
+  it('has no two presets that resolve to the same keymap', () => {
+    // The half the assertion above cannot make. Comparing every preset against
+    // the *defaults* leaves two buttons free to be identical to each other,
+    // which is the shape a duplicate would actually ship in — Cursor is a VS
+    // Code fork, and everything it does not rebind it inherits.
+    const seen = new Map<string, string>()
+    for (const preset of PRESETS) {
+      const resolved = JSON.stringify(resolveKeymap(preset.bindings))
+      expect([preset.id, seen.get(resolved)]).toEqual([preset.id, undefined])
+      seen.set(resolved, preset.id)
+    }
+  })
+
+  it('keeps Cursor off the prefix its inline edit spends', () => {
+    // The whole reason this is not the VS Code preset under another name.
+    // Cursor binds Ctrl+K to inline edit and moved the chord leader to Ctrl+M,
+    // so a preset reusing Ctrl+K would be reproducing VS Code, not Cursor.
+    const bindings = findPreset('cursor')!.bindings
+    expect(bindings['panel:splitDown']).toBe('CmdOrCtrl+M CmdOrCtrl+\\')
+    expect(bindings['app:shortcuts']).toBe('CmdOrCtrl+M CmdOrCtrl+S')
+    for (const [id, binding] of Object.entries(bindings)) {
+      expect([id, bindingStrokes(binding ?? '')[0]]).not.toEqual([id, 'CmdOrCtrl+K'])
     }
   })
 })
