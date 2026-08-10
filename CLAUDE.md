@@ -555,6 +555,12 @@ check can only gate it from inside the same run. It has no `paths` filter, which
 is what makes it requirable: a skipped check never reports, so a filtered workflow
 can never be a required status check.
 
+**It has no base-branch filter either, and that is the same rule.** `branches:`
+under `pull_request` matches the *base*, so `[main]` silently excludes every
+stacked PR — nothing runs, the required checks never report, and the only way to
+land it is to bypass the ruleset. `audit.yml` keeps its filters on purpose: it is
+advisory and gates nothing.
+
 **A `workflow_call` renames the check to `<caller job> / <called job>`**, and the
 two-part name cannot be flattened. Moving a job into a reusable workflow means
 updating the ruleset in the same breath, or every PR blocks on a check that will

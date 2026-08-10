@@ -19,8 +19,14 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  # No base filter, for the same reason there is no paths filter. `branches:` on
+  # a pull_request matches the *base*, so pinning it to main means a PR stacked
+  # on another branch — the normal way to review a fix that sits on top of a
+  # revert — triggers nothing at all, and every required check stays unreported
+  # forever. That reads as CI being broken and can only be resolved by bypassing
+  # the ruleset. A run against the wrong base costs one build; a check that can
+  # never report costs the branch protection.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
