@@ -34,6 +34,7 @@ const build = (over: Partial<MenuTemplateOptions> = {}): MenuItemConstructorOpti
     keymap: resolveKeymap({}),
     dispatch: vi.fn(),
     dataActions: dataActions(),
+    shellActions: vi.fn(),
     platform: 'win32',
     appName: 'Digital DM Screen',
     ...over
@@ -248,6 +249,90 @@ describe('the accelerator column', () => {
       ])
     )
     expect(JSON.stringify(build())).not.toContain('"Escape"')
+  })
+})
+
+describe('the strokes Electron’s own roles hold', () => {
+  const view = (over: Partial<MenuTemplateOptions> = {}): MenuItemConstructorOptions[] =>
+    menu(build(over), '&View')
+
+  it('leaves every role alone while the keymap wants none of their keys', () => {
+    // The case almost everyone is in, and the one that must not move: with
+    // nothing bound on Ctrl+R and friends, the View menu is exactly what
+    // Electron builds — roles, with the labels and behaviour they carry.
+    expect(roles(view())).toEqual(
+      expect.arrayContaining([
+        'reload',
+        'forceReload',
+        'toggleDevTools',
+        'resetZoom',
+        'zoomIn',
+        'zoomOut',
+        'togglefullscreen'
+      ])
+    )
+    expect(view().every((entry) => entry.role !== 'reload' || !entry.click)).toBe(true)
+  })
+
+  it('hands a role’s stroke over when a binding wants it', () => {
+    // The bug. `role: 'reload'` registers CmdOrCtrl+R, which is not a catalogue
+    // action, so nothing in `findConflict` could see it — a user bound Ctrl+R,
+    // the editor said it was bound, and Reload ate the key every time. A role
+    // cannot be told to drop its accelerator, so it stops being a role.
+    const shellActions = vi.fn()
+    const keymap = resolveKeymap({ 'layout:save': 'CmdOrCtrl+R' })
+    const reload = byLabel(view({ keymap, shellActions }), 'Reload')
+
+    expect(reload?.role).toBeUndefined()
+    expect(reload?.accelerator).toBeUndefined()
+    activate(reload)
+    expect(shellActions).toHaveBeenCalledWith('reload')
+
+    // Only the contested one. Everything beside it is still a role — and a role
+    // carries no label of its own here, so it is found by role or not at all.
+    expect(roles(view({ keymap }))).toContain('forceReload')
+    expect(roles(view({ keymap }))).not.toContain('reload')
+  })
+
+  it('reads the role’s key in the platform’s spelling, not ours', () => {
+    // A role writes `Alt+Command+I` and a recorded chord writes
+    // `CmdOrCtrl+Alt+I`. Same key, different strings — comparing them raw finds
+    // nothing, and the binding goes on being eaten.
+    const keymap = resolveKeymap({ 'layout:save': 'CmdOrCtrl+Alt+I' })
+    expect(roles(menu(mac({ keymap }), 'View'))).not.toContain('toggleDevTools')
+    expect(byLabel(menu(mac({ keymap }), 'View'), 'Toggle Developer Tools')).toBeDefined()
+    // The same binding on Windows is Ctrl+Alt+I, which no role holds there.
+    expect(roles(view({ keymap }))).toContain('toggleDevTools')
+  })
+
+  it('counts the second stroke of a sequence too', () => {
+    // A role fires whether or not a prefix is pending, so `Ctrl+K Ctrl+R` loses
+    // its tail to Reload exactly the way a first stroke would. Same reason
+    // `checkBinding` treats every stroke as reserved.
+    const keymap = resolveKeymap({ 'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+R' })
+    expect(byLabel(view({ keymap }), 'Reload')?.role).toBeUndefined()
+  })
+
+  it('keeps the stock Window menu on macOS until Cmd+M is wanted', () => {
+    // Expanding it costs the OS's own window handling, so it only happens for a
+    // user who has actually asked for the key.
+    expect(mac()[6].role).toBe('windowMenu')
+
+    const keymap = resolveKeymap({ 'layout:save': 'CmdOrCtrl+M' })
+    const windowMenu = mac({ keymap })[6]
+    expect(windowMenu.role).toBeUndefined()
+    expect(windowMenu.label).toBe('Window')
+    expect(roles(items(windowMenu))).toEqual([undefined, 'zoom', undefined, 'front'])
+    expect(byLabel(items(windowMenu), 'Minimize')?.accelerator).toBeUndefined()
+  })
+
+  it('leaves the Window menu out entirely off macOS, key or no key', () => {
+    // `minimize` only collides where the window menu exists, and it is macOS
+    // only here — Ctrl+M is free on Windows and Linux, which is the whole reason
+    // the two platforms differ.
+    const keymap = resolveKeymap({ 'layout:save': 'CmdOrCtrl+M' })
+    expect(build({ keymap }).some((entry) => entry.label === 'Window')).toBe(false)
+    expect(byLabel(menu(build({ keymap }), '&Layout'), 'Save')?.accelerator).toBe('CmdOrCtrl+M')
   })
 })
 

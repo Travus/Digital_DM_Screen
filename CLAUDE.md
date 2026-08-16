@@ -129,6 +129,23 @@ and never match. `code` also keeps a chord put on a non-US layout.
 only because the OS routes them through the menu; shadowing one kills copy and
 paste app-wide. Reserved in all three spellings of the primary modifier.
 
+**Electron's other roles hold keys too, and the keymap cannot see them.**
+`reload` is `CmdOrCtrl+R`, `minimize` is `CmdOrCtrl+M`, and the zoom, devtools
+and fullscreen roles hold theirs; none is a catalogue action, so `findConflict`
+passes a binding the role then eats. They give the stroke up instead — the same
+bargain `rendererSingles` already makes one rung up. A role **cannot** be told to
+drop its accelerator, so `shellItem` in `menuTemplate.ts` turns it into a plain
+row calling `shellActions`, and `menu.ts` performs what the role would have.
+`ROLE_ACCELERATORS` is copied from Electron's `menu-item-roles.ts`; compare
+through `formatAccelerator`, because a role writes `Alt+Command+I` where a
+recording writes `CmdOrCtrl+Alt+I`. Both strokes of a sequence count, since a
+role fires with a prefix pending.
+
+**Nothing changes for a keymap that wants none of those keys**, which is nearly
+every keymap — the rows stay roles. On macOS, freeing `Cmd+M` means writing out
+`role: 'windowMenu'`, which costs the OS's own window handling, so that one is
+expanded only when the stroke is actually claimed.
+
 **Escape belongs to the renderer.** A menu accelerator for Escape swallows the key
 app-wide, including inside text fields. It is handled by a `keydown` listener in
 `App.tsx` — a five-rung chain (cancel a pending chord, close the palette, the
@@ -192,14 +209,13 @@ tool's name and guessing at its bindings is worse than not shipping it.
 the menu owns the prefix and no sequence starts. A test resolves each preset and
 runs every binding through `findConflict`.
 
-**A menu *role* owns its stroke, and nothing in the keymap can see that.**
-`role: 'reload'` registers `CmdOrCtrl+R` on every platform, and macOS's
-`role: 'windowMenu'` registers `CmdOrCtrl+M` for Minimize. Neither is a catalogue
-action, so `findConflict` passes a binding on those strokes and it then never
-fires — the menu accelerator gets the key first. This is why Cursor has no
-preset: its leader is `Ctrl+M` on Windows and Linux and `Cmd+R` on macOS, both of
-those are taken here, and a keymap entry is one chord for all platforms so the
-split cannot be spelled either way round.
+**Cursor has no preset, and "it is a VS Code fork" is not the reason.** It moved
+its chord leader off `Ctrl+K` — to `Ctrl+M` on Windows and Linux, `Cmd+R` on
+macOS. A keymap entry is one chord for all platforms, so that split cannot be
+spelled: `CmdOrCtrl+M` is exact on two platforms and a stand-in on the third, and
+a preset wearing a tool's name should be that tool's keymap. The strokes
+themselves are reachable now that the roles hand them over, so this is a
+judgement about fidelity rather than a blocker.
 
 **Two presets must differ from each other, not just from the defaults.** The test
 that claimed this only ever compared each preset against the shipped keymap,
@@ -538,6 +554,12 @@ others: `render-check.yml` and `build-installers.yml`.
 check can only gate it from inside the same run. It has no `paths` filter, which
 is what makes it requirable: a skipped check never reports, so a filtered workflow
 can never be a required status check.
+
+**It has no base-branch filter either, and that is the same rule.** `branches:`
+under `pull_request` matches the *base*, so `[main]` silently excludes every
+stacked PR — nothing runs, the required checks never report, and the only way to
+land it is to bypass the ruleset. `audit.yml` keeps its filters on purpose: it is
+advisory and gates nothing.
 
 **A `workflow_call` renames the check to `<caller job> / <called job>`**, and the
 two-part name cannot be flattened. Moving a job into a reusable workflow means

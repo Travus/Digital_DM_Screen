@@ -15,10 +15,71 @@
 import { basename } from 'node:path'
 import type { MenuItemConstructorOptions } from 'electron'
 import type { DataSnapshot, Dataset, MenuAction, RecentEntry } from '../shared/types'
-import { isChordBinding, isValidBinding } from '../shared/accelerator'
+import {
+  bindingStrokes,
+  formatAccelerator,
+  isChordBinding,
+  isValidBinding
+} from '../shared/accelerator'
 import { rendererSingles, type ActionId, type ResolvedKeymap } from '../shared/actions'
 
 export type MenuDispatch = (action: MenuAction, payload?: string) => void
+
+/**
+ * Roles on this menu that register an accelerator of their own.
+ *
+ * Electron hands each of these a key, and none of them is a catalogue action —
+ * so `findConflict` cannot see them. A user binding `CmdOrCtrl+R` gets a chord
+ * the editor accepts, the palette prints, and Reload then eats before the page
+ * is ever asked. That is the same failure as a sequence losing its opening
+ * stroke to a menu accelerator, one layer down, and it takes the same answer:
+ * **the menu gives the stroke up.**
+ *
+ * It has to give up being a *role* to do it. An item with a role carries either
+ * the role's key or one you name; there is no way to say "no accelerator". So a
+ * role whose key the keymap wants becomes a plain item that calls `shellActions`
+ * — which is why that callback exists at all.
+ */
+export type ShellRole =
+  | 'reload'
+  | 'forceReload'
+  | 'toggleDevTools'
+  | 'resetZoom'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'togglefullscreen'
+  | 'minimize'
+
+/** What Electron performs for a role that has stopped being one. */
+export type ShellActions = (role: ShellRole) => void
+
+/**
+ * Electron's own defaults, copied from `lib/browser/api/menu-item-roles.ts`
+ * rather than remembered — the spellings differ from ours (`CommandOrControl`,
+ * `Command`) and are normalised before anything is compared to them.
+ */
+const ROLE_ACCELERATORS: Record<ShellRole, (isMac: boolean) => string> = {
+  reload: () => 'CmdOrCtrl+R',
+  forceReload: () => 'Shift+CmdOrCtrl+R',
+  toggleDevTools: (isMac) => (isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I'),
+  resetZoom: () => 'CommandOrControl+0',
+  zoomIn: () => 'CommandOrControl+Plus',
+  zoomOut: () => 'CommandOrControl+-',
+  togglefullscreen: (isMac) => (isMac ? 'Control+Command+F' : 'F11'),
+  minimize: () => 'CommandOrControl+M'
+}
+
+/** The label the role would have shown, for the item that replaces it. */
+const ROLE_LABELS: Record<ShellRole, string> = {
+  reload: 'Reload',
+  forceReload: 'Force Reload',
+  toggleDevTools: 'Toggle Developer Tools',
+  resetZoom: 'Actual Size',
+  zoomIn: 'Zoom In',
+  zoomOut: 'Zoom Out',
+  togglefullscreen: 'Toggle Full Screen',
+  minimize: 'Minimize'
+}
 
 /**
  * Data commands run in the main process rather than being dispatched to the
@@ -38,6 +99,8 @@ export interface MenuTemplateOptions {
   keymap: ResolvedKeymap
   dispatch: MenuDispatch
   dataActions: DataActions
+  /** Runs what a role would have done, for a role that had to give up its key. */
+  shellActions: ShellActions
   /** `process.platform` in the app. */
   platform: string
   /** `app.getName()`, which the About items and the macOS app menu are named for. */
@@ -67,11 +130,44 @@ export function menuTemplate({
   keymap,
   dispatch,
   dataActions,
+  shellActions,
   platform,
   appName
 }: MenuTemplateOptions): MenuItemConstructorOptions[] {
   const send = (action: MenuAction) => () => dispatch(action)
   const isMac = platform === 'darwin'
+
+  /*
+   * Every stroke the keymap spends, either half of either kind of binding, in
+   * the platform's own spelling — a role's key and a recorded chord write the
+   * primary modifier differently (`Command`, `CommandOrControl`, `CmdOrCtrl`),
+   * so they are only comparable once resolved.
+   *
+   * Both halves, because a role fires whether or not a prefix is pending. That
+   * is the same reason `checkBinding` treats every stroke as reserved rather
+   * than only the first.
+   */
+  const claimed = new Set(
+    Object.values(keymap).flatMap((binding) =>
+      binding ? bindingStrokes(binding).map((stroke) => formatAccelerator(stroke, platform)) : []
+    )
+  )
+
+  const wants = (role: ShellRole): boolean =>
+    claimed.has(formatAccelerator(ROLE_ACCELERATORS[role](isMac), platform))
+
+  /**
+   * A role, unless the keymap wants its key — in which case the same row, doing
+   * the same thing, with nothing registered.
+   *
+   * The common case is untouched: with no binding on any of these strokes every
+   * one of them is still a plain role, which is what keeps the ordinary menu
+   * exactly as Electron builds it.
+   */
+  const shellItem = (role: ShellRole, label?: string): MenuItemConstructorOptions => {
+    if (!wants(role)) return label ? { role, label } : { role }
+    return { label: label ?? ROLE_LABELS[role], click: () => shellActions(role) }
+  }
 
   // Strokes the menu must not register, because a sequence needs the renderer to
   // see them. Computed once from the same keymap the renderer reads, so the two
@@ -199,7 +295,33 @@ export function menuTemplate({
     ? []
     : [{ type: 'separator' }, { ...quit, role: 'quit' }]
   const macPasteItems: MenuItemConstructorOptions[] = isMac ? [{ role: 'pasteAndMatchStyle' }] : []
-  const macWindowMenu: MenuItemConstructorOptions[] = isMac ? [{ role: 'windowMenu' }] : []
+  /*
+   * `role: 'windowMenu'` is a whole submenu, and Minimize inside it holds
+   * `Cmd+M`. Freeing that stroke means writing the submenu out — Electron's own
+   * composition, which on macOS is minimize, zoom, separator, front.
+   *
+   * Only when the stroke is actually wanted. Expanding it unconditionally would
+   * trade the OS's window handling for nothing: a plain submenu is not
+   * registered as the application's Window menu, so the system stops listing
+   * open windows in it. One window is all this app has, which is what makes that
+   * an acceptable price for a key the user asked for — and no price at all for
+   * everyone who never binds it.
+   */
+  const macWindowMenu: MenuItemConstructorOptions[] = !isMac
+    ? []
+    : wants('minimize')
+      ? [
+          {
+            label: 'Window',
+            submenu: [
+              shellItem('minimize'),
+              { role: 'zoom' },
+              { type: 'separator' },
+              { role: 'front' }
+            ]
+          }
+        ]
+      : [{ role: 'windowMenu' }]
   const helpMenu: MenuItemConstructorOptions[] = [
     {
       label: isMac ? 'Help' : '&Help',
@@ -314,15 +436,15 @@ export function menuTemplate({
           click: send('view:toggleSidebar')
         },
         { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        shellItem('reload'),
+        shellItem('forceReload'),
+        shellItem('toggleDevTools'),
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        shellItem('resetZoom'),
+        shellItem('zoomIn'),
+        shellItem('zoomOut'),
         { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Window Fullscreen' }
+        shellItem('togglefullscreen', 'Window Fullscreen')
       ]
     },
     ...macWindowMenu,

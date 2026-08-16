@@ -455,6 +455,21 @@ const shots = [
       text: ['Ctrl+K Ctrl+\\', 'Ctrl+K Ctrl+S', 'Ctrl+S']
     }
   },
+  // A keymap that wants a key one of Electron's own roles holds. Reload ships on
+  // Ctrl+R, which nothing in the catalogue knows about, so the menu has to hand
+  // the stroke over instead of registering it twice. Also the shot that catches
+  // the row it builds by hand being malformed — `buildFromTemplate` throws on
+  // one, and a throw there is an app with no menu, so no way back to the editor.
+  {
+    name: 'shortcuts-role-stroke',
+    layout: starter,
+    keys: { 'layout:save': 'CmdOrCtrl+R' },
+    menu: 'app:shortcuts',
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+R']
+    }
+  },
   // A preset applied through its own button rather than by seeding the bindings
   // it is supposed to produce — the shot that covers the preset list actually
   // being wired to the keymap, which seeding a keybindings.json cannot show.
