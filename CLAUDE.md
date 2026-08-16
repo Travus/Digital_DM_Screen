@@ -50,6 +50,8 @@ on screen; whether it *looks right* is still eyes only.
   fullscreen and the settings drawer all come from the host.
 - `src/renderer/src/components/ReferenceList.tsx` — the shared searchable card
   list behind Conditions, Player Abilities and Diseases.
+- `src/renderer/src/components/MarkupText.tsx`, `MarkupTextarea.tsx` and
+  `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
 
 The layout is an n-ary tree: a `split` holds any number of children in a row or
 column, with `sizes` as flex weights; a `panel` leaf points at an entry in
@@ -105,6 +107,86 @@ an element at `opacity: 0` still takes every click aimed at what is behind it.
 The timers in `App.tsx` and the transition in `styles.css` are two halves of one
 duration and have to agree.
 
+## Rich text
+
+Bold and italic in Table cells and Notes. `lib/markup.ts` is the one parser and
+`lib/grid.ts` the one clipboard format; both are pure and unit-tested.
+
+**Markdown markers are the stored form, never HTML.** A cell holds `**bold**`.
+That keeps a `.dmscreen` readable, lets a cell survive being copied into any
+other program as text, and is what lets the Notes editor stay a real `<textarea>`
+— native undo, spellcheck, IME and caret all come free, and none of them survives
+a contentEditable rewrite.
+
+**Markers are matched as runs, not characters.** One star is italic, two bold,
+three both, and a run closes only on a run of its own width. Scanning character
+by character, a single `*` closes against the first half of a `**` and
+`***both***` orphans its third star. An unpaired run stays literal, so `2 * 3` is
+arithmetic.
+
+**`parseMarkup` returns spans covering every character**, each flagged as marker
+or content, because the surfaces need different halves at different times.
+
+**Markers are shown only while the field they are in has focus.** That is one
+rule, and both modules follow it. The constraint that forces markers to stay —
+the mirror lying under a live caret, where anything that stops occupying width
+slides the rest of the line out from under it — binds exactly while there is a
+caret aimed at a character, and not otherwise. Unfocused, the markers go and the
+text reads as finished. A table cell reaches this with CSS (`:focus +
+.cell-render`), Notes with a `focused` state, because a mirror's *content*
+changes rather than its visibility.
+
+**The Notes editor is a mirror, and its metrics are load-bearing.** A styled
+`<div>` sits under a textarea whose own text is transparent. Every property
+deciding where a glyph lands has to match: font, size, line height, padding,
+border width, letter spacing, tab size, wrapping. Both halves take the caller's
+class (`.notes-area`) so those are declared once, and `styles.css` adds only the
+differences. The mirror has no scrollbar; it is dragged along by hand.
+
+**Those overrides are scoped under `.markup-editor` on purpose.** The caller's
+class is a plain one too, so a bare `.markup-input` ties with `.notes-area` on
+specificity and loses to whichever `styles.css` declares later — which is exactly
+how the textarea kept opaque text and hid the mirror entirely. Do not flatten
+those selectors.
+
+Only cells that actually carry a marker get the overlay — `hasMarkup` is a hint,
+and a false positive costs a no-op layer.
+
+**Row shading and the selection tint are different CSS properties on purpose.**
+Shading sets `background-color`; the block-selection tint is a flat
+`background-image` gradient layered over it. They composed as one property
+before, and the shading rule both outranked the selection rule on specificity and
+reset its image via the `background` shorthand — so every shaded row swallowed
+the highlight and looked unselected. Keep them on separate properties rather than
+racing their selectors.
+
+**Tab and Enter move between cells, and both grow the table.** Enter steps down a
+column, Tab across a row and on to the next; running off the bottom appends a row
+rather than doing nothing, because the last cell is where a table is always being
+extended from. The row's remove button is `tabIndex={-1}` — it sits between the
+last cell of one row and the first of the next in DOM order, so leaving it in the
+ring would put it in the middle of every row transition. Shift+arrows extend a
+block, which is what keeps copying a column reachable without a mouse.
+
+**The cell to focus goes through a ref, not a direct call.** Both keys may land
+on a row that does not exist yet, and the input cannot be focused until the
+render that creates it. The layout effect leaves the request standing when the
+cell is not there — adding a row and moving the selection are two updates, and
+nothing guarantees they land in one render, so clearing it on the first would
+drop the focus on the floor.
+
+**Selection is restored by hand after a toggle.** `toggleMark` inserts characters
+before the caret, so React re-rendering with the new value would leave the
+selection wherever the old offsets land — usually the end. `useMarkupKeys` parks
+the new range in a ref and applies it in a layout effect, the first moment the
+DOM holds the text those offsets are measured against.
+
+**Clipboard blocks are TSV**, because that is what a spreadsheet reads and
+writes. Pasting grows the table rather than clipping: the shape of a copied block
+is what the DM meant, and dropping the overhang loses data with nothing on screen
+to say so. A cell can never hold a newline, so `parseGrid` folds one carried in by
+a quoted field into a space rather than letting one row silently become two.
+
 ## Keybindings
 
 `src/shared/actions.ts` is the catalogue: one entry per command with its default
@@ -157,6 +239,14 @@ is contextual and a keymap entry cannot express it.
 `isBareEscape` test to stay agreed on that — the dismiss chain ignores a modified
 Escape, and the chord dispatcher stops skipping it. Guard only one of them and
 `CmdOrCtrl+K CmdOrCtrl+Escape` validates, shows in the editor, and never fires.
+
+**`Ctrl+B` and `Ctrl+I` are text editing, and the menu must not take them.** The
+Table and Notes modules read them as bold and italic, and a menu accelerator
+beats the renderer — so binding either to a command makes that formatting
+unreachable in every text field, not merely inconvenient. This is why
+`data:importPack` moved off `CmdOrCtrl+I`. Neither stroke is *reserved*: the tmux
+preset uses `Ctrl+B` as its chord leader, and a keymap the user picked
+deliberately is allowed to spend it.
 
 **`Ctrl+X` is reserved on macOS too**, where Cut is `Cmd+X` and it would in fact
 be free. Deliberately blunt: freeing it only on Darwin makes one
@@ -415,6 +505,7 @@ paths distinct.
 - `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
+- `select` — `{ selector, start, end }`, for behaviour that acts on selected text
 - `steps` — those four as an ordered list, for a shot that needs two of a kind
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
@@ -423,7 +514,8 @@ paths distinct.
 **The shorthand fields are sugar for `steps`, desugared in the driver.** There is
 one executor in `src/main/index.ts` and one list for it to read, so the two
 spellings cannot come to mean different things — `menu`, `click`, `press`, `type`,
-`hover` are one step each in that fixed order, which is what most shots want.
+`select`, `hover` are one step each in that fixed order, which is what most shots
+want.
 Declaring both is refused rather than merged: a shot writing `steps` has an order
 in mind, and prepending a shorthand field to it would put a click somewhere
 nobody wrote. Steps also take `wait` for a mid-sequence dwell.
@@ -466,7 +558,15 @@ else, which put the action palette's own arrow keys beyond the harness entirely.
 
 `type` writes through the **native value setter**, not `el.value`. React keeps a
 tracker on the node holding the last value it wrote; a plain assignment leaves the
-tracker agreeing with the DOM, so React discards the change event as a no-op.
+tracker agreeing with the DOM, so React discards the change event as a no-op. The
+prototype that setter comes off is **read from the element**: calling an input's
+setter on a textarea throws `Illegal invocation`, which put every textarea out of
+the harness's reach.
+
+**`select` exists because a synthetic `Ctrl+A` selects nothing.** A dispatched
+KeyboardEvent performs no default action, and `type` leaves the caret at the end,
+so nothing acting on a selection — Ctrl+B and Ctrl+I over a word — could be
+driven at all. It sets the range directly.
 
 **Build before you smoke, or you are photographing the last build.** It launches
 `out/`, not `src/`.

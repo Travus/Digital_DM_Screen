@@ -1,3 +1,5 @@
+import { MarkupTextarea } from '../components/MarkupTextarea'
+import { stripMarkup } from '../lib/markup'
 import { defineModule, type ModuleProps } from './types'
 
 interface State {
@@ -11,19 +13,21 @@ interface Settings {
 }
 
 function Notes({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
-  const words = state.text.trim() ? state.text.trim().split(/\s+/).length : 0
+  // Count what the note says, not what marks it up: `**duke**` is one word.
+  const plain = stripMarkup(state.text).trim()
+  const words = plain ? plain.split(/\s+/).length : 0
 
   return (
     <div className="stack fill">
-      <textarea
+      <MarkupTextarea
         className={`notes-area ${settings.monospace ? 'mono' : ''}`}
         style={{ fontSize: `${settings.fontSize}px` }}
         spellCheck={settings.spellcheck}
         placeholder="Session notes, NPC names you just improvised, that plot thread you keep forgetting…"
         value={state.text}
-        onChange={(event) => setState({ text: event.target.value })}
+        onChange={(text) => setState({ text })}
       />
-      <div className="note right">{words} words</div>
+      <div className="note right">Ctrl+B bold · Ctrl+I italic · {words} words</div>
     </div>
   )
 }

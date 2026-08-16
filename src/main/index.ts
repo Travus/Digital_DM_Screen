@@ -155,6 +155,7 @@ interface SmokeStep {
   click?: string
   press?: Record<string, unknown>
   type?: { selector: string; text: string }
+  select?: { selector: string; start: number; end: number }
   hover?: string
   wait?: number
 }
@@ -238,15 +239,38 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
         const { selector, text } = ${JSON.stringify(step.type)}
         const el = document.querySelector(selector)
         if (!el) return false
-        const setter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype, 'value'
-        ).set
-        setter.call(el, text)
+        // The prototype is taken from the element, not assumed to be
+        // HTMLInputElement: calling an input's setter on a textarea throws
+        // "Illegal invocation", which put every textarea beyond this step.
+        const proto =
+          el instanceof window.HTMLTextAreaElement
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype
+        Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, text)
         el.dispatchEvent(new Event('input', { bubbles: true }))
         return true
       })()`
     )) as boolean
     if (!typed) console.log(`[renderer:error] nothing to type into: ${step.type.selector}`)
+    return wait(400)
+  }
+
+  // Put a selection range on a field. `type` leaves the caret at the end and a
+  // synthetic Ctrl+A performs no default action, so without this there was no
+  // way to reach any behaviour that acts on selected text — Ctrl+B and Ctrl+I
+  // over a word being the ones that need it.
+  if (step.select !== undefined) {
+    const selected = (await window.webContents.executeJavaScript(
+      `(() => {
+        const { selector, start, end } = ${JSON.stringify(step.select)}
+        const el = document.querySelector(selector)
+        if (!el) return false
+        el.focus()
+        el.setSelectionRange(start, end)
+        return true
+      })()`
+    )) as boolean
+    if (!selected) console.log(`[renderer:error] nothing to select in: ${step.select.selector}`)
     return wait(400)
   }
 

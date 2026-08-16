@@ -8,6 +8,7 @@ import { namesModule } from './NamesModule'
 import { notesModule } from './NotesModule'
 import { partyModule } from './PartyModule'
 import { rulesModule } from './RulesModule'
+import { tableModule } from './TableModule'
 import { tablesModule } from './TablesModule'
 import { timerModule } from './TimerModule'
 import { trackersModule } from './TrackersModule'
@@ -22,6 +23,7 @@ export const MODULES: AnyModule[] = [
   initiativeModule,
   trackersModule,
   notesModule,
+  tableModule,
   diceModule,
   bigDiceModule,
   tablesModule,

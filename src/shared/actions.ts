@@ -261,7 +261,12 @@ export const ACTIONS: readonly ActionDef[] = [
     id: 'data:importPack',
     label: 'Import data pack',
     category: 'Data',
-    defaultAccelerator: 'CmdOrCtrl+I'
+    // Not CmdOrCtrl+I, which it used to hold. The Table and Notes modules read
+    // Ctrl+B and Ctrl+I as bold and italic, and a menu accelerator beats the
+    // renderer — so leaving import here would have made italic unreachable in
+    // every text field rather than merely inconvenient. Import is reached from
+    // the Data menu and the palette; italic has nowhere else to go.
+    defaultAccelerator: 'CmdOrCtrl+Shift+D'
   },
   {
     id: 'data:reloadPacks',
