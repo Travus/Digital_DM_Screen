@@ -58,6 +58,17 @@ describe('what may be bound', () => {
     expect(checkAccelerator('F2')).toBeNull()
   })
 
+  it('allows Shift+Escape — Escape types nothing, so the Shift rule has nothing to protect', () => {
+    expect(checkAccelerator('Shift+Escape')).toBeNull()
+  })
+
+  it('keeps the other named keys behind a real modifier', () => {
+    // The exemption is Escape, not "named keys": Shift+Home is selection and
+    // Shift+Tab is navigation in every text field.
+    expect(checkAccelerator('Shift+Home')).toBe('no-modifier')
+    expect(checkAccelerator('Shift+Tab')).toBe('no-modifier')
+  })
+
   it('reserves the Edit roles in every spelling of the primary modifier', () => {
     for (const chord of ['CmdOrCtrl+C', 'Cmd+V', 'Ctrl+X', 'CmdOrCtrl+A', 'Cmd+Z']) {
       expect(checkAccelerator(chord)).toBe('reserved')

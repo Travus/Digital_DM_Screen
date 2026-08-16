@@ -41,6 +41,18 @@ const MODIFIER_ALIASES: Record<string, Modifier> = {
  */
 const REAL_MODIFIERS: readonly Modifier[] = ['Super', 'CmdOrCtrl', 'Cmd', 'Ctrl', 'Alt', 'AltGr']
 
+/**
+ * Keys safe to bind without a real modifier, because typing cannot produce
+ * them: the function keys — F2 renames the layout today — and Escape, which
+ * types no character, so Zed's `Shift+Escape` zoom cannot fire mid-word the
+ * way `Shift+A` would. Bare Escape never gets this far — it is reserved before
+ * the modifier check runs. The other named keys stay behind a modifier on
+ * purpose: `Shift+Home` is selection and `Shift+Tab` is navigation, which a
+ * binding would steal from every text field.
+ */
+const safeWithoutModifier = (key: string): boolean =>
+  key === 'Escape' || /^F([1-9]|1\d|2[0-4])$/.test(key)
+
 const NAMED_KEYS = [
   'Space',
   'Tab',
@@ -201,11 +213,8 @@ export function checkAccelerator(accelerator: string): AcceleratorProblem | null
   if (isBareEscape(parsed)) return 'reserved'
   if (RESERVED.has(formatParsed(parsed))) return 'reserved'
 
-  // Function keys are the one safe bare binding — F2 renames the layout today,
-  // and nothing types an F-key into a text field.
-  const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(parsed.key)
   const hasRealModifier = parsed.modifiers.some((modifier) => REAL_MODIFIERS.includes(modifier))
-  if (!isFunctionKey && !hasRealModifier) return 'no-modifier'
+  if (!safeWithoutModifier(parsed.key) && !hasRealModifier) return 'no-modifier'
 
   return null
 }
@@ -386,9 +395,8 @@ export function checkBinding(binding: string): BindingProblem | null {
     if (isBareEscape(parsed) || RESERVED.has(formatParsed(parsed))) return 'reserved'
 
     if (index === 0) {
-      const isFunctionKey = /^F([1-9]|1\d|2[0-4])$/.test(parsed.key)
       const hasRealModifier = parsed.modifiers.some((modifier) => REAL_MODIFIERS.includes(modifier))
-      if (!isFunctionKey && !hasRealModifier) return 'no-modifier'
+      if (!safeWithoutModifier(parsed.key) && !hasRealModifier) return 'no-modifier'
     }
   }
 

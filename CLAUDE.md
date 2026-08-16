@@ -190,7 +190,10 @@ nothing else. This is what makes the VS Code, Zed and Sublime keymaps expressibl
 
 **Only the first stroke needs a modifier; the second may be bare.** That is the
 feature — `C-w v` finishes on a plain key. It stays safe because a sequence can
-only *begin* on a modified stroke, so ordinary typing cannot open one.
+only *begin* on a stroke typing cannot produce: a modified stroke, or one of the
+`safeWithoutModifier` keys — F-keys and Escape — that type no character. The
+Escape half is what lets Zed's `Shift+Escape` zoom bind; only *bare* Escape is
+reserved.
 
 **Emacs cannot have its own prefix.** `C-x` is Cut, handled by Chromium in any
 editable field on Windows and Linux whatever the menu does.
