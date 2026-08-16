@@ -804,6 +804,205 @@ const shots = [
     // `resolve()` is total, so the app renders — and has to say so rather than
     // failing silently to a normal-looking screen.
     expect: ['.panel', '.data-status', '.data-status-warn']
+  },
+  // The Table module straight from the picker: header row and shading are both
+  // on by default, so this is also the shot that says the defaults arrived.
+  {
+    name: 'table-module',
+    layout: null,
+    click: '.picker-card[data-module-id="table"]',
+    expect: ['.data-table.shaded', '.data-table thead', '.data-table .th-input']
+  },
+  // Formatting rendered in cells. The markers must be gone from the visible
+  // text while the state still holds them — `missing` on `.mk-mark` is what
+  // separates "renders bold" from "renders bold and leaves the stars behind",
+  // which look identical in a screenshot of a wide-enough column.
+  {
+    name: 'table-markup',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.state = {
+        columns: [
+          { id: 'col_a', label: 'Name', width: 160, align: 'left' },
+          { id: 'col_b', label: 'Owed', width: 110, align: 'right' }
+        ],
+        rows: [
+          { id: 'row_1', cells: { col_a: '**Sera Voll**', col_b: '*120 gp*' } },
+          { id: 'row_2', cells: { col_a: 'Brother Anselm', col_b: '0 gp' } }
+        ]
+      }
+    },
+    expect: {
+      found: ['.data-table', '.cell-markup.rich .cell-render .mk-b', '.cell-render .mk-i'],
+      // A cell drops its markers; only the Notes mirror keeps them.
+      missing: ['.cell-render .mk-mark'],
+      text: ['Sera Voll', '120 gp']
+    }
+  },
+  // Header row off. The thead goes entirely rather than emptying, so the first
+  // data row is against the top of the panel.
+  {
+    name: 'table-no-header',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.settings = { headerRow: false, shadedRows: false, compact: false }
+    },
+    expect: { found: ['.data-table', '.data-table tbody'], missing: ['.data-table thead'] }
+  },
+  // Column config in the settings drawer, which is the only route to renaming or
+  // realigning a column once the header row is off. Fullscreened first so the
+  // drawer has room, the same way `party-settings` does it.
+  {
+    name: 'table-settings',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.settings = { headerRow: false, shadedRows: true, compact: false }
+    },
+    click: [
+      '.panel:has(.data-table) .icon-btn[title^="Fullscreen"]',
+      '.panel:has(.data-table) .icon-btn[title="Panel settings"]'
+    ].join('\n'),
+    expect: {
+      found: ['.panel-settings', '.panel-settings .field-row .input'],
+      text: ['Header row', 'Shade alternate rows', 'Columns']
+    }
+  },
+  // The Notes mirror with the caret in it. Both halves have to be visible at
+  // once: `.mk-b` says the overlay rendered, `.mk-mark` says the markers are
+  // there holding their width — drop them while focused and every later
+  // character on the line slides out from under the caret. The click is what
+  // makes this the focused case; `notes-markup-blurred` is the other one.
+  {
+    name: 'notes-markup',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'notes'
+      doc.panels.panel_ref.state = {
+        text: 'The **duke** is *lying* about the crypt.\nAsk **Sera** what she saw.'
+      }
+    },
+    click: '.markup-input',
+    expect: {
+      found: ['.markup-editor', '.markup-mirror .mk-b', '.markup-mirror .mk-i', '.mk-mark'],
+      text: ['duke', 'lying']
+    }
+  },
+  // Ctrl+B over a selection, driven through the real textarea rather than seeded.
+  // This is the only shot that exercises `useMarkupKeys` — the selection restore
+  // in particular, which nothing else would catch until a DM lost their caret
+  // mid-sentence. `press` dispatches at the focused element, so the React
+  // onKeyDown on the textarea is on the path.
+  {
+    name: 'notes-bold-key',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'notes'
+      doc.panels.panel_ref.state = { text: 'the duke lies' }
+    },
+    steps: [
+      // "duke" is characters 4 to 8 of "the duke lies".
+      { select: { selector: '.markup-input', start: 4, end: 8 } },
+      { press: { code: 'KeyB', key: 'b', ctrlKey: true } }
+    ],
+    // Only the selected word goes bold, so the mirror shows a bold run with
+    // plain text either side of it — and the markers it gained.
+    expect: { found: ['.markup-mirror .mk-b', '.markup-mirror .mk-mark'], text: ['duke', 'lies'] }
+  },
+  // Notes with nothing focused. The markers go, the formatting stays: the mirror
+  // only owes the caret a matching character count while there *is* a caret in
+  // it. `missing` on `.mk-mark` is the whole assertion — `notes-markup` above is
+  // the same note focused, and the pair is what pins the difference.
+  {
+    name: 'notes-markup-blurred',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'notes'
+      doc.panels.panel_ref.state = { text: 'The **duke** is *lying* about the crypt.' }
+    },
+    expect: {
+      found: ['.markup-mirror .mk-b', '.markup-mirror .mk-i'],
+      missing: ['.mk-mark'],
+      text: ['duke', 'lying']
+    }
+  },
+  // Tab out of the last cell of the last row. The table has to grow — a key that
+  // does nothing at the one place a table is always extended from reads as
+  // broken — and the caret has to land in the row that did not exist when the
+  // key was pressed, which is the whole reason focus goes through a ref.
+  {
+    name: 'table-tab-grows',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.state = {
+        columns: [
+          { id: 'col_a', label: 'Name', width: 140, align: 'left' },
+          { id: 'col_b', label: 'Value', width: 110, align: 'left' }
+        ],
+        rows: [{ id: 'row_1', cells: { col_a: 'only', col_b: 'row' } }]
+      }
+    },
+    steps: [{ click: '[data-cell="0:1"]' }, { press: { code: 'Tab', key: 'Tab' } }],
+    // Row 1 exists and is focused. Asserting on the focus is what separates
+    // "grew a row" from "grew a row and lost the caret".
+    expect: ['[data-cell="1:0"]', '[data-cell="1:0"]:focus']
+  },
+  // Enter steps down a column rather than off the end of the row.
+  {
+    name: 'table-enter-steps-down',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.state = {
+        columns: [
+          { id: 'col_a', label: 'Name', width: 140, align: 'left' },
+          { id: 'col_b', label: 'Value', width: 110, align: 'left' }
+        ],
+        rows: [
+          { id: 'row_1', cells: { col_a: 'first' } },
+          { id: 'row_2', cells: { col_a: 'second' } }
+        ]
+      }
+    },
+    steps: [{ click: '[data-cell="0:0"]' }, { press: { code: 'Enter', key: 'Enter' } }],
+    // Same column, next row — not the next cell across, which is Tab's job.
+    expect: ['[data-cell="1:0"]:focus']
+  },
+  // The selection tint over a shaded row. Shading and the highlight used to be
+  // the same property, so the shaded rule simply won and every even row looked
+  // unselected. Seeded as a block across both rows: one shaded, one not, in one
+  // frame, which is the only way the fix is eyes-checkable.
+  {
+    name: 'table-selection-shaded',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'table'
+      doc.panels.panel_ref.settings = { headerRow: true, shadedRows: true, compact: false }
+      doc.panels.panel_ref.state = {
+        columns: [
+          { id: 'col_a', label: 'Name', width: 140, align: 'left' },
+          { id: 'col_b', label: 'Value', width: 110, align: 'left' }
+        ],
+        rows: [
+          { id: 'row_1', cells: { col_a: 'first', col_b: '1' } },
+          { id: 'row_2', cells: { col_a: 'second', col_b: '2' } }
+        ]
+      }
+    },
+    // Shift+ArrowDown from row 0 puts a two-cell block across both rows, so one
+    // picked cell is shaded and one is not — which is the comparison.
+    steps: [
+      { click: '[data-cell="0:0"]' },
+      { press: { code: 'ArrowDown', key: 'ArrowDown', shiftKey: true } }
+    ],
+    expect: [
+      '.data-table.shaded',
+      '.data-table tbody tr:nth-child(1) td.cell-picked',
+      '.data-table tbody tr:nth-child(2) td.cell-picked'
+    ]
   }
 ]
 
@@ -859,15 +1058,15 @@ function normaliseExpect(expect, name) {
 }
 
 /** The actions a step may carry. Exactly one, which is what makes it ordered. */
-const STEP_KINDS = ['menu', 'click', 'press', 'type', 'hover', 'wait']
+const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'hover', 'wait']
 
 /**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
- * shorthand fields — `menu`, `click`, `press`, `type`, `hover` — which are sugar
- * for one step each in that fixed order. A shot needing two of a kind, or needing
- * them interleaved, declares `steps` instead.
+ * shorthand fields — `menu`, `click`, `press`, `type`, `select`, `hover` — which
+ * are sugar for one step each in that fixed order. A shot needing two of a kind,
+ * or needing them interleaved, declares `steps` instead.
  *
  * **The shorthand is desugared here, not executed separately.** There is one
  * executor in `src/main/index.ts` and one thing for it to read, so the two
@@ -917,6 +1116,7 @@ function normaliseSteps(shot, name) {
       .map((click) => ({ click })),
     ...(shot.press ? [{ press: shot.press }] : []),
     ...(shot.type ? [{ type: shot.type }] : []),
+    ...(shot.select ? [{ select: shot.select }] : []),
     ...(shot.hover ? [{ hover: shot.hover }] : [])
   ]
 }

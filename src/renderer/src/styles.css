@@ -1293,6 +1293,159 @@ code {
   gap: 1px;
 }
 
+/* ------------------------------------------------------------- data table */
+
+/* Shading is deliberately weak — it is there to help the eye keep a row, not
+   to draw stripes. `--line-soft` is the same value the row borders use.
+ *
+ * `background-color`, not the `background` shorthand: the selection tint below
+ * is a `background-image` layered over whatever colour is here, and the
+ * shorthand would reset that image to `none`. Keeping them on separate
+ * properties is what lets both apply — the shorthand also outranks the
+ * selection rule on specificity, so a shaded row simply swallowed the
+ * highlight. */
+.data-table.shaded tbody tr:nth-child(even) td {
+  background-color: var(--line-soft);
+}
+
+/* Column separators, which the Party table deliberately does without: that one
+   is a character sheet with a few wide fields, this one is a grid and reads as
+   a list of rows without them. The row-actions column keeps its own stronger
+   rule — `.table.resizable .col-actions` outranks this. */
+.data-table td + td,
+.data-table th + th {
+  border-left: 1px solid var(--line-soft);
+}
+
+/* Not the trailing spacer, which is not a column. Given a separator it reads as
+   an unnamed fourth one that will not take a value. */
+.data-table td:nth-last-child(2),
+.data-table th:nth-last-child(2) {
+  border-left: none;
+}
+
+/* The block selection is a tint layered *over* the row colour rather than a
+   replacement for it, so a shaded row highlights exactly like an unshaded one.
+   A flat gradient is the only way to say "an image that is one colour". */
+.data-table td.cell-picked {
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--accent) 24%, transparent),
+    color-mix(in srgb, var(--accent) 24%, transparent)
+  );
+}
+
+.data-table th .th-input {
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: var(--text-dim);
+}
+
+/* Header labels are editable, so the resize grip must not sit over the end of
+   the input where the caret needs to go. */
+.data-table th {
+  padding-right: 12px;
+}
+
+/* ---------------------------------------------------------------- markup */
+
+.mk-b {
+  font-weight: 700;
+}
+
+.mk-i {
+  font-style: italic;
+}
+
+/* Dimmed rather than hidden: the mirror has to hold the same characters as the
+   textarea beneath it, and removing these would shift the rest of the line. */
+.mk-mark {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* A cell is the other case — nothing sits under it, so markers are dropped and
+   the table reads as finished text. */
+.cell-markup {
+  position: relative;
+  display: block;
+}
+
+.cell-render {
+  position: absolute;
+  inset: 0;
+  padding: 3px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Only cells that actually carry markers get the overlay treatment, so an
+   ordinary cell keeps its native text rendering and selection colours. */
+.cell-markup.rich .cell-input:not(:focus) {
+  color: transparent;
+}
+
+.cell-markup.rich .cell-input:focus + .cell-render {
+  display: none;
+}
+
+/* The Notes mirror. Both halves take the caller's class — `.notes-area` here —
+   so font, padding, border and radius are declared once and cannot drift. Only
+   the differences belong below.
+ *
+ * Every rule is scoped under `.markup-editor` on purpose. The caller's class is
+ * a plain one too, so an unscoped `.markup-input` ties with it on specificity
+ * and loses to whichever is declared later in this file — which is how the
+ * textarea kept its opaque text and hid the mirror completely. Do not flatten
+ * these selectors. */
+.markup-editor {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.markup-editor .markup-box {
+  flex: 1;
+  min-height: 0;
+  /* Wrapping must agree character for character with the textarea's own. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+}
+
+.markup-editor .markup-mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  /* The textarea above draws the visible border, including its focus colour. */
+  border-color: transparent;
+}
+
+.markup-editor .markup-input {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+/* The textarea sits above the mirror, so its selection paints over the styled
+   text rather than behind it. Kept light enough to read bold text through. */
+.markup-editor .markup-input::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.markup-editor .markup-input::placeholder {
+  color: var(--text-faint);
+}
+
 /* ---------------------------------------------------------------- symbols */
 
 .symbol-cell {
