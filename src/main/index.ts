@@ -1,12 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { join, basename } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
-import type {
-  DataSnapshot,
-  LayoutDoc,
-  OpenResult,
-  RecentEntry,
-  SessionSnapshot
+import { access, readFile, writeFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
+import {
+  IMAGE_SCHEME,
+  type DataSnapshot,
+  type ImageRef,
+  type LayoutDoc,
+  type OpenResult,
+  type RecentEntry,
+  type SessionSnapshot
 } from '../shared/types'
 import { parseLayoutDoc } from '../shared/layout'
 import {
@@ -21,6 +24,7 @@ import {
 } from './userStore'
 import { resolveKeymap, sanitiseKeymap, type Keymap, type ResolvedKeymap } from '../shared/actions'
 import { addPack, currentSnapshot, loadPacks, removePack, setDatasetEnabled } from './packStore'
+import { IMAGE_EXTENSIONS, imageId, mimeFor, registerImage, servedPath } from './imageStore'
 import { buildMenu, type DataActions } from './menu'
 
 const LAYOUT_FILTERS = [
@@ -79,6 +83,79 @@ const DATAPACK_FILTERS = [
   { name: 'DM Screen Data Pack', extensions: ['dmpack.json', 'dmpack', 'json'] },
   { name: 'All Files', extensions: ['*'] }
 ]
+
+const IMAGE_FILTERS = [
+  { name: 'Images', extensions: IMAGE_EXTENSIONS },
+  { name: 'All Files', extensions: ['*'] }
+]
+
+/* ------------------------------------------------------------------ images */
+
+/**
+ * Must run before `app.whenReady()`, which is why it is a bare statement rather
+ * than a step inside the ready handler: Chromium reads the scheme registry once
+ * during startup, and a scheme registered after that point is handled but never
+ * treated as secure — the page then refuses the image as insecure content, with
+ * nothing in the handler to show for it.
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: IMAGE_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
+
+/**
+ * Serves a registered image, and nothing else.
+ *
+ * The bytes are streamed rather than read into a buffer, which is the reason
+ * this exists at all instead of the renderer asking for a `data:` URL over IPC:
+ * a battle map arrives as a decoded bitmap Chromium owns and can drop, not as a
+ * base64 string a third larger than the file sitting in renderer memory for as
+ * long as the panel is open.
+ *
+ * The Content-Type is set from the extension rather than passed through. A
+ * `file:` fetch guesses, and a guess of `text/plain` is a blank panel with no
+ * error anywhere.
+ */
+function serveImages(): void {
+  protocol.handle(IMAGE_SCHEME, async (request) => {
+    const id = new URL(request.url).pathname.replace(/^\//, '')
+    const path = servedPath(id)
+    const mime = path && mimeFor(path)
+    if (!path || !mime) return new Response('Unknown image', { status: 404 })
+
+    try {
+      const file = await net.fetch(pathToFileURL(path).toString())
+      if (!file.ok) return new Response('Unreadable image', { status: 404 })
+      return new Response(file.body, { headers: { 'Content-Type': mime } })
+    } catch {
+      // A map on a drive that is no longer mounted. The panel already draws a
+      // missing-file state from `exists`; this is only the race where the file
+      // goes between the check and the read.
+      return new Response('Unreadable image', { status: 404 })
+    }
+  })
+}
+
+/**
+ * Puts a path on the guest list and reports whether it is still there.
+ *
+ * Two callers, one path: the file dialog below, and the renderer restoring a
+ * panel out of a layout that was saved on some earlier day. The second is why
+ * `exists` is answered here rather than assumed — a `.dmscreen` copied to
+ * another machine names files that are not on it.
+ */
+async function resolveImage(path: string): Promise<ImageRef> {
+  const id = registerImage(path)
+  if (!id) return { id: imageId(path), path, exists: false }
+  try {
+    await access(path)
+    return { id, path, exists: true }
+  } catch {
+    return { id, path, exists: false }
+  }
+}
 
 const dataActions: DataActions = {
   importPack: () => {
@@ -156,6 +233,7 @@ interface SmokeStep {
   press?: Record<string, unknown>
   type?: { selector: string; text: string }
   select?: { selector: string; start: number; end: number }
+  wheel?: { selector: string; deltaY: number; offsetX?: number; offsetY?: number }
   hover?: string
   wait?: number
 }
@@ -271,6 +349,37 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
       })()`
     )) as boolean
     if (!selected) console.log(`[renderer:error] nothing to select in: ${step.select.selector}`)
+    return wait(400)
+  }
+
+  // A wheel notch over one element, for behaviour a click cannot express. Zoom
+  // is the case: it has buttons too, but the wheel is the path with the
+  // interesting parts on it — the listener has to be the element's own and
+  // non-passive to refuse the scroll, and the zoom is aimed at the pointer
+  // rather than at the centre, neither of which a button press exercises.
+  //
+  // `offsetX`/`offsetY` move the pointer off centre, which is the only way to
+  // tell an aimed zoom from a centred one: from the middle the two agree.
+  if (step.wheel !== undefined) {
+    const found = (await window.webContents.executeJavaScript(
+      `(() => {
+        const { selector, deltaY, offsetX, offsetY } = ${JSON.stringify(step.wheel)}
+        const el = document.querySelector(selector)
+        if (!el) return false
+        const box = el.getBoundingClientRect()
+        el.dispatchEvent(
+          new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            deltaY,
+            clientX: box.left + box.width / 2 + (offsetX ?? 0),
+            clientY: box.top + box.height / 2 + (offsetY ?? 0)
+          })
+        )
+        return true
+      })()`
+    )) as boolean
+    if (!found) console.log(`[renderer:error] no element matched ${step.wheel.selector}`)
     return wait(400)
   }
 
@@ -539,6 +648,13 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // The app is one page and never navigates. Chromium's default for a file
+  // dropped on a window is to open that file *as* the window, which throws the
+  // whole running app away — including the layout that had not been saved yet.
+  // The Image module catches a drop on its own panel; this catches every drop
+  // that misses.
+  mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+
   mainWindow.on('close', (event) => {
     if (forceClose || !documentDirty) return
     event.preventDefault()
@@ -673,6 +789,24 @@ ipcMain.handle('layout:saveAs', async (_event, doc: LayoutDoc): Promise<string |
   }
 })
 
+/**
+ * Picks an image and puts it on the guest list. The renderer stores the path it
+ * gets back, and the id is what the `<img>` points at until the panel unmounts.
+ */
+ipcMain.handle('image:pick', async (): Promise<ImageRef | null> => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: 'Choose image',
+    properties: ['openFile'],
+    filters: IMAGE_FILTERS
+  })
+  const path = result.filePaths[0]
+  if (result.canceled || !path) return null
+  return resolveImage(path)
+})
+
+/** The restore and drag-and-drop route to the same list. */
+ipcMain.handle('image:resolve', (_event, path: string): Promise<ImageRef> => resolveImage(path))
+
 ipcMain.handle('recents:list', (): Promise<RecentEntry[]> => listRecents())
 
 ipcMain.handle('recents:remove', async (_event, path: string): Promise<RecentEntry[]> => {
@@ -805,6 +939,7 @@ if (!app.requestSingleInstanceLock()) {
     keymapOverrides = loaded.keymap
     for (const warning of loaded.warnings) console.warn(`keybindings.json: ${warning}`)
 
+    serveImages()
     await loadPacks()
     await refreshMenu()
     createWindow()

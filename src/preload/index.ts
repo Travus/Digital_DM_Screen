@@ -1,6 +1,7 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   DataSnapshot,
+  ImageRef,
   LayoutDoc,
   MenuAction,
   OpenResult,
@@ -29,6 +30,22 @@ const api = {
     ipcRenderer.invoke('layout:save', filePath, doc),
   saveLayoutAs: (doc: LayoutDoc): Promise<string | null> =>
     ipcRenderer.invoke('layout:saveAs', doc),
+
+  /** Shows the image picker and puts the result on main's guest list. */
+  pickImage: (): Promise<ImageRef | null> => ipcRenderer.invoke('image:pick'),
+
+  /**
+   * Same list, for a path that came out of a saved layout or off a drop. The
+   * `exists` flag comes back from main because only main can look.
+   */
+  resolveImage: (path: string): Promise<ImageRef> => ipcRenderer.invoke('image:resolve', path),
+
+  /**
+   * The path of a dropped file. Electron 32 removed `File.path`, and a
+   * sandboxed renderer has no other way to learn one — `webUtils` is reachable
+   * from the preload, so the bridge is the only route left.
+   */
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
 
   listRecents: (): Promise<RecentEntry[]> => ipcRenderer.invoke('recents:list'),
   removeRecent: (path: string): Promise<RecentEntry[]> =>

@@ -66,6 +66,35 @@ export interface OpenResult {
   doc: LayoutDoc
 }
 
+/**
+ * The scheme main serves picked image files over, and the URL shape the
+ * renderer points an `<img>` at.
+ *
+ * Both halves live here so the handler and the `<img src>` cannot drift, the
+ * way accelerators live in one catalogue. The host is fixed and the id is a
+ * path segment: registering the scheme as `standard` makes the host part of the
+ * origin, and an id per host would give every image its own.
+ */
+export const IMAGE_SCHEME = 'dmscreen-image'
+
+export function imageUrl(id: string): string {
+  return `${IMAGE_SCHEME}://image/${id}`
+}
+
+/**
+ * One image the renderer is allowed to display.
+ *
+ * The layout stores `path`; `id` is what an `<img>` actually points at, since a
+ * sandboxed renderer cannot read a file and the CSP does not allow `file:`.
+ * `exists` is carried rather than inferred, so a panel restored from a layout
+ * whose image has moved says so instead of showing a broken image icon.
+ */
+export interface ImageRef {
+  id: string
+  path: string
+  exists: boolean
+}
+
 /* ---------------------------------------------------------- reference data */
 
 /**

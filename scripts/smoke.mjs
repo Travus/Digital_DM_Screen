@@ -36,6 +36,14 @@ function userDataFor(name) {
 
 const starter = join(root, 'examples', 'starter.dmscreen')
 const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
+/**
+ * A map for the Image module. Absolute, because that is what the module stores
+ * and what main registers — and it is resolved here, in the driver, since
+ * `mutate` runs before the child is spawned.
+ */
+const fixtureMap = join(root, 'examples', 'smoke-map.png')
+/** Named like an image, and not one. The half a path check cannot see. */
+const fixtureBrokenMap = join(root, 'examples', 'smoke-broken.png')
 
 const shots = [
   {
@@ -1003,6 +1011,116 @@ const shots = [
       '.data-table tbody tr:nth-child(1) td.cell-picked',
       '.data-table tbody tr:nth-child(2) td.cell-picked'
     ]
+  },
+  // The Image module with nothing chosen. The file dialog is native and out of
+  // the harness's reach, so this is as far as clicking gets — every shot below
+  // seeds the path instead.
+  {
+    name: 'image-empty',
+    layout: null,
+    click: '.picker-card[data-module-id="image"]',
+    expect: { found: ['.image-drop', '.image-drop .btn.primary'], text: ['Drop an image here'] }
+  },
+  // The whole delivery path, end to end: main registers the seeded path, serves
+  // it over `dmscreen-image://`, and Chromium decodes it. `data-loaded` is what
+  // makes that an assertion rather than a hope — the `<img>` is laid out at
+  // panel size whether or not a single byte arrived, so asserting on the
+  // element would pass against a handler that only ever returned 404. A CSP
+  // that refused the scheme would fail this shot on the console error as well.
+  {
+    name: 'image-fitted',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'image'
+      doc.panels.panel_ref.state = { path: fixtureMap, scale: 1, offsetX: 0, offsetY: 0 }
+    },
+    expect: {
+      found: ['.image-viewport[data-loaded]', '.image-canvas'],
+      missing: ['.image-viewport.zoomed'],
+      text: ['100%']
+    }
+  },
+  // Zoom and pan restored from panel state, which is the half a reload has to
+  // get right. Fullscreened so the map has room to be visibly off-centre —
+  // scale 2 in a small panel clamps the pan back to nearly nothing, and the
+  // shot would then look identical to the fitted one.
+  {
+    name: 'image-zoomed',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'image'
+      doc.panels.panel_ref.state = { path: fixtureMap, scale: 2.5, offsetX: 120, offsetY: -40 }
+    },
+    click: '.panel:has(.image-viewport) .icon-btn[title^="Fullscreen"]',
+    expect: {
+      found: ['.image-viewport.zoomed[data-loaded]', '.image-canvas'],
+      text: ['250%']
+    }
+  },
+  // Zoom driven through the wheel, which is the path the buttons do not cover:
+  // the listener has to be the element's own and non-passive, and the zoom is
+  // aimed at the pointer rather than at the centre. Off-centre by 150px, so the
+  // map moves under the cursor rather than merely getting bigger — from the
+  // middle an aimed zoom and a centred one are the same picture.
+  //
+  // Fullscreened first for the room, and the assertion is the readout: it is
+  // rendered from the same clamped view the transform is, so a number on screen
+  // says the wheel reached `apply` and came back inside its limits.
+  {
+    name: 'image-wheel-zoom',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'image'
+      doc.panels.panel_ref.state = { path: fixtureMap, scale: 1, offsetX: 0, offsetY: 0 }
+    },
+    steps: [
+      { click: '.panel:has(.image-viewport) .icon-btn[title^="Fullscreen"]' },
+      { wheel: { selector: '.image-viewport', deltaY: -600, offsetX: 150, offsetY: 0 } }
+    ],
+    expect: {
+      found: ['.image-viewport.zoomed[data-loaded]'],
+      // 1.0015 ** 600, rounded. A fixed number rather than "not 100%", so a
+      // change to the wheel step has to be deliberate.
+      text: ['246%']
+    }
+  },
+  // A layout whose image has moved, which is the cost of storing a path and the
+  // one state that has to explain itself. The path is on screen because it is
+  // the whole of what the DM needs to find the file again.
+  {
+    name: 'image-missing',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'image'
+      doc.panels.panel_ref.state = {
+        path: '/maps/no-such-keep.png',
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0
+      }
+    },
+    expect: {
+      found: ['.image-missing', '.image-drop .note.mono'],
+      missing: ['.image-viewport'],
+      text: ['/maps/no-such-keep.png', 'Locate']
+    }
+  },
+  // The file is there and Chromium still will not decode it. Reached through
+  // `onError`, which is the only signal for it — main serves the bytes happily,
+  // so nothing before the decode knows anything is wrong. Distinguished from
+  // the shot above because "go and find it" is the wrong instruction here.
+  {
+    name: 'image-unreadable',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'image'
+      doc.panels.panel_ref.state = { path: fixtureBrokenMap, scale: 1, offsetX: 0, offsetY: 0 }
+    },
+    expect: {
+      found: ['.image-missing'],
+      missing: ['.image-viewport'],
+      text: ['could not be read', 'Choose another']
+    }
   }
 ]
 
@@ -1058,15 +1176,15 @@ function normaliseExpect(expect, name) {
 }
 
 /** The actions a step may carry. Exactly one, which is what makes it ordered. */
-const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'hover', 'wait']
+const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'hover', 'wait']
 
 /**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
- * shorthand fields — `menu`, `click`, `press`, `type`, `select`, `hover` — which
- * are sugar for one step each in that fixed order. A shot needing two of a kind,
- * or needing them interleaved, declares `steps` instead.
+ * shorthand fields — `menu`, `click`, `press`, `type`, `select`, `wheel`,
+ * `hover` — which are sugar for one step each in that fixed order. A shot
+ * needing two of a kind, or needing them interleaved, declares `steps` instead.
  *
  * **The shorthand is desugared here, not executed separately.** There is one
  * executor in `src/main/index.ts` and one thing for it to read, so the two
@@ -1117,6 +1235,7 @@ function normaliseSteps(shot, name) {
     ...(shot.press ? [{ press: shot.press }] : []),
     ...(shot.type ? [{ type: shot.type }] : []),
     ...(shot.select ? [{ select: shot.select }] : []),
+    ...(shot.wheel ? [{ wheel: shot.wheel }] : []),
     ...(shot.hover ? [{ hover: shot.hover }] : [])
   ]
 }
