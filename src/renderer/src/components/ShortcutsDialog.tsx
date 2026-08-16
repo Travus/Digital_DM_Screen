@@ -15,7 +15,7 @@ import {
   type Conflict,
   type Keymap
 } from '../../../shared/actions'
-import { PRESETS } from '../../../shared/presets'
+import { PRESETS, presetBindings } from '../../../shared/presets'
 import { useKeymapStore } from '../state/keymapStore'
 
 /**
@@ -199,11 +199,10 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
                 // is user-facing prose, and a smoke shot that selected on it —
                 // or on position — would be asserting the wrong thing.
                 data-preset-id={preset.id}
-                title={preset.blurb}
                 onClick={() => {
                   stopRecording()
                   setProblem(null)
-                  commit({ ...preset.bindings })
+                  commit({ ...presetBindings(preset, platform) })
                 }}
               >
                 {preset.name}
