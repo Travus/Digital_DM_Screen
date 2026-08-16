@@ -36,8 +36,6 @@ import { ACTIONS, type ActionId, type Keymap } from './actions'
 export interface KeymapPreset {
   id: string
   name: string
-  /** One line, shown under the button. */
-  blurb: string
   bindings: Keymap
 }
 
@@ -50,7 +48,6 @@ export const PRESETS: readonly KeymapPreset[] = [
   {
     id: 'default',
     name: 'Default',
-    blurb: 'What the app ships with.',
     bindings: {}
   },
   {
@@ -59,7 +56,6 @@ export const PRESETS: readonly KeymapPreset[] = [
     // Ctrl+K is VS Code's prefix. Both sequences finish on a stroke that is
     // separately bound — Ctrl+\ splits right, Ctrl+S saves — which is exactly
     // the case the renderer now arbitrates.
-    blurb: 'Ctrl+K sequences for the split and the shortcut editor.',
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K CmdOrCtrl+\\',
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
@@ -74,8 +70,8 @@ export const PRESETS: readonly KeymapPreset[] = [
     id: 'zed',
     name: 'Zed',
     // From Zed's own default keymap: ctrl-k down splits, ctrl-k ctrl-s opens the
-    // keymap. Its zoom is shift-escape, which Escape being reserved rules out.
-    blurb: 'Zed’s Ctrl+K family. Its Shift+Esc zoom is left out — Esc is reserved.',
+    // keymap. Its shift-escape zoom is left out because `Shift` does not count
+    // as a real modifier — `checkAccelerator` refuses the chord as unmodified.
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K Down',
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
@@ -86,7 +82,6 @@ export const PRESETS: readonly KeymapPreset[] = [
   {
     id: 'sublime',
     name: 'Sublime Text',
-    blurb: 'Sublime’s Alt+Shift layout commands for splitting.',
     bindings: {
       'panel:splitRight': 'Alt+Shift+2',
       'panel:splitDown': 'Alt+Shift+8',
@@ -99,7 +94,6 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'JetBrains',
     // JetBrains spends its Ctrl keys on editor commands, so the overlap with
     // this app is small but real: Ctrl+W is Extend Selection there, not Close.
-    blurb: 'IntelliJ: Ctrl+Shift+A finds actions, Shift+F6 renames, Ctrl+F4 closes.',
     bindings: {
       'layout:rename': 'Shift+F6',
       'layout:new': 'Alt+Insert',
@@ -114,7 +108,6 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'Vim',
     // C-w is Vim's window prefix and this app's default for Close Panel, so the
     // preset has to claim it — onto `C-w c`, which is where Vim puts it anyway.
-    blurb: 'Window commands behind Ctrl+W: v and s split, c closes, o for only.',
     bindings: {
       'panel:splitRight': 'CmdOrCtrl+W V',
       'panel:splitDown': 'CmdOrCtrl+W S',
@@ -127,7 +120,6 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'tmux',
     // % splits vertically (a vertical divider, panes side by side) and " splits
     // horizontally. Famously the opposite way round from how they read.
-    blurb: 'Pane commands behind Ctrl+B: % and " split, x kills, z zooms.',
     bindings: {
       'panel:splitRight': 'CmdOrCtrl+B %',
       'panel:splitDown': 'CmdOrCtrl+B "',
@@ -138,7 +130,6 @@ export const PRESETS: readonly KeymapPreset[] = [
   {
     id: 'none',
     name: 'None',
-    blurb: 'Every shortcut unbound. Esc still leaves fullscreen.',
     bindings: NOTHING
   }
 ]

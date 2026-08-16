@@ -424,8 +424,7 @@ const shots = [
     // present at all is not.
     expect: { found: ['.menu'], text: ['Split right'] }
   },
-  // The preset list, which is also the shot that would catch a preset going
-  // missing or a blurb overflowing its row.
+  // The preset list.
   {
     name: 'shortcuts-presets',
     layout: starter,
