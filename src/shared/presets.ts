@@ -101,11 +101,12 @@ export const PRESETS: readonly KeymapPreset[] = [
     id: 'zed',
     name: 'Zed',
     // From Zed's own default keymap: ctrl-k down splits, ctrl-k ctrl-s opens the
-    // keymap. Its shift-escape zoom is left out because `Shift` does not count
-    // as a real modifier — `checkAccelerator` refuses the chord as unmodified.
+    // keymap, and shift-escape is `workspace::ToggleZoom` — maximize by another
+    // name, bindable since Escape joined the keys that need no real modifier.
     bindings: {
       'panel:splitDown': 'CmdOrCtrl+K Down',
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
+      'panel:maximize': 'Shift+Escape',
       // `command_palette::Toggle`.
       'app:palette': 'CmdOrCtrl+Shift+P'
     }

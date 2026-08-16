@@ -508,6 +508,19 @@ const shots = [
       text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+S']
     }
   },
+  // The Zed preset applied through its button. Shift+Escape on Fullscreen Panel
+  // is the row that could not exist before Escape joined the keys that bind
+  // without a real modifier — and rendering it is also proof the accelerator
+  // survives the menu build, which throws on one it cannot register.
+  {
+    name: 'shortcuts-zed',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="zed"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+K Down', 'Ctrl+K Ctrl+S', 'Shift+Escape']
+    }
+  },
 
   /* ----------------------------------------------------------- action palette */
 
