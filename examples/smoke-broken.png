@@ -1,0 +1,3 @@
+Not a PNG. Named like one so the Image module registers it, serves it and then
+fails to decode it — which is the one failure a path check cannot catch, and the
+one that would otherwise leave a blank panel with nothing to read.

@@ -3,6 +3,7 @@ import { bigDiceModule } from './BigDiceModule'
 import { conditionsModule } from './ConditionsModule'
 import { diceModule } from './DiceModule'
 import { diseasesModule } from './DiseasesModule'
+import { imageModule } from './ImageModule'
 import { initiativeModule } from './InitiativeModule'
 import { namesModule } from './NamesModule'
 import { notesModule } from './NotesModule'
@@ -24,6 +25,7 @@ export const MODULES: AnyModule[] = [
   trackersModule,
   notesModule,
   tableModule,
+  imageModule,
   diceModule,
   bigDiceModule,
   tablesModule,

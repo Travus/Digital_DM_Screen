@@ -52,6 +52,8 @@ on screen; whether it *looks right* is still eyes only.
   list behind Conditions, Player Abilities and Diseases.
 - `src/renderer/src/components/MarkupText.tsx`, `MarkupTextarea.tsx` and
   `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
+- `src/main/imageStore.ts` — the files the Image module is allowed to display,
+  and the ids the `dmscreen-image://` handler serves them under.
 
 The layout is an n-ary tree: a `split` holds any number of children in a row or
 column, with `sizes` as flex weights; a `panel` leaf points at an entry in
@@ -186,6 +188,66 @@ writes. Pasting grows the table rather than clipping: the shape of a copied bloc
 is what the DM meant, and dropping the overhang loses data with nothing on screen
 to say so. A cell can never hold a newline, so `parseGrid` folds one carried in by
 a quoted field into a space rather than letting one row silently become two.
+
+## Images
+
+The Image module shows one file per panel — a map, a handout, a portrait.
+
+**The layout stores a path, never the bytes.** Base64 in panel state would ride
+the session autosave, which serialises the *whole* document 700 ms after any
+change and pretty-prints it, so a 3 MB map would be re-encoded and rewritten on
+every keystroke in an unrelated Notes panel. The cost of a path is that it does
+not travel, which the panel says out loud rather than showing a broken image —
+the same bargain `DataPackRef` already makes.
+
+**The renderer never reads a file; main serves one.** `img-src` does not list
+`file:`, and the page origin differs between dev and a packaged build, so `'self'`
+covers nothing. Main registers `dmscreen-image://` and streams the bytes back.
+The scheme name and the URL shape live in `shared/types.ts` — one place, for the
+reason accelerators have one.
+
+**`registerSchemesAsPrivileged` runs before `app.whenReady()`**, as a bare
+statement at module scope. Chromium reads that registry once during startup, and
+a scheme registered after it is still handled but is no longer *secure* — the
+page then refuses the image as insecure content, with nothing in the handler to
+show for it.
+
+**The handler serves a registered id and nothing else.** `imageStore.ts` is the
+guest list, and `registerImage` refuses anything that is not an image by
+extension. Panel state is hand-editable JSON that can name any file on the disk,
+so without the list any string reaching an `<img src>` would name a readable one
+— which is the file access `sandbox: true` exists to withhold. The
+`Content-Type` is set from the extension rather than passed through, because a
+`file:` fetch guesses and a guess of `text/plain` is a blank panel.
+
+**A file that is there and will not decode is its own state.** `exists` is a
+path check and cannot see a truncated download or a `.png` that is something
+else. `onError` catches those, and the panel says "could not be read" rather
+than "go and find it", which would be the wrong instruction.
+
+**Gesture state is committed when the gesture settles, not while it runs.**
+Every write to panel state goes through the store's `mutate`, which marks the
+layout unsaved and restarts the autosave debounce — at pointer rate that is the
+whole document rewritten several times a second for a drag that has not finished.
+The live view is mirrored in component state and lands in the panel 250 ms after
+the last event, and on unmount, so a panel closed mid-drag keeps its frame.
+
+**Scale 1 means "fits the panel", not "actual pixels".** The image is drawn with
+`object-fit: contain` and then transformed, so every stored zoom is relative to
+that box. Resizing the panel therefore does not change what the DM is looking at,
+and pan limits fall out of it: a contained image has nowhere to go, so a drag at
+scale 1 does nothing without a rule saying so. `lib/imageView.ts` is the whole of
+that arithmetic and is unit-tested.
+
+**Wheel zoom is on the element's own listener.** React registers its root wheel
+listener as passive, so `preventDefault` on a synthetic wheel event does nothing
+and the panel would zoom and scroll at once.
+
+**Dropping a file on the window used to throw the app away.** Chromium's default
+is to navigate to the dropped file, which discards a layout that was never saved.
+`will-navigate` is refused in `createWindow`; the module's own drop handler is
+the half that catches the drops meant for it. A dropped file's path comes from
+`webUtils.getPathForFile` — Electron 32 removed `File.path`.
 
 ## Keybindings
 
@@ -506,7 +568,8 @@ paths distinct.
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
 - `select` — `{ selector, start, end }`, for behaviour that acts on selected text
-- `steps` — those four as an ordered list, for a shot that needs two of a kind
+- `wheel` — `{ selector, deltaY, offsetX, offsetY }`, one notch over an element
+- `steps` — those five as an ordered list, for a shot that needs two of a kind
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
   long form taking `found`, `missing` and `text`
@@ -514,8 +577,8 @@ paths distinct.
 **The shorthand fields are sugar for `steps`, desugared in the driver.** There is
 one executor in `src/main/index.ts` and one list for it to read, so the two
 spellings cannot come to mean different things — `menu`, `click`, `press`, `type`,
-`select`, `hover` are one step each in that fixed order, which is what most shots
-want.
+`select`, `wheel`, `hover` are one step each in that fixed order, which is what
+most shots want.
 Declaring both is refused rather than merged: a shot writing `steps` has an order
 in mind, and prepending a shorthand field to it would put a click somewhere
 nobody wrote. Steps also take `wait` for a mid-sequence dwell.
@@ -524,6 +587,17 @@ nobody wrote. Steps also take `wait` for a mid-sequence dwell.
 "narrow a list, then walk it" could not be written, and neither could any state
 two inputs deep — the palette showing a greyed row's reason and then a fresh
 query typed over it. Reach for `steps` when the behaviour *is* the transition.
+
+**`wheel` is off-centre on purpose.** A zoom aimed at the pointer and one taken
+from the middle draw the same picture when the pointer *is* the middle, so a shot
+that does not pass an offset proves only that the number changed. It also reaches
+what a button cannot: the element's own non-passive listener, which is the half
+that stops the panel scrolling while it zooms.
+
+**Some UI needs a file on disk, and those fixtures live in `examples/`.**
+`smoke-map.png` is the Image module's map. `smoke-broken.png` is named like an
+image and is not one, which is the only way to reach the decode failure —
+`exists` is a path check and passes it happily.
 
 **A shot without `expect` is a shot that cannot fail**, so the harness refuses one
 before the spawn. The check runs in the renderer and is reported over stdout as

@@ -3,10 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- No remote resources: everything ships with the app. -->
+    <!-- No remote resources: everything ships with the app. The one exception
+         is dmscreen-image:, which main serves from the files the user picked —
+         a scheme rather than file:, so the renderer reads nothing itself. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: dmscreen-image:"
     />
     <title>Digital DM Screen</title>
   </head>
