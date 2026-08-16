@@ -1,22 +1,46 @@
 import { describe, expect, it } from 'vitest'
 import { checkBinding } from '../../../shared/accelerator'
-import { ACTIONS, findConflict, resolveKeymap, type ActionId } from '../../../shared/actions'
-import { PRESETS, findPreset } from '../../../shared/presets'
+import {
+  ACTIONS,
+  findConflict,
+  resolveKeymap,
+  type ActionId,
+  type Keymap
+} from '../../../shared/actions'
+import { PRESETS, findPreset, presetBindings, type KeymapPreset } from '../../../shared/presets'
+
+/**
+ * Every arm a preset ships. Most have one; a preset whose tool moves a key per
+ * platform carries a complete darwin arm beside `bindings`, and whatever must
+ * hold for a preset must hold for each arm on its own — an arm is what a
+ * platform actually applies.
+ */
+const arms = (preset: KeymapPreset): [string, Keymap][] =>
+  preset.darwin
+    ? [
+        ['win32', preset.bindings],
+        ['darwin', preset.darwin]
+      ]
+    : [['all platforms', preset.bindings]]
 
 describe('every preset', () => {
   for (const preset of PRESETS) {
     describe(preset.name, () => {
       it('binds only actions that exist', () => {
         const known = new Set(ACTIONS.map((action) => action.id))
-        for (const id of Object.keys(preset.bindings)) {
-          expect([id, known.has(id as ActionId)]).toEqual([id, true])
+        for (const [arm, bindings] of arms(preset)) {
+          for (const id of Object.keys(bindings)) {
+            expect([arm, id, known.has(id as ActionId)]).toEqual([arm, id, true])
+          }
         }
       })
 
       it('ships only bindings the app would accept', () => {
-        for (const [id, binding] of Object.entries(preset.bindings)) {
-          if (!binding) continue
-          expect([id, checkBinding(binding)]).toEqual([id, null])
+        for (const [arm, bindings] of arms(preset)) {
+          for (const [id, binding] of Object.entries(bindings)) {
+            if (!binding) continue
+            expect([arm, id, checkBinding(binding)]).toEqual([arm, id, null])
+          }
         }
       })
 
@@ -30,11 +54,17 @@ describe('every preset', () => {
        * catches it.
        */
       it('does not contradict itself once applied', () => {
-        const resolved = resolveKeymap(preset.bindings)
-        for (const action of ACTIONS) {
-          const binding = resolved[action.id]
-          if (!binding) continue
-          expect([action.id, findConflict(resolved, binding, action.id)]).toEqual([action.id, null])
+        for (const [arm, bindings] of arms(preset)) {
+          const resolved = resolveKeymap(bindings)
+          for (const action of ACTIONS) {
+            const binding = resolved[action.id]
+            if (!binding) continue
+            expect([arm, action.id, findConflict(resolved, binding, action.id)]).toEqual([
+              arm,
+              action.id,
+              null
+            ])
+          }
         }
       })
     })
@@ -79,6 +109,8 @@ describe('the presets that exist', () => {
     // A preset reproduces its tool, not our defaults. Left to fall through, the
     // VS Code keymap would quietly stop being VS Code the day we moved ours.
     expect(findPreset('vscode')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('cursor')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
+    expect(findPreset('cursor')?.darwin?.['app:palette']).toBe('CmdOrCtrl+Shift+P')
     expect(findPreset('zed')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
     expect(findPreset('sublime')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+P')
   })
@@ -88,12 +120,40 @@ describe('the presets that exist', () => {
     expect(findPreset('jetbrains')?.bindings['app:palette']).toBe('CmdOrCtrl+Shift+A')
   })
 
+  it('gives Cursor the leader it uses on each platform, which takes both arms', () => {
+    // Sourced from Cursor: `Ctrl+K` is inline edit there, so the chord leader
+    // moved — "Cmd+R on Mac and Ctrl+M on Windows and Linux" (staff, on their
+    // forum), and the docs reach the shortcuts editor with `Cmd R` `Cmd S`. One
+    // chord string cannot name two leaders; the darwin arm is what spells it.
+    const cursor = findPreset('cursor')!
+    expect(cursor.bindings['app:shortcuts']).toBe('CmdOrCtrl+M CmdOrCtrl+S')
+    expect(cursor.bindings['panel:splitDown']).toBe('CmdOrCtrl+M CmdOrCtrl+\\')
+    expect(cursor.darwin?.['app:shortcuts']).toBe('CmdOrCtrl+R CmdOrCtrl+S')
+    expect(cursor.darwin?.['panel:splitDown']).toBe('CmdOrCtrl+R CmdOrCtrl+\\')
+  })
+
+  it('applies the darwin arm on darwin and the only arm everywhere else', () => {
+    const cursor = findPreset('cursor')!
+    expect(presetBindings(cursor, 'darwin')).toBe(cursor.darwin)
+    expect(presetBindings(cursor, 'win32')).toBe(cursor.bindings)
+    expect(presetBindings(cursor, 'linux')).toBe(cursor.bindings)
+    // A preset without an arm is the same keymap everywhere.
+    expect(presetBindings(findPreset('vscode')!, 'darwin')).toBe(findPreset('vscode')!.bindings)
+  })
+
   it('has no preset that quietly does nothing', () => {
-    // A button that changes no binding is worse than no button.
+    // A button that changes no binding is worse than no button — on either
+    // platform, since arm selection decides what the button actually does.
     const defaults = resolveKeymap({})
-    for (const preset of PRESETS) {
-      if (preset.id === 'default') continue
-      expect([preset.id, resolveKeymap(preset.bindings)]).not.toEqual([preset.id, defaults])
+    for (const platform of ['win32', 'darwin']) {
+      for (const preset of PRESETS) {
+        if (preset.id === 'default') continue
+        expect([platform, preset.id, resolveKeymap(presetBindings(preset, platform))]).not.toEqual([
+          platform,
+          preset.id,
+          defaults
+        ])
+      }
     }
   })
 
@@ -102,12 +162,16 @@ describe('the presets that exist', () => {
     // hidden by a comment claiming it. Comparing every preset against the
     // *defaults* leaves two buttons free to be identical to each other, which is
     // the shape a duplicate actually ships in: an editor forked from another
-    // inherits every binding it does not deliberately move.
-    const seen = new Map<string, string>()
-    for (const preset of PRESETS) {
-      const resolved = JSON.stringify(resolveKeymap(preset.bindings))
-      expect([preset.id, seen.get(resolved)]).toEqual([preset.id, undefined])
-      seen.set(resolved, preset.id)
+    // inherits every binding it does not deliberately move. Checked per
+    // platform, because arm selection is where a duplicate could now hide — two
+    // presets distinct on Windows could still collapse into one on a Mac.
+    for (const platform of ['win32', 'darwin']) {
+      const seen = new Map<string, string>()
+      for (const preset of PRESETS) {
+        const resolved = JSON.stringify(resolveKeymap(presetBindings(preset, platform)))
+        expect([platform, preset.id, seen.get(resolved)]).toEqual([platform, preset.id, undefined])
+        seen.set(resolved, preset.id)
+      }
     }
   })
 })

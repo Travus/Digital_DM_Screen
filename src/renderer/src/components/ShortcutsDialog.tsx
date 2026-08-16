@@ -15,7 +15,7 @@ import {
   type Conflict,
   type Keymap
 } from '../../../shared/actions'
-import { PRESETS } from '../../../shared/presets'
+import { PRESETS, presetBindings } from '../../../shared/presets'
 import { useKeymapStore } from '../state/keymapStore'
 
 /**
@@ -202,7 +202,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }): JSX.Eleme
                 onClick={() => {
                   stopRecording()
                   setProblem(null)
-                  commit({ ...preset.bindings })
+                  commit({ ...presetBindings(preset, platform) })
                 }}
               >
                 {preset.name}

@@ -433,7 +433,17 @@ const shots = [
     // slightly shorter list.
     expect: {
       found: ['.preset-row', '.preset'],
-      text: ['Default', 'VS Code', 'Zed', 'Sublime Text', 'JetBrains', 'Vim', 'tmux', 'None']
+      text: [
+        'Default',
+        'VS Code',
+        'Cursor',
+        'Zed',
+        'Sublime Text',
+        'JetBrains',
+        'Vim',
+        'tmux',
+        'None'
+      ]
     }
   },
   // The VS Code keymap applied. Split Down and Keyboard Shortcuts both read as
@@ -480,6 +490,22 @@ const shots = [
       found: ['.shortcuts-modal', '.shortcut-row'],
       // Ctrl+S is still Save, alongside a sequence that ends on it.
       text: ['Ctrl+K Ctrl+\\', 'Ctrl+K Ctrl+S', 'Ctrl+S']
+    }
+  },
+  // The Cursor preset applied through its button — the shot that would catch the
+  // two forks collapsing into one keymap (Cursor's leader is Ctrl+M where VS
+  // Code's is Ctrl+K), and that the platform picked its arm: this harness runs
+  // on Linux, so what shows here must come from the Ctrl+M arm, not the darwin
+  // one. The darwin arm itself is pinned by unit tests, since no shot runs on a
+  // Mac.
+  {
+    name: 'shortcuts-cursor',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="cursor"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      // Ctrl+S is still Save, alongside a sequence that ends on it.
+      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+S']
     }
   },
 

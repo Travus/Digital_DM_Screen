@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
 import { resolveKeymap, type ResolvedKeymap } from '../shared/actions'
+import { findPreset, presetBindings } from '../shared/presets'
 import type { DataSnapshot } from '../shared/types'
 import { menuTemplate, type DataActions, type MenuTemplateOptions } from './menuTemplate'
 
@@ -311,6 +312,15 @@ describe('the strokes Electron’s own roles hold', () => {
     // `checkBinding` treats every stroke as reserved.
     const keymap = resolveKeymap({ 'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+R' })
     expect(byLabel(view({ keymap }), 'Reload')?.role).toBeUndefined()
+  })
+
+  it('hands Reload’s stroke to Cursor’s macOS leader and leaves Minimize alone', () => {
+    // The arrangement the darwin arm exists for: on a Mac the Cursor preset
+    // opens on Cmd+R, so Reload gives the stroke up — and Cmd+M stays with the
+    // stock Window menu, because that arm never claims it.
+    const keymap = resolveKeymap(presetBindings(findPreset('cursor')!, 'darwin'))
+    expect(roles(menu(mac({ keymap }), 'View'))).not.toContain('reload')
+    expect(mac({ keymap })[6].role).toBe('windowMenu')
   })
 
   it('keeps the stock Window menu on macOS until Cmd+M is wanted', () => {

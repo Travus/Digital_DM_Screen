@@ -209,13 +209,15 @@ tool's name and guessing at its bindings is worse than not shipping it.
 the menu owns the prefix and no sequence starts. A test resolves each preset and
 runs every binding through `findConflict`.
 
-**Cursor has no preset, and "it is a VS Code fork" is not the reason.** It moved
-its chord leader off `Ctrl+K` — to `Ctrl+M` on Windows and Linux, `Cmd+R` on
-macOS. A keymap entry is one chord for all platforms, so that split cannot be
-spelled: `CmdOrCtrl+M` is exact on two platforms and a stand-in on the third, and
-a preset wearing a tool's name should be that tool's keymap. The strokes
-themselves are reachable now that the roles hand them over, so this is a
-judgement about fidelity rather than a blocker.
+**A preset whose tool moves a key per platform carries a `darwin` arm.** Cursor
+is why: its chord leader left `Ctrl+K` for `Ctrl+M` on Windows and Linux and
+`Cmd+R` on macOS, and one chord string cannot say that — `CmdOrCtrl` swaps the
+modifier, never the key. The arm is a **complete replacement** applied instead of
+`bindings`, never merged over them: a delta arm would leave the other platform's
+leader live beside its own. `presetBindings` is the only reader, so every surface
+agrees on which arm a platform gets. What lands in the keymap is still ordinary
+chords — a `keybindings.json` copied across platforms keeps working, it just
+keeps the leader of the machine that wrote it.
 
 **Two presets must differ from each other, not just from the defaults.** The test
 that claimed this only ever compared each preset against the shipped keymap,
