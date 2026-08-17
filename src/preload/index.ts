@@ -10,6 +10,12 @@ import type {
 } from '../shared/types'
 import type { Keymap, ResolvedKeymap } from '../shared/actions'
 
+/** Which window a renderer is, handed over at preload. */
+export interface WindowIdentity {
+  windowId: string | null
+  isPrimary: boolean
+}
+
 export interface AppInfo {
   version: string
   electron: string
@@ -30,6 +36,16 @@ const api = {
   initialDocument: ipcRenderer.sendSync('document:snapshot') as DocumentSnapshot,
 
   /**
+   * Which of the document's windows this renderer is showing.
+   *
+   * Every window runs the same page, so this is the only thing telling them
+   * apart. Synchronous for the same reason as the document: the tree a window
+   * renders is picked by this, so an async answer means a first frame with no
+   * layout in it.
+   */
+  identity: ipcRenderer.sendSync('window:identity') as WindowIdentity,
+
+  /**
    * An edit, sent to the copy that gets saved.
    *
    * The renderer stays authoritative for what the document contains — the tree
@@ -47,6 +63,20 @@ const api = {
     }
   },
 
+  /**
+   * Subscribe to the same document moving under another window, or to the window
+   * list changing. Separate from `onDocumentChanged` because this arrives on
+   * every keystroke next door, and adopting it must not reset what this window
+   * is looking at.
+   */
+  onPeerDocument: (handler: (snapshot: DocumentSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: DocumentSnapshot): void => handler(snapshot)
+    ipcRenderer.on('document:peer', listener)
+    return () => {
+      ipcRenderer.off('document:peer', listener)
+    }
+  },
+
   /** Subscribe to the file path and unsaved flag moving without the document. */
   onDocumentStatus: (handler: (status: DocumentStatus) => void): (() => void) => {
     const listener = (_event: unknown, status: DocumentStatus): void => handler(status)
@@ -55,6 +85,63 @@ const api = {
       ipcRenderer.off('document:status', listener)
     }
   },
+
+  /**
+   * The layout's name and its lock, which belong to the document rather than to
+   * any one window — so they go through main and come back to everyone.
+   */
+  setDocumentMeta: (meta: { name?: string; locked?: boolean }): Promise<void> =>
+    ipcRenderer.invoke('document:setMeta', meta),
+
+  /** A write aimed at a panel another window owns, for main to forward. */
+  patchPanel: (
+    targetWindowId: string,
+    panelId: string,
+    patch: Record<string, unknown>,
+    kind: 'state' | 'settings'
+  ): Promise<void> =>
+    ipcRenderer.invoke('document:patchPanel', targetWindowId, panelId, patch, kind),
+
+  /** Subscribe to a write forwarded from another window. */
+  onPatchPanel: (
+    handler: (panelId: string, patch: Record<string, unknown>, kind: 'state' | 'settings') => void
+  ): (() => void) => {
+    const listener = (
+      _event: unknown,
+      panelId: string,
+      patch: Record<string, unknown>,
+      kind: 'state' | 'settings'
+    ): void => handler(panelId, patch, kind)
+    ipcRenderer.on('document:patchPanel', listener)
+    return () => {
+      ipcRenderer.off('document:patchPanel', listener)
+    }
+  },
+
+  /**
+   * The theme, which every window shares. Stored in `localStorage`, so a window
+   * opened later already has it — this is only for a change made while another
+   * window is up, which it has no other way to hear about.
+   */
+  setTheme: (theme: string): Promise<void> => ipcRenderer.invoke('theme:set', theme),
+
+  onThemeChanged: (handler: (theme: string) => void): (() => void) => {
+    const listener = (_event: unknown, theme: string): void => handler(theme)
+    ipcRenderer.on('theme:changed', listener)
+    return () => {
+      ipcRenderer.off('theme:changed', listener)
+    }
+  },
+
+  /* The window list. Every one of these goes through main, which owns the shape
+     of that list for the same reason it owns the name and the lock. */
+  addWindow: (): Promise<void> => ipcRenderer.invoke('window:add'),
+  setWindowOpen: (windowId: string, open: boolean): Promise<void> =>
+    ipcRenderer.invoke('window:setOpen', windowId, open),
+  renameWindow: (windowId: string, name: string): Promise<void> =>
+    ipcRenderer.invoke('window:rename', windowId, name),
+  removeWindow: (windowId: string): Promise<void> => ipcRenderer.invoke('window:remove', windowId),
+  focusWindow: (windowId: string): Promise<void> => ipcRenderer.invoke('window:focus', windowId),
 
   /**
    * The four file commands, which run entirely in main now that the document

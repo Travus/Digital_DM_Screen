@@ -3,7 +3,7 @@ import type { PanelNode } from '../../../shared/types'
 import { actionUnavailable, type ActionContext } from '../../../shared/actions'
 import { EMPTY_MODULE_ID, findParent, neighbourSides } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
-import { useAppStore } from '../state/store'
+import { myRoot, useAppStore } from '../state/store'
 import { parenthesised, useShortcuts } from '../lib/shortcuts'
 import { placeMenu, type Placement, type Size } from '../lib/menuPlacement'
 import { ModulePicker } from './ModulePicker'
@@ -52,12 +52,17 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
      Both are answered whether or not a row here reads them, since the struct is
      the palette's and is answered for this panel rather than trimmed to it.
 
-     Subscribing to `doc.root` rather than to `doc` is what keeps that cheap: the
+     Subscribing to this window's root rather than to `doc` is what keeps that cheap: the
      document is replaced on every keystroke in any panel, the tree only when the
      arrangement changes. */
-  const root = useAppStore((state) => state.doc.root)
-  const parentSplitId = useMemo(() => findParent(root, node.id)?.id ?? null, [root, node.id])
-  const neighbours = useMemo(() => neighbourSides(root, node.id), [root, node.id])
+  const root = useAppStore(myRoot)
+  const isPrimary = useAppStore((state) => state.isPrimary)
+  const windowCount = useAppStore((state) => state.doc.windows.length)
+  const parentSplitId = useMemo(
+    () => (root ? (findParent(root, node.id)?.id ?? null) : null),
+    [root, node.id]
+  )
+  const neighbours = useMemo(() => neighbourSides(root ?? node, node.id), [root, node])
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -166,6 +171,8 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
     locked,
     hasPanel: true,
     maximized: anyMaximized,
+    isPrimary,
+    hasWindows: windowCount > 1,
     hasSplit: parentSplitId !== null,
     neighbours
   }

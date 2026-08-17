@@ -2816,3 +2816,96 @@ kbd {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ----------------------------------------------------------------- windows */
+
+/* The switcher, beside the layout name. Lighter than the file buttons on
+   purpose: it names a place rather than doing something to the document. */
+.windows-btn {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.windows-btn:hover,
+.windows-btn.on {
+  color: var(--text);
+}
+
+/* A secondary window carries only this bar, so it needs a little breathing
+   room where the primary has a row of buttons holding its height. */
+.topbar.secondary {
+  gap: 10px;
+}
+
+.window-label {
+  font-weight: 600;
+  color: var(--text);
+  padding: 4px 2px;
+}
+
+.windows-menu {
+  min-width: 240px;
+}
+
+/* A row is a name and its buttons, rather than one button, so the name can be
+   clicked to focus and the ✕ can close without the two overlapping. */
+.window-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.window-row .window-name {
+  flex: 1;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.window-row.current .window-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Closed windows keep their panels and are listed to say so, but they are not
+   somewhere you are — dimmed rather than hidden. */
+.window-row.closed .window-name {
+  color: var(--text-dim);
+}
+
+.window-row .icon-btn {
+  opacity: 0;
+  padding: 0 4px;
+}
+
+.window-row:hover .icon-btn,
+.window-row .icon-btn:focus-visible {
+  opacity: 1;
+}
+
+.window-row .window-remove:hover {
+  color: var(--danger);
+}
+
+.menu-heading {
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.window-name-input {
+  flex: 1;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  min-width: 0;
+}

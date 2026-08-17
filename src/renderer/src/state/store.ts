@@ -6,12 +6,14 @@ import type {
   LayoutNode,
   MoveDirection,
   RecentEntry,
+  WindowDef,
   SplitDirection
 } from '../../../shared/types'
 import {
   collectPanelNodes,
   equaliseSplit,
   findNode,
+  findWindow,
   makePanelData,
   makePanelNode,
   neighbourPanels,
@@ -19,10 +21,12 @@ import {
   removeNode,
   resizePanelShare,
   setSplitSizes,
+  setWindowRoot,
   splitNode,
   swapPanelNodes,
   toggleSplitDirection,
   uid,
+  windowOfPanel,
   EMPTY_MODULE_ID
 } from '../../../shared/layout'
 
@@ -30,6 +34,15 @@ export type Theme = 'dark' | 'light'
 
 interface AppState {
   doc: LayoutDoc
+  /**
+   * Which of the document's windows this renderer is showing.
+   *
+   * Every window runs the same page over the same document, so this is what
+   * decides which tree it draws and which panels it may write to directly.
+   */
+  windowId: string
+  /** The window carrying the file buttons, and the one whose close quits. */
+  isPrimary: boolean
   filePath: string | null
   dirty: boolean
   recents: RecentEntry[]
@@ -58,8 +71,13 @@ interface AppState {
   saveAs: () => Promise<boolean>
   renameLayout: (name: string) => void
   toggleLock: () => void
-  /** A different document arriving from main: New, Open, or the restore. */
+  /** A different document arriving from main: New or Open. */
   adoptDocument: (snapshot: DocumentSnapshot) => void
+  /**
+   * The same document, moved by another window or by a change to the window
+   * list. Keeps this window's view state, which a replacement resets.
+   */
+  adoptPeerDocument: (snapshot: DocumentSnapshot) => void
   /** Just the file path and the unsaved flag, which a save moves on their own. */
   adoptStatus: (status: DocumentStatus) => void
 
@@ -84,6 +102,14 @@ interface AppState {
   updatePanelState: (panelId: string, patch: Record<string, unknown>) => void
   updatePanelSettings: (panelId: string, patch: Record<string, unknown>) => void
 
+  /* windows */
+  addWindow: () => Promise<void>
+  openWindow: (windowId: string) => Promise<void>
+  closeWindow: (windowId: string) => Promise<void>
+  renameWindow: (windowId: string, name: string) => Promise<void>
+  removeWindow: (windowId: string) => Promise<void>
+  focusWindow: (windowId: string) => Promise<void>
+
   /* view */
   maximize: (nodeId: string | null) => void
   toggleMaximize: (nodeId: string) => void
@@ -91,6 +117,8 @@ interface AppState {
   setRenamingNode: (nodeId: string | null) => void
   setPickingNode: (nodeId: string | null) => void
   setTheme: (theme: Theme) => void
+  /** The same, from another window — applied without being sent back. */
+  adoptTheme: (theme: Theme) => void
   toggleSidebar: () => void
 }
 
@@ -122,8 +150,32 @@ export const useAppStore = create<AppState>((set, get) => {
     void window.dmscreen.publishDocument(doc)
   }
 
+  /**
+   * A change to this window's own tiling. Every other window's tree is left
+   * exactly as it was, which is the line main's merge reads on the other side.
+   */
   const mutateTree = (fn: (root: LayoutNode) => LayoutNode): void => {
-    mutate((doc) => pruneOrphanPanels({ ...doc, root: fn(doc.root) }))
+    mutate((doc) => {
+      const window = findWindow(doc, get().windowId)
+      if (!window) return doc
+      return pruneOrphanPanels(setWindowRoot(doc, window.id, fn(window.root)))
+    })
+  }
+
+  /**
+   * Send a write on to the window that owns the panel, and report that it has
+   * been dealt with. False means the panel is this window's to write.
+   */
+  const routeIfForeign = (
+    panelId: string,
+    patch: Record<string, unknown>,
+    kind: 'state' | 'settings'
+  ): boolean => {
+    const { doc, windowId } = get()
+    const owner = windowOfPanel(doc, panelId)
+    if (!owner || owner === windowId) return false
+    void window.dmscreen.patchPanel(owner, panelId, patch, kind)
+    return true
   }
 
   /**
@@ -133,9 +185,14 @@ export const useAppStore = create<AppState>((set, get) => {
    * taught to wait out.
    */
   const initial = window.dmscreen.initialDocument
+  const identity = window.dmscreen.identity
 
   return {
     doc: initial.doc,
+    // Falls back to the primary's id: a window main does not recognise is one
+    // that should not exist, and drawing the main screen beats drawing nothing.
+    windowId: identity.windowId ?? initial.doc.windows[0].id,
+    isPrimary: identity.isPrimary,
     filePath: initial.filePath,
     dirty: initial.dirty,
     recents: [],
@@ -177,18 +234,36 @@ export const useAppStore = create<AppState>((set, get) => {
     // The lock covers the names as well as the shape, and is enforced here for
     // the same reason the tree operations below are: a guard living in the UI is
     // one every new route in has to remember.
+    /*
+     * The layout's name and its lock are the document's, not this window's, so
+     * they are set through main and come back to every window. Applied locally
+     * first all the same: the control that was just clicked has to respond now,
+     * and main confirming a moment later cannot disagree with it.
+     */
     renameLayout: (name) => {
       if (get().doc.locked) return
-      mutate((doc) => ({ ...doc, name }))
+      set((state) => ({ doc: { ...state.doc, name }, dirty: true }))
+      void window.dmscreen.setDocumentMeta({ name })
     },
 
-    toggleLock: () => mutate((doc) => ({ ...doc, locked: !doc.locked })),
+    toggleLock: () => {
+      const locked = !get().doc.locked
+      set((state) => ({ doc: { ...state.doc, locked }, dirty: true }))
+      void window.dmscreen.setDocumentMeta({ locked })
+    },
 
     /* Set, never mutated: adopting main's document is not an edit to it, and
        publishing it back would echo. The same argument as `maximizedNodeId`
        being outside `mutate` — this is the app catching up, not a change. */
     adoptDocument: ({ doc, filePath, dirty }) =>
       set({ doc, filePath, dirty, maximizedNodeId: null, activeNodeId: null }),
+
+    /*
+     * The view state is deliberately left alone here. A peer's edit arrives on
+     * every keystroke in the other window, and resetting on each one would drop
+     * this window out of fullscreen while someone typed next door.
+     */
+    adoptPeerDocument: ({ doc, filePath, dirty }) => set({ doc, filePath, dirty }),
 
     adoptStatus: ({ filePath, dirty }) => set({ filePath, dirty }),
 
@@ -204,26 +279,32 @@ export const useAppStore = create<AppState>((set, get) => {
       if (get().doc.locked) return
       const panelId = uid('panel')
       const newNode = makePanelNode(panelId)
-      mutate((doc) => ({
-        ...doc,
-        root: splitNode(doc.root, nodeId, direction, newNode),
-        panels: { ...doc.panels, [panelId]: makePanelData() }
-      }))
+      mutate((doc) => {
+        const window = findWindow(doc, get().windowId)
+        if (!window) return doc
+        return {
+          ...setWindowRoot(doc, window.id, splitNode(window.root, nodeId, direction, newNode)),
+          panels: { ...doc.panels, [panelId]: makePanelData() }
+        }
+      })
       // A fresh panel should be the one that reacts to the next command.
       set({ activeNodeId: newNode.id, maximizedNodeId: null })
     },
 
     closePanel: (nodeId) => {
-      const { doc, maximizedNodeId, activeNodeId } = get()
+      const { doc, maximizedNodeId, activeNodeId, windowId } = get()
       if (doc.locked) return
-      const next = removeNode(doc.root, nodeId)
+      const root = findWindow(doc, windowId)?.root
+      if (!root) return
+      const next = removeNode(root, nodeId)
       if (!next) {
         // Closing the last panel leaves an empty one rather than a blank screen.
+        // Only this window's — a second screen emptying itself must not take the
+        // panels on the first one with it.
         const panelId = uid('panel')
         mutate((d) => ({
-          ...d,
-          root: makePanelNode(panelId),
-          panels: { [panelId]: makePanelData() }
+          ...setWindowRoot(d, windowId, makePanelNode(panelId)),
+          panels: { ...d.panels, [panelId]: makePanelData() }
         }))
       } else {
         mutateTree(() => next)
@@ -261,18 +342,22 @@ export const useAppStore = create<AppState>((set, get) => {
      * the same treatment, since the module lands there either way.
      */
     swapWithNode: (nodeId, targetNodeId) => {
-      const { doc, maximizedNodeId } = get()
+      const { doc, maximizedNodeId, windowId } = get()
       // Fullscreen would hide the whole of it — see `ifFullscreen` in the
       // catalogue, which greys the same commands for the same reason.
       if (doc.locked || maximizedNodeId) return
-      const next = swapPanelNodes(doc.root, nodeId, targetNodeId)
-      if (next === doc.root) return
+      const root = findWindow(doc, windowId)?.root
+      if (!root) return
+      const next = swapPanelNodes(root, nodeId, targetNodeId)
+      if (next === root) return
       mutateTree(() => next)
       set({ activeNodeId: targetNodeId })
     },
 
     swapWithNeighbour: (nodeId, direction) => {
-      const neighbour = neighbourPanels(get().doc.root, nodeId)[direction]
+      const root = myRoot(get())
+      if (!root) return
+      const neighbour = neighbourPanels(root, nodeId)[direction]
       if (neighbour) get().swapWithNode(nodeId, neighbour)
     },
 
@@ -283,10 +368,12 @@ export const useAppStore = create<AppState>((set, get) => {
      * session autosave for nothing.
      */
     resizePanel: (nodeId, axis, delta) => {
-      const { doc, maximizedNodeId } = get()
+      const { doc, maximizedNodeId, windowId } = get()
       if (doc.locked || maximizedNodeId) return
-      const next = resizePanelShare(doc.root, nodeId, axis, delta)
-      if (next === doc.root) return
+      const root = findWindow(doc, windowId)?.root
+      if (!root) return
+      const next = resizePanelShare(root, nodeId, axis, delta)
+      if (next === root) return
       mutateTree(() => next)
     },
 
@@ -311,7 +398,17 @@ export const useAppStore = create<AppState>((set, get) => {
       }))
     },
 
-    updatePanelState: (panelId, patch) =>
+    /*
+     * A write to a panel, wherever it lives.
+     *
+     * A window may only speak for its own panels — that is the line main's merge
+     * reads — so a write aimed at another window's panel is forwarded to the
+     * window that owns it and applied there. The initiative tracker pushing HP
+     * back to a party panel is the case: the two are often on different screens,
+     * and applying it here would produce a change main discards without a word.
+     */
+    updatePanelState: (panelId, patch) => {
+      if (routeIfForeign(panelId, patch, 'state')) return
       mutate((doc) => {
         const panel = doc.panels[panelId]
         if (!panel) return doc
@@ -319,9 +416,11 @@ export const useAppStore = create<AppState>((set, get) => {
           ...doc,
           panels: { ...doc.panels, [panelId]: { ...panel, state: { ...panel.state, ...patch } } }
         }
-      }),
+      })
+    },
 
-    updatePanelSettings: (panelId, patch) =>
+    updatePanelSettings: (panelId, patch) => {
+      if (routeIfForeign(panelId, patch, 'settings')) return
       mutate((doc) => {
         const panel = doc.panels[panelId]
         if (!panel) return doc
@@ -332,7 +431,19 @@ export const useAppStore = create<AppState>((set, get) => {
             [panelId]: { ...panel, settings: { ...panel.settings, ...patch } }
           }
         }
-      }),
+      })
+    },
+
+    /* --------------------------------------------------------- windows */
+
+    /* All of them main's: the window list's shape is the one part of the
+       document no single window speaks for. Each comes back as a peer update. */
+    addWindow: () => window.dmscreen.addWindow(),
+    openWindow: (windowId) => window.dmscreen.setWindowOpen(windowId, true),
+    closeWindow: (windowId) => window.dmscreen.setWindowOpen(windowId, false),
+    renameWindow: (windowId, name) => window.dmscreen.renameWindow(windowId, name),
+    removeWindow: (windowId) => window.dmscreen.removeWindow(windowId),
+    focusWindow: (windowId) => window.dmscreen.focusWindow(windowId),
 
     /* ------------------------------------------------------------- view */
 
@@ -359,6 +470,13 @@ export const useAppStore = create<AppState>((set, get) => {
     setPickingNode: (nodeId) => set({ pickingNodeId: nodeId }),
 
     setTheme: (theme) => {
+      get().adoptTheme(theme)
+      // Every window follows. A secondary window has no theme control of its
+      // own, so this is the only way the players' screen changes with the rest.
+      void window.dmscreen.setTheme(theme)
+    },
+
+    adoptTheme: (theme) => {
       localStorage.setItem(THEME_KEY, theme)
       applyTheme(theme)
       set({ theme })
@@ -373,10 +491,27 @@ export const useAppStore = create<AppState>((set, get) => {
  * back to the first panel so the menu always does something sensible.
  */
 export function resolveTargetNodeId(): string | null {
-  const { doc, activeNodeId, maximizedNodeId } = useAppStore.getState()
-  if (maximizedNodeId) return maximizedNodeId
-  if (activeNodeId && findNode(doc.root, activeNodeId)) return activeNodeId
-  return collectPanelNodes(doc.root)[0]?.id ?? null
+  const state = useAppStore.getState()
+  const root = myRoot(state)
+  if (!root) return null
+  if (state.maximizedNodeId) return state.maximizedNodeId
+  if (state.activeNodeId && findNode(root, state.activeNodeId)) return state.activeNodeId
+  return collectPanelNodes(root)[0]?.id ?? null
 }
 
 export { EMPTY_MODULE_ID }
+
+/**
+ * The window this renderer is showing, and its tiling.
+ *
+ * Everything that used to read `doc.root` reads one of these instead. As a
+ * selector rather than a stored copy, so a window's tree cannot go stale against
+ * the document it came from.
+ */
+export function myWindow(state: { doc: LayoutDoc; windowId: string }): WindowDef | undefined {
+  return findWindow(state.doc, state.windowId)
+}
+
+export function myRoot(state: { doc: LayoutDoc; windowId: string }): LayoutNode | undefined {
+  return myWindow(state)?.root
+}

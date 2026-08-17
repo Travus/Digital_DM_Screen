@@ -13,8 +13,9 @@
  * here, from one copy, whatever is on screen.
  */
 import { createEmptyDoc, parseLayoutDoc } from '../shared/layout'
-import type { DocumentSnapshot, DocumentStatus, LayoutDoc } from '../shared/types'
+import type { DocumentSnapshot, DocumentStatus, LayoutDoc, WindowBounds } from '../shared/types'
 import { readSession, writeSession } from './userStore'
+import { isUsableBounds } from './windowBounds'
 
 /** How long the document must sit still before it is stashed in userData. */
 const SESSION_DEBOUNCE_MS = 700
@@ -22,6 +23,14 @@ const SESSION_DEBOUNCE_MS = 700
 let doc: LayoutDoc = createEmptyDoc()
 let filePath: string | null = null
 let dirty = false
+/**
+ * Where each window last sat, by window id.
+ *
+ * Kept beside the document rather than in it: a layout describes a tiling, and
+ * which monitor the players' screen is on is a fact about this desk. This rides
+ * the session, so it never travels with a `.dmscreen`.
+ */
+let bounds: Record<string, WindowBounds> = {}
 
 let sessionTimer: ReturnType<typeof setTimeout> | null = null
 let announce: (status: DocumentStatus) => void = () => {}
@@ -61,11 +70,21 @@ function setStatus(nextPath: string | null, nextDirty: boolean): void {
   announce(status())
 }
 
+export function rememberedBounds(): Record<string, WindowBounds> {
+  return bounds
+}
+
+/** A window was moved or resized. Cheap, and debounced by the session write. */
+export function rememberBounds(windowId: string, next: WindowBounds): void {
+  bounds = { ...bounds, [windowId]: next }
+  scheduleSession()
+}
+
 function scheduleSession(): void {
   if (sessionTimer) clearTimeout(sessionTimer)
   sessionTimer = setTimeout(() => {
     sessionTimer = null
-    void writeSession(snapshot())
+    void writeSession({ ...snapshot(), bounds })
   }, SESSION_DEBOUNCE_MS)
 }
 
@@ -83,7 +102,7 @@ export async function flushSession(): Promise<void> {
     clearTimeout(sessionTimer)
     sessionTimer = null
   }
-  await writeSession(snapshot())
+  await writeSession({ ...snapshot(), bounds })
 }
 
 /**
@@ -103,6 +122,12 @@ export function publish(next: LayoutDoc): void {
 /** New, Open, and the session restore: a different document, cleanly. */
 export function replace(next: LayoutDoc, path: string | null, nextDirty = false): void {
   doc = next
+  // Geometry for windows this document does not have is dropped rather than
+  // accumulated. Window ids are minted per document, so keeping them would grow
+  // the session by a few entries per layout ever opened, and none of them would
+  // ever match anything again.
+  const live = new Set(next.windows.map((window) => window.id))
+  bounds = Object.fromEntries(Object.entries(bounds).filter(([id]) => live.has(id)))
   setStatus(path, nextDirty)
   scheduleSession()
 }
@@ -136,4 +161,13 @@ export async function restore(): Promise<void> {
   doc = parsed
   filePath = session.filePath ?? null
   dirty = session.dirty === true
+
+  // Checked one at a time rather than trusted as a block: a rectangle read off
+  // the disk reaches the OS, which takes a negative size literally.
+  const live = new Set(parsed.windows.map((window) => window.id))
+  bounds = Object.fromEntries(
+    Object.entries(session.bounds ?? {}).filter(
+      ([id, value]) => live.has(id) && isUsableBounds(value)
+    )
+  )
 }

@@ -1,0 +1,206 @@
+{
+  "formatVersion": 2,
+  "name": "Two screens",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "windows": [
+    {
+      "id": "win_main",
+      "name": "Main window",
+      "open": true,
+      "root": {
+        "type": "split",
+        "id": "split_main",
+        "direction": "column",
+        "sizes": [
+          0.6,
+          0.4
+        ],
+        "children": [
+          {
+            "type": "panel",
+            "id": "node_init",
+            "panelId": "panel_init"
+          },
+          {
+            "type": "panel",
+            "id": "node_ref",
+            "panelId": "panel_ref"
+          }
+        ]
+      }
+    },
+    {
+      "id": "win_player",
+      "name": "Player screen",
+      "open": true,
+      "root": {
+        "type": "panel",
+        "id": "node_party",
+        "panelId": "panel_party"
+      }
+    }
+  ],
+  "panels": {
+    "panel_init": {
+      "moduleId": "initiative",
+      "settings": {
+        "showAc": true,
+        "showNotes": true,
+        "hideEnemyHp": false,
+        "syncParty": true
+      },
+      "state": {
+        "round": 1,
+        "turnIndex": 0,
+        "combatants": [
+          {
+            "id": "c_thora",
+            "name": "Thora Ironvein",
+            "initiative": 19,
+            "ac": 18,
+            "hpCurrent": 44,
+            "hpMax": 52,
+            "conditions": [],
+            "note": "",
+            "isPlayer": true,
+            "partyLink": {
+              "panelId": "panel_party",
+              "characterId": "pc_thora"
+            }
+          },
+          {
+            "id": "c_wolf1",
+            "name": "Dire wolf",
+            "initiative": 14,
+            "ac": 14,
+            "hpCurrent": 22,
+            "hpMax": 37,
+            "conditions": [
+              "Prone"
+            ],
+            "note": "Pack tactics",
+            "isPlayer": false
+          },
+          {
+            "id": "c_selis",
+            "name": "Selis Quill",
+            "initiative": 11,
+            "ac": 13,
+            "hpCurrent": 9,
+            "hpMax": 28,
+            "conditions": [
+              "Frightened"
+            ],
+            "note": "Concentrating on bless",
+            "isPlayer": true
+          }
+        ]
+      }
+    },
+    "panel_ref": {
+      "moduleId": "conditions",
+      "settings": {
+        "showSummaries": true,
+        "startExpanded": false
+      },
+      "state": {
+        "query": "",
+        "expanded": [
+          "Frightened"
+        ]
+      }
+    },
+    "panel_party": {
+      "moduleId": "party",
+      "settings": {
+        "compact": false,
+        "showPlayerColumn": true
+      },
+      "state": {
+        "columnWidths": {
+          "notes": 210
+        },
+        "fields": [
+          {
+            "id": "ac",
+            "label": "AC",
+            "type": "number"
+          },
+          {
+            "id": "hp",
+            "label": "HP",
+            "type": "meter"
+          },
+          {
+            "id": "pp",
+            "label": "Pass. Perc.",
+            "type": "number"
+          },
+          {
+            "id": "boons",
+            "label": "Boons",
+            "type": "symbols",
+            "symbols": [
+              {
+                "id": "sym_blessing",
+                "char": "✨"
+              },
+              {
+                "id": "sym_luck",
+                "char": "🍀"
+              },
+              {
+                "id": "sym_potion",
+                "char": "🧪"
+              }
+            ]
+          },
+          {
+            "id": "notes",
+            "label": "Notes",
+            "type": "text"
+          }
+        ],
+        "characters": [
+          {
+            "id": "pc_thora",
+            "name": "Thora Ironvein",
+            "values": {
+              "__player": "Ada",
+              "ac": 18,
+              "hp": {
+                "current": 44,
+                "max": 52
+              },
+              "pp": 12,
+              "boons": [
+                "sym_blessing",
+                "sym_potion"
+              ],
+              "notes": "Owes the harbourmaster a favour"
+            }
+          },
+          {
+            "id": "pc_selis",
+            "name": "Selis Quill",
+            "values": {
+              "__player": "Jonas",
+              "ac": 13,
+              "hp": {
+                "current": 9,
+                "max": 28
+              },
+              "pp": 16,
+              "boons": [
+                "sym_luck"
+              ],
+              "notes": "Looking for their brother"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "locked": false
+}

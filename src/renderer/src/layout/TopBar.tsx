@@ -3,8 +3,46 @@ import { actionUnavailable } from '../../../shared/actions'
 import { useAppStore } from '../state/store'
 import { parenthesised, useShortcuts } from '../lib/shortcuts'
 import { ShortcutHint } from '../components/ShortcutHint'
+import { WindowsMenu } from './WindowsMenu'
+
+/**
+ * A secondary window's bar: the mark, which screen this is, and the switcher.
+ *
+ * Deliberately almost nothing. A second window is usually the one the players
+ * can see, and app chrome on it is chrome pointed at the wrong audience. The
+ * commands it drops are not lost — the native menu, its accelerators and the
+ * action palette all still carry them, and every one of them acts on the focused
+ * window. What goes is the row of buttons, which on a players' screen would only
+ * ever be pressed by accident.
+ */
+function SecondaryBar(): JSX.Element {
+  const windowId = useAppStore((state) => state.windowId)
+  const windowName = useAppStore(
+    (state) => state.doc.windows.find((entry) => entry.id === state.windowId)?.name
+  )
+  const layoutName = useAppStore((state) => state.doc.name)
+
+  return (
+    <header className="topbar secondary">
+      <div className="brand" title="Digital DM Screen">
+        <BrandMark />
+      </div>
+      <span className="window-label" data-window-id={windowId} title={layoutName}>
+        {windowName ?? 'Window'}
+      </span>
+      <WindowsMenu />
+      <span className="spacer" />
+    </header>
+  )
+}
 
 export function TopBar(): JSX.Element {
+  const isPrimary = useAppStore((state) => state.isPrimary)
+  if (!isPrimary) return <SecondaryBar />
+  return <PrimaryBar />
+}
+
+function PrimaryBar(): JSX.Element {
   const shortcuts = useShortcuts()
   const name = useAppStore((state) => state.doc.name)
   const dirty = useAppStore((state) => state.dirty)
@@ -36,6 +74,8 @@ export function TopBar(): JSX.Element {
     locked,
     hasPanel: false,
     maximized: false,
+    isPrimary: true,
+    hasWindows: false,
     hasSplit: false,
     neighbours: { left: false, right: false, up: false, down: false }
   })
@@ -44,17 +84,7 @@ export function TopBar(): JSX.Element {
   return (
     <header className="topbar">
       <div className="brand" title="Digital DM Screen">
-        {/* Inline rather than a glyph — no font dependency to go missing. */}
-        <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M12 2 3.5 5v7.2c0 5.2 3.6 8.9 8.5 9.8 4.9-.9 8.5-4.6 8.5-9.8V5L12 2Z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-          <path d="M12 7v9M8 11h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
+        <BrandMark />
       </div>
 
       {renaming ? (
@@ -102,6 +132,8 @@ export function TopBar(): JSX.Element {
           {dirty && <span className="dirty-dot" title="Unsaved changes" />}
         </button>
       )}
+
+      <WindowsMenu />
 
       <span className="spacer" />
 
@@ -161,6 +193,22 @@ export function TopBar(): JSX.Element {
         </button>
       </div>
     </header>
+  )
+}
+
+/** Inline rather than a glyph — no font dependency to go missing. */
+function BrandMark(): JSX.Element {
+  return (
+    <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 2 3.5 5v7.2c0 5.2 3.6 8.9 8.5 9.8 4.9-.9 8.5-4.6 8.5-9.8V5L12 2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M12 7v9M8 11h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   )
 }
 

@@ -35,6 +35,13 @@ function userDataFor(name) {
 }
 
 const starter = join(root, 'examples', 'starter.dmscreen')
+/**
+ * Two windows, and the only version 2 layout in the repo — every other shot
+ * seeds `starter.dmscreen`, which is version 1 and therefore exercises the
+ * migration instead. Initiative sits on one screen and the party panel it reads
+ * from on the other, which is the cross-window case.
+ */
+const twoScreens = join(root, 'examples', 'two-screens.dmscreen')
 const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
 /**
  * A map for the Image module. Absolute, because that is what the module stores
@@ -112,6 +119,117 @@ const shots = [
     expect: {
       found: ['.topbar .icon-btn.on[title^="Layout locked"]'],
       missing: ['.dirty-dot']
+    }
+  },
+
+  /* ------------------------------------------------------------- windows */
+
+  // One window, so the control is the command rather than a list.
+  {
+    name: 'windows-alone',
+    layout: starter,
+    expect: {
+      found: ['.windows-btn[data-windows="add"]'],
+      missing: ['.windows-menu'],
+      text: ['+ Add Window']
+    }
+  },
+  // Adding one. The button becomes a list, because from here on the question it
+  // answers is "which screen".
+  {
+    name: 'windows-added',
+    layout: starter,
+    steps: [{ click: '.windows-btn[data-windows="add"]' }, { wait: 900 }],
+    expect: {
+      found: ['.windows-btn[data-windows="menu"]'],
+      missing: ['.windows-btn[data-windows="add"]'],
+      text: ['Windows']
+    }
+  },
+  // The list itself: both screens, the current one marked, and the command that
+  // was the whole control a moment ago now at the bottom of it.
+  {
+    name: 'windows-menu',
+    layout: twoScreens,
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: [
+        '.windows-menu',
+        '.window-row.current[data-window-id="win_main"]',
+        '.window-row[data-window-id="win_player"]',
+        '.windows-menu [data-windows="add"]'
+      ],
+      text: ['Main window', 'Player screen', '+ New Window']
+    }
+  },
+  // The second screen, photographed. Its bar carries the switcher and nothing
+  // else — no New, Open, Save or Save As, which is the point of a window the
+  // players can see.
+  {
+    name: 'windows-secondary',
+    layout: twoScreens,
+    window: 2,
+    expect: {
+      found: [
+        '.topbar.secondary',
+        '.window-label[data-window-id="win_player"]',
+        '.table.resizable'
+      ],
+      missing: ['.topbar-actions', '.layout-name'],
+      text: ['Player screen']
+    }
+  },
+  // The switcher is on the secondary window too, and knows which screen it is
+  // on — the row for this window is the one marked current.
+  {
+    name: 'windows-secondary-menu',
+    layout: twoScreens,
+    window: 2,
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: ['.window-row.current[data-window-id="win_player"]'],
+      text: ['Main window', 'Player screen']
+    }
+  },
+  // Closed rather than removed: the row stays, under its own heading, and the
+  // panels behind it are still in the document. Closing from the list rather
+  // than from the window's own frame, which the harness cannot reach.
+  {
+    name: 'windows-closed-listed',
+    layout: twoScreens,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.window-row[data-window-id="win_player"] .window-close' },
+      { wait: 900 }
+    ],
+    expect: {
+      found: ['.window-row.closed[data-window-id="win_player"]', '.menu-heading'],
+      // "CLOSED", not "Closed": the heading is uppercased in CSS, and the text
+      // check reads `innerText`, which reports the text as rendered.
+      text: ['CLOSED', 'Player screen']
+    }
+  },
+  /*
+   * The cross-window link. Initiative is on the main screen and the party panel
+   * it reads AC and HP from is on the other, so this shot fails if a window only
+   * ever sees its own panels.
+   *
+   * The numbers are the party panel's, not the combatant's own: the fixture
+   * gives Thora 44/52 in both, so the assertion is on the AC, which the party
+   * panel puts at 18 against the combatant record's own copy.
+   */
+  {
+    name: 'windows-party-link',
+    layout: twoScreens,
+    expect: {
+      // The badge is rendered only for a combatant whose linked party panel was
+      // actually found, so it is the assertion: a window that could see nothing
+      // but its own panels would draw the row without it.
+      //
+      // Not a `text` check on the numbers. Those live in inputs, and the
+      // harness reads `document.body.innerText`, which does not include the
+      // value of a form control.
+      found: ['.combatant.pc .link-badge']
     }
   },
   {
@@ -1457,6 +1575,17 @@ function run(shotPath, shot, name, slot) {
   const expectations = JSON.stringify(normaliseExpect(shot.expect, name))
   const steps = JSON.stringify(normaliseSteps(shot, name))
   const { settle } = shot
+  /*
+   * Which window the shot drives and photographs, as an index into the
+   * document's open windows. A layout can have several now, and a second screen
+   * is UI like any other — unphotographed, it is the one part of the app nobody
+   * ever looks at.
+   *
+   * One window, not all of them: the steps and the capture belong to a single
+   * renderer, and installing the hook everywhere would have each of them fire
+   * the step list and race to exit the app.
+   */
+  const windowIndex = shot.window ? shot.window - 1 : 0
 
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
@@ -1486,6 +1615,7 @@ function run(shotPath, shot, name, slot) {
           XDG_CONFIG_HOME: join(configRoot, name),
           DMSCREEN_SMOKE_SHOT: shotPath,
           DMSCREEN_SMOKE_STEPS: steps,
+          DMSCREEN_SMOKE_WINDOW: String(windowIndex),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           DMSCREEN_SMOKE_EXPECT: expectations,
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'

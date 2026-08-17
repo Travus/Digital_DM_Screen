@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addWindow,
+  mergeWindowSlice,
   collectPanelNodes,
   createEmptyDoc,
+  defaultWindowName,
   equaliseSplit,
   findNode,
   findParent,
+  findWindow,
+  isPrimaryWindow,
+  makePanelData,
   makePanelNode,
+  removeWindow,
+  renameWindow,
+  setWindowOpen,
+  setWindowRoot,
+  windowOfNode,
+  windowOfPanel,
   neighbourPanels,
   neighbourSides,
   panelNodeOrder,
@@ -328,22 +340,58 @@ describe('resizing a panel from the keyboard', () => {
 })
 
 describe('pruning orphaned panel data', () => {
-  it('drops payloads the tree no longer points at', () => {
-    const doc: LayoutDoc = {
-      formatVersion: 1,
-      name: 'Test',
-      root: tree(),
-      panels: {
-        p_a: { moduleId: 'notes', settings: {}, state: {} },
-        p_b: { moduleId: 'dice', settings: {}, state: {} },
-        p_c: { moduleId: 'timers', settings: {}, state: {} },
-        p_gone: { moduleId: 'notes', settings: {}, state: {} }
-      },
-      locked: false,
-      createdAt: '',
-      updatedAt: ''
-    }
+  const docWith = (windows: LayoutDoc['windows']): LayoutDoc => ({
+    formatVersion: 2,
+    name: 'Test',
+    windows,
+    panels: {
+      p_a: { moduleId: 'notes', settings: {}, state: {} },
+      p_b: { moduleId: 'dice', settings: {}, state: {} },
+      p_c: { moduleId: 'timers', settings: {}, state: {} },
+      p_gone: { moduleId: 'notes', settings: {}, state: {} }
+    },
+    locked: false,
+    createdAt: '',
+    updatedAt: ''
+  })
+
+  it('drops payloads no tree points at', () => {
+    const doc = docWith([{ id: 'w1', name: 'Main window', root: tree(), open: true }])
     expect(Object.keys(pruneOrphanPanels(doc).panels).sort()).toEqual(['p_a', 'p_b', 'p_c'])
+  })
+
+  it('keeps payloads a second window points at', () => {
+    const doc = docWith([
+      { id: 'w1', name: 'Main window', root: tree(), open: true },
+      {
+        id: 'w2',
+        name: 'Window 2',
+        root: { type: 'panel', id: 'n_g', panelId: 'p_gone' },
+        open: true
+      }
+    ])
+    expect(Object.keys(pruneOrphanPanels(doc).panels).sort()).toEqual([
+      'p_a',
+      'p_b',
+      'p_c',
+      'p_gone'
+    ])
+  })
+
+  // A closed window keeps its panels — that is the whole of what "closed rather
+  // than removed" buys. Pruning to the open windows would empty it the moment
+  // anything else in the document changed.
+  it('keeps payloads a closed window points at', () => {
+    const doc = docWith([
+      { id: 'w1', name: 'Main window', root: tree(), open: true },
+      {
+        id: 'w2',
+        name: 'Window 2',
+        root: { type: 'panel', id: 'n_g', panelId: 'p_gone' },
+        open: false
+      }
+    ])
+    expect(Object.keys(pruneOrphanPanels(doc).panels)).toContain('p_gone')
   })
 })
 
@@ -356,9 +404,11 @@ describe('ids and fresh documents', () => {
     expect(first.startsWith('node_')).toBe(true)
   })
 
-  it('starts a document on one empty panel that its tree points at', () => {
+  it('starts a document on one open window over one empty panel', () => {
     const doc = createEmptyDoc('Session one')
-    const [node] = collectPanelNodes(doc.root)
+    expect(doc.windows).toHaveLength(1)
+    expect(doc.windows[0]).toMatchObject({ open: true })
+    const [node] = collectPanelNodes(doc.windows[0].root)
     expect(doc.name).toBe('Session one')
     expect(doc.locked).toBe(false)
     expect(doc.panels[node.panelId]).toMatchObject({ moduleId: 'empty' })
@@ -438,7 +488,10 @@ describe('parsing a layout file', () => {
     delete raw.locked
     delete raw.createdAt
     const doc = parseLayoutDoc(raw)
-    expect(doc).toMatchObject({ formatVersion: 1, locked: false })
+    // Stamped with what this build writes rather than what was read: `valid()`
+    // is a version 1 file and has been migrated by the time it gets here, so
+    // carrying its old number through would put it back on the next save.
+    expect(doc).toMatchObject({ formatVersion: 2, locked: false })
     expect(typeof doc?.createdAt).toBe('string')
   })
 
@@ -524,5 +577,272 @@ describe('parsing a layout file', () => {
       sizes: [0.5, 0.5]
     }
     expect(parseLayoutDoc(raw)).toBeNull()
+  })
+})
+
+describe('windows', () => {
+  const twoWindows = (): LayoutDoc => addWindow(createEmptyDoc('Two screens'))
+
+  it('adds a window holding one empty panel of its own', () => {
+    const doc = twoWindows()
+    expect(doc.windows).toHaveLength(2)
+    const [node] = collectPanelNodes(doc.windows[1].root)
+    expect(doc.panels[node.panelId]).toMatchObject({ moduleId: 'empty' })
+    // The first window keeps its own panel — a second screen is an addition,
+    // not a redistribution.
+    expect(Object.keys(doc.panels)).toHaveLength(2)
+  })
+
+  it('names each new window past the ones already taken', () => {
+    const doc = twoWindows()
+    expect(doc.windows[1].name).toBe('Window 2')
+    expect(defaultWindowName(doc)).toBe('Window 3')
+  })
+
+  // Counting off the length would reuse a name here: three windows, one of them
+  // already called "Window 3".
+  it('skips a name a renamed window has taken', () => {
+    const doc = renameWindow(addWindow(twoWindows()), 'win_main', 'Window 4')
+    expect(defaultWindowName(doc)).toBe('Window 5')
+  })
+
+  it('finds which window shows a panel, and which names a node', () => {
+    const doc = twoWindows()
+    const [first] = collectPanelNodes(doc.windows[0].root)
+    const [second] = collectPanelNodes(doc.windows[1].root)
+    expect(windowOfPanel(doc, first.panelId)).toBe(doc.windows[0].id)
+    expect(windowOfPanel(doc, second.panelId)).toBe(doc.windows[1].id)
+    expect(windowOfNode(doc, second.id)).toBe(doc.windows[1].id)
+    expect(windowOfPanel(doc, 'p_nowhere')).toBeNull()
+  })
+
+  it('replaces one window tree and leaves the other alone', () => {
+    const doc = twoWindows()
+    const before = doc.windows[0].root
+    const next = setWindowRoot(doc, doc.windows[1].id, makePanelNode('p_new'))
+    expect(next.windows[0].root).toBe(before)
+    expect(next.windows[1].root).toMatchObject({ panelId: 'p_new' })
+  })
+
+  it('closes a window without losing it or its panels', () => {
+    const doc = twoWindows()
+    const second = doc.windows[1]
+    const [panel] = collectPanelNodes(second.root)
+    const closed = setWindowOpen(doc, second.id, false)
+    expect(closed.windows).toHaveLength(2)
+    expect(closed.windows[1].open).toBe(false)
+    expect(pruneOrphanPanels(closed).panels[panel.panelId]).toBeDefined()
+    expect(setWindowOpen(closed, second.id, true).windows[1].open).toBe(true)
+  })
+
+  /*
+   * The primary is what closing the app goes through, and every layout has to
+   * have one. Refusing both here rather than in the UI is the same argument the
+   * lock already makes: a guard written into a component is one every later
+   * route in has to remember.
+   */
+  it('refuses to close or remove the primary window', () => {
+    const doc = twoWindows()
+    expect(setWindowOpen(doc, doc.windows[0].id, false)).toBe(doc)
+    expect(removeWindow(doc, doc.windows[0].id)).toBe(doc)
+    expect(isPrimaryWindow(doc, doc.windows[0].id)).toBe(true)
+    expect(isPrimaryWindow(doc, doc.windows[1].id)).toBe(false)
+  })
+
+  it('removes a secondary window and prunes the panels that went with it', () => {
+    const doc = twoWindows()
+    const [gone] = collectPanelNodes(doc.windows[1].root)
+    const next = removeWindow(doc, doc.windows[1].id)
+    expect(next.windows).toHaveLength(1)
+    expect(next.panels[gone.panelId]).toBeUndefined()
+  })
+
+  it('leaves a document alone when asked about a window it does not have', () => {
+    const doc = twoWindows()
+    expect(removeWindow(doc, 'win_nope')).toBe(doc)
+    expect(findWindow(doc, 'win_nope')).toBeUndefined()
+  })
+})
+
+describe('reading a version 1 layout', () => {
+  const v1 = (): Record<string, unknown> => ({
+    formatVersion: 1,
+    name: 'Old screen',
+    root: {
+      type: 'split',
+      id: 'split_root',
+      direction: 'row',
+      children: [
+        { type: 'panel', id: 'n_a', panelId: 'p_a' },
+        { type: 'panel', id: 'n_b', panelId: 'p_b' }
+      ],
+      sizes: [0.5, 0.5]
+    },
+    panels: { p_a: { moduleId: 'notes' }, p_b: { moduleId: 'dice' } },
+    locked: false
+  })
+
+  it('wraps the single root in one open primary window', () => {
+    const doc = parseLayoutDoc(v1())
+    expect(doc?.windows).toHaveLength(1)
+    expect(doc?.windows[0]).toMatchObject({ name: 'Main window', open: true })
+    expect(collectPanelNodes(doc!.windows[0].root)).toHaveLength(2)
+  })
+
+  // Fixed rather than minted, so opening the same old file twice names the same
+  // window both times — which is what lets the geometry remembered against that
+  // id in session.json still find it.
+  it('gives that window the same id every time', () => {
+    expect(parseLayoutDoc(v1())?.windows[0].id).toBe(parseLayoutDoc(v1())?.windows[0].id)
+  })
+
+  it('reads a version 2 file as the windows it declares', () => {
+    const raw = {
+      ...v1(),
+      formatVersion: 2,
+      root: undefined,
+      windows: [
+        { id: 'w1', name: 'Main window', root: { type: 'panel', id: 'n_a', panelId: 'p_a' } },
+        {
+          id: 'w2',
+          name: 'Player screen',
+          root: { type: 'panel', id: 'n_b', panelId: 'p_b' },
+          open: false
+        }
+      ]
+    }
+    delete (raw as Record<string, unknown>).root
+    const doc = parseLayoutDoc(raw)
+    expect(doc?.windows.map((window) => window.name)).toEqual(['Main window', 'Player screen'])
+    // Absent means open; only an explicit false closes one.
+    expect(doc?.windows.map((window) => window.open)).toEqual([true, false])
+  })
+
+  // A layout whose only window is closed has nothing to show, so the file is
+  // read as if it were open rather than rejected.
+  it('forces the primary window open whatever the file says', () => {
+    const raw = {
+      ...v1(),
+      root: undefined,
+      windows: [
+        {
+          id: 'w1',
+          name: 'Main window',
+          root: { type: 'panel', id: 'n_a', panelId: 'p_a' },
+          open: false
+        }
+      ]
+    }
+    delete (raw as Record<string, unknown>).root
+    expect(parseLayoutDoc(raw)?.windows[0].open).toBe(true)
+  })
+
+  it('rejects a windows list that is empty or malformed', () => {
+    const broken: unknown[] = [
+      { ...v1(), root: undefined, windows: [] },
+      {
+        ...v1(),
+        root: undefined,
+        windows: [{ name: 'No id', root: { type: 'panel', id: 'n', panelId: 'p' } }]
+      },
+      {
+        ...v1(),
+        root: undefined,
+        windows: [{ id: 'w', name: 'Bad tree', root: { type: 'panel' } }]
+      }
+    ]
+    for (const raw of broken) {
+      delete (raw as Record<string, unknown>).root
+      expect(parseLayoutDoc(raw)).toBeNull()
+    }
+  })
+})
+
+describe('merging one window copy of the document', () => {
+  /** Two windows, one panel each, so ownership is unambiguous. */
+  const shared = (): LayoutDoc => addWindow(createEmptyDoc('Shared'))
+
+  const panelOf = (doc: LayoutDoc, index: number): string =>
+    collectPanelNodes(doc.windows[index].root)[0].panelId
+
+  const edit = (doc: LayoutDoc, panelId: string, text: string): LayoutDoc => ({
+    ...doc,
+    panels: { ...doc.panels, [panelId]: { ...doc.panels[panelId], state: { text } } }
+  })
+
+  it('takes the sender window tree and leaves the other alone', () => {
+    const base = shared()
+    const sender = base.windows[1].id
+    const incoming = setWindowRoot(base, sender, makePanelNode(panelOf(base, 1)))
+    const merged = mergeWindowSlice(base, incoming, sender)
+    expect(merged.windows[0].root).toBe(base.windows[0].root)
+    expect(merged.windows[1].root).toBe(incoming.windows[1].root)
+  })
+
+  /*
+   * The case this exists for. Both windows edit, and the second message to
+   * arrive must not undo the first — adopting an incoming copy wholesale is
+   * exactly how it would.
+   */
+  it('does not let a stale copy undo another window edit', () => {
+    const base = shared()
+    const [first, second] = [base.windows[0].id, base.windows[1].id]
+    const firstPanel = panelOf(base, 0)
+    const secondPanel = panelOf(base, 1)
+
+    // Window one types, and main folds that in.
+    const afterFirst = mergeWindowSlice(base, edit(base, firstPanel, 'from one'), first)
+    // Window two was still holding the pre-edit document when it typed.
+    const stale = edit(base, secondPanel, 'from two')
+    const afterSecond = mergeWindowSlice(afterFirst, stale, second)
+
+    expect(afterSecond.panels[firstPanel].state).toEqual({ text: 'from one' })
+    expect(afterSecond.panels[secondPanel].state).toEqual({ text: 'from two' })
+  })
+
+  it('ignores an edit aimed at a panel the sender does not own', () => {
+    const base = shared()
+    const other = panelOf(base, 0)
+    const forged = edit(base, other, 'not yours')
+    const merged = mergeWindowSlice(base, forged, base.windows[1].id)
+    expect(merged.panels[other]).toBe(base.panels[other])
+  })
+
+  it('drops a panel the sender has stopped showing', () => {
+    const base = addWindow(shared())
+    const sender = base.windows[1].id
+    const gone = panelOf(base, 1)
+    const incoming = setWindowRoot(base, sender, makePanelNode('p_fresh'))
+    const merged = mergeWindowSlice(
+      base,
+      { ...incoming, panels: { ...incoming.panels, p_fresh: makePanelData('notes') } },
+      sender
+    )
+    expect(merged.panels[gone]).toBeUndefined()
+    expect(merged.panels.p_fresh).toMatchObject({ moduleId: 'notes' })
+  })
+
+  /*
+   * Adding, closing and renaming a window are commands that go through main and
+   * come back to every window, so a renderer never speaks for them. A message
+   * carrying a stale name would otherwise undo a rename made a moment earlier
+   * in another window.
+   */
+  it('keeps the window name and open flag the base has', () => {
+    const base = shared()
+    const sender = base.windows[1].id
+    const named = renameWindow(setWindowOpen(base, sender, false), sender, 'Renamed by main')
+    const incoming = { ...base }
+    const merged = mergeWindowSlice(named, incoming, sender)
+    expect(merged.windows[1].name).toBe('Renamed by main')
+    expect(merged.windows[1].open).toBe(false)
+  })
+
+  it('leaves the base alone when the window is not in both copies', () => {
+    const base = shared()
+    expect(mergeWindowSlice(base, base, 'win_nope')).toBe(base)
+    expect(mergeWindowSlice(base, removeWindow(base, base.windows[1].id), base.windows[1].id)).toBe(
+      base
+    )
   })
 })

@@ -56,10 +56,18 @@ on screen; whether it *looks right* is still eyes only.
   and the ids the `dmscreen-image://` handler serves them under.
 - `src/main/document.ts` — the layout document, and the one copy of it that
   outlives a window.
+- `src/main/windowBounds.ts` — where a window opens, as arithmetic about
+  rectangles.
+- `src/main/smoke.ts` — the smoke harness's half of the app, inert unless
+  `DMSCREEN_SMOKE_SHOT` is set.
+- `src/renderer/src/layout/WindowsMenu.tsx` — the window switcher beside the
+  layout name.
 
-The layout is an n-ary tree: a `split` holds any number of children in a row or
-column, with `sizes` as flex weights; a `panel` leaf points at an entry in
-`doc.panels`. All tree operations are pure functions in `src/shared/layout.ts`.
+A layout is a list of **windows**, each with its own n-ary tree over one shared
+pool of panels. In a tree a `split` holds any number of children in a row or
+column, with `sizes` as flex weights, and a `panel` leaf points at an entry in
+`doc.panels`. All tree operations are pure functions in `src/shared/layout.ts`
+and take a `root`, so none of them knows windows exist.
 
 ## State
 
@@ -100,6 +108,15 @@ over the top. It is also parsed rather than trusted: the renderer no longer gets
 a chance to reject `session.json`, and a malformed tree arriving at preload is a
 renderer that cannot draw at all.
 
+**The layout format is version 2, and version 1 still opens.** A version 1 file
+has one `root` at the top; `parseLayoutDoc` wraps it in a single primary window
+called "Main window", under the fixed id `win_main` so that opening the same old
+file twice names the same window and its remembered geometry still finds it. The
+migration is one way — a version 2 file has no `root`, and an older build rejects
+it rather than half-loading it. `examples/starter.dmscreen` stays version 1 on
+purpose, so nearly every smoke shot exercises that path; `examples/two-screens.dmscreen`
+is the version 2 fixture.
+
 **Panel state is sparse.** `doc.panels[id].state` holds only what the user has
 changed; module defaults are merged over it at render time. Anything reading
 *another* panel's state must merge over that module's declared defaults — see
@@ -122,6 +139,86 @@ to remember, and there are four ways to a rename.
 it on blur, which reads as the app losing the edit rather than declining it —
 so `setRenamingNode` refuses too. Only in the opening direction: closing has to
 keep working, or locking while a field is already up strands it on screen.
+
+## Windows
+
+A layout is several screens: the laptop being run from, and the television the
+players can see. One `.dmscreen` holds all of them, which is what lets a second
+window have no Save button — there is nothing separate to save.
+
+**`windows[0]` is the primary, and it is not just the first one.** It carries the
+file buttons, and closing it closes the app rather than closing a window — so it
+can never be closed or removed, and `setWindowOpen`/`removeWindow` refuse it in
+`layout.ts` rather than leaving that to the UI. `window:close` is greyed on it
+with the reason, because closing it is Quit and Quit is a different command with
+a different key.
+
+**Closing a secondary window keeps it.** `open: false`, panels and all, listed
+under a Closed heading in the switcher and reopened from there. A stray close of
+the players' screen should not cost the arrangement on it. `pruneOrphanPanels`
+therefore walks **every** window including the closed ones — pruning to the open
+ones would empty a closed window the moment anything else in the document
+changed. The only way to be rid of one for good is the bin on its row, or the
+list would only ever grow.
+
+**A quit is not a close.** `shuttingDown` is set before the primary takes the
+others down, and a `close` fired under it does not mark anything closed —
+otherwise quitting would save a layout whose every screen had marked itself
+closed on the way out.
+
+**A window owns its own tiling and the contents of its panels, and nothing
+else.** Every renderer holds the whole document and publishes the whole of it
+after an edit, and `mergeWindowSlice` reads each message for the part its sender
+is entitled to speak for. Adopting an incoming copy wholesale is how the last
+message to arrive undoes an edit made next door a moment earlier. The window
+list's *shape* — `name`, `open`, adding, removing — is main's, along with the
+layout's name and its lock, and all of it changes through commands that come back
+to everyone. That split is what makes this conflict-free by construction rather
+than merely unlikely to conflict: two windows editing at once write to disjoint
+halves.
+
+**A write aimed at another window's panel is forwarded, not applied.** The
+initiative tracker pushes AC and HP back into a party panel that is often on the
+other screen. `updatePanelState` checks `windowOfPanel` and routes through main to
+the owning window, which applies it as its own. Applying it locally would produce
+a change the merge silently discards — the reads work either way, which is
+exactly what would make that hard to notice.
+
+**Replacement and a peer's edit are different messages.** `document:changed` is
+New or Open, and resets what the window was looking at. `document:peer` is the
+same document moved by another window, and keeps `maximizedNodeId` and
+`activeNodeId` — it arrives on every keystroke next door, so resetting would drop
+this window out of fullscreen while someone typed on the other screen.
+
+**Geometry is remembered per machine, in `session.json`, never in the layout.**
+Which monitor the players' screen is on is a fact about this desk, and a
+`.dmscreen` copied elsewhere would arrive describing displays that machine does
+not have. `clampToDisplays` brings a window back when its display is gone —
+Electron takes an off-screen position literally, so a window restored onto an
+unplugged television never appears, which reads as the app failing to start. A
+window merely hanging over an edge is left alone: that is somewhere people
+deliberately put windows.
+
+**The menu dispatches to the focused window.** The menu is the application's, so
+"Split Right" run from the players' screen has to split a panel there. Dialogs
+hang off `dialogParent()` for the same reason.
+
+**New Window and Close Window are on the Layout menu, not a Window menu.** On
+macOS "Window" is the system's menu — `role: 'windowMenu'` — and a second one
+with the same name is a menu bar with two Windows in it. They are commands about
+the layout, which is the menu they are in. They keep their own `Window` category
+in the catalogue, which is what the shortcuts editor groups on.
+
+**The theme is relayed through main.** It lives in `localStorage`, which the
+windows share, so one opened later already has it. What it cannot do is notice a
+change made next door — and a secondary window has no theme control of its own,
+so without the relay the players' screen stays dark until it is reopened.
+
+**A secondary window's bar is the mark, the window's name and the switcher.**
+Nothing else. A second window is usually the one an audience can see, and app
+chrome on it is chrome pointed at the wrong people. The commands it drops are not
+lost: the native menu, its accelerators and the action palette all still carry
+them, and every one acts on the focused window.
 
 ## Moving panels
 
@@ -640,6 +737,7 @@ paths distinct.
 - `wheel` — `{ selector, deltaY, offsetX, offsetY }`, one notch over an element
 - `drag` — `{ from, to, hold }`, one element dropped onto another
 - `steps` — those six as an ordered list, for a shot that needs two of a kind
+- `window` — which window to drive and photograph, 1-based, default the first
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
   long form taking `found`, `missing` and `text`
@@ -747,6 +845,17 @@ restore has committed, so it cannot appear before the render it stands for — t
 awaits `document.fonts.ready` and two frames, because the DOM being right is not
 yet the window being painted. **Do not reintroduce a constant here.** Adding one
 to "give it a moment" is how this becomes flaky again.
+
+**A shot drives and photographs one window.** `window: 2` reaches a second
+screen, which is otherwise the one part of the app nobody ever looks at. One
+window and not all of them: the steps and the capture belong to a single
+renderer, and installing the hook everywhere would have each of them fire the
+step list and race to exit the app.
+
+**The `text` check reads `innerText`, which is the text as *rendered*.** A
+heading uppercased in CSS is matched as "CLOSED", not "Closed", and the value of
+an input is not in it at all — every number on an initiative row is invisible to
+it. Assert on a selector for anything inside a form control.
 
 **A shot that saves needs somewhere of its own to save to.** `writable` is that:
 without it a save shot would rewrite `examples/starter.dmscreen`, the fixture
