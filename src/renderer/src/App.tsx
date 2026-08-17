@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { acceleratorFromChord, formatBinding } from '../../shared/accelerator'
 import type { ActionId } from '../../shared/actions'
-import { findParent } from '../../shared/layout'
+import { findParent, RESIZE_STEP } from '../../shared/layout'
 import type { MenuAction } from '../../shared/types'
 import { LayoutView } from './layout/LayoutView'
 import { RecentsPanel } from './layout/RecentsPanel'
@@ -171,6 +171,33 @@ export function App(): JSX.Element {
         break
       case 'panel:splitDown':
         if (target) store.splitPanel(target, 'column')
+        break
+      case 'panel:swapLeft':
+        if (target) store.swapWithNeighbour(target, 'left')
+        break
+      case 'panel:swapRight':
+        if (target) store.swapWithNeighbour(target, 'right')
+        break
+      case 'panel:swapUp':
+        if (target) store.swapWithNeighbour(target, 'up')
+        break
+      case 'panel:swapDown':
+        if (target) store.swapWithNeighbour(target, 'down')
+        break
+      /* Which boundary moves is the store's business — the panel may be the last
+         in its split, where growing means taking from the pane before it. What
+         is said here is only the axis and which way. */
+      case 'panel:wider':
+        if (target) store.resizePanel(target, 'row', RESIZE_STEP)
+        break
+      case 'panel:narrower':
+        if (target) store.resizePanel(target, 'row', -RESIZE_STEP)
+        break
+      case 'panel:taller':
+        if (target) store.resizePanel(target, 'column', RESIZE_STEP)
+        break
+      case 'panel:shorter':
+        if (target) store.resizePanel(target, 'column', -RESIZE_STEP)
         break
       case 'panel:close':
         if (target) store.closePanel(target)

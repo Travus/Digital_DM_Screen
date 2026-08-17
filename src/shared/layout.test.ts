@@ -6,16 +6,20 @@ import {
   findNode,
   findParent,
   makePanelNode,
+  neighbourPanels,
+  neighbourSides,
   panelNodeOrder,
   parseLayoutDoc,
   pruneOrphanPanels,
   removeNode,
+  resizePanelShare,
   setSplitSizes,
   splitNode,
+  swapPanelNodes,
   toggleSplitDirection,
   uid
 } from './layout'
-import type { LayoutDoc, LayoutNode, SplitNode } from './types'
+import type { LayoutDoc, LayoutNode, PanelNode, SplitNode } from './types'
 
 const panel = (id: string, panelId = `p_${id}`): LayoutNode => ({ type: 'panel', id, panelId })
 
@@ -166,6 +170,160 @@ describe('resizing and flipping', () => {
     expect(setSplitSizes(root, 'a', [1, 2])).toEqual(root)
     expect(toggleSplitDirection(root, 'a')).toEqual(root)
     expect(equaliseSplit(root, 'a')).toEqual(root)
+  })
+})
+
+describe('finding the panel next door', () => {
+  it('reads a neighbour off the screen, not off the nesting', () => {
+    // a | b over c. `a` runs the full height, so both right-hand panels are to
+    // the right of it; `b` and `c` are above and below one another.
+    expect(neighbourPanels(tree(), 'a').right).toBe('b')
+    expect(neighbourPanels(tree(), 'b').left).toBe('a')
+    expect(neighbourPanels(tree(), 'b').down).toBe('c')
+    expect(neighbourPanels(tree(), 'c').up).toBe('b')
+  })
+
+  it('has nothing off the edges of the window', () => {
+    expect(neighbourPanels(tree(), 'a').left).toBeNull()
+    expect(neighbourPanels(tree(), 'a').up).toBeNull()
+    expect(neighbourPanels(tree(), 'c').down).toBeNull()
+    // A lone panel is on every edge at once.
+    expect(neighbourSides(panel('only'), 'only')).toEqual({
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    })
+  })
+
+  it('picks the panel in line rather than the first one across the boundary', () => {
+    // Two rows of two. This is the case a walk up the tree gets wrong: the
+    // nearest ancestor running downwards is the outer column, whose next child
+    // is the whole second row — and `b` is above `d`, not above `c`.
+    const root = split('root', 'column', [
+      split('top', 'row', [panel('a'), panel('b')]),
+      split('bottom', 'row', [panel('c'), panel('d')])
+    ])
+    expect(neighbourPanels(root, 'b').down).toBe('d')
+    expect(neighbourPanels(root, 'a').down).toBe('c')
+    expect(neighbourPanels(root, 'd').up).toBe('b')
+  })
+
+  it('takes the one sharing the most edge, then the topmost', () => {
+    // `a` faces a stack of three. The middle one shares the most of `a`'s edge,
+    // and where two share the same it is the higher — so a swap repeated in one
+    // direction lands somewhere predictable rather than somewhere arbitrary.
+    const stack = split('right', 'column', [panel('b'), panel('c'), panel('d')])
+    stack.sizes = [0.25, 0.5, 0.25]
+    const root = split('root', 'row', [panel('a'), stack])
+    expect(neighbourPanels(root, 'a').right).toBe('c')
+
+    stack.sizes = [0.375, 0.375, 0.25]
+    expect(neighbourPanels(root, 'a').right).toBe('b')
+  })
+
+  it('ignores a panel that only touches a corner', () => {
+    // `a` over `b` on the left, `c` over `d` on the right, boundaries level.
+    // `b`'s top corner meets `c`'s bottom one exactly, and touching at a point
+    // is not being next to something — `b` reaches `d` and nothing else.
+    const left = split('left', 'column', [panel('a'), panel('b')])
+    const right = split('right', 'column', [panel('c'), panel('d')])
+    const root = split('root', 'row', [left, right])
+    expect(neighbourPanels(root, 'b').right).toBe('d')
+    expect(neighbourPanels(root, 'a').right).toBe('c')
+  })
+
+  it('answers for a node that is not in the tree without throwing', () => {
+    expect(neighbourPanels(tree(), 'nope').right).toBeNull()
+    expect(neighbourPanels(tree(), null).right).toBeNull()
+  })
+})
+
+describe('swapping two panels', () => {
+  it('trades the contents and leaves the tree alone', () => {
+    const next = swapPanelNodes(tree(), 'a', 'c')
+    // The node ids stay where they were — they are what the active panel, the
+    // fullscreen panel and the pane sizes are all held by.
+    expect(panelNodeOrder(next)).toEqual(['a', 'b', 'c'])
+    expect((findNode(next, 'a') as PanelNode).panelId).toBe('p_c')
+    expect((findNode(next, 'c') as PanelNode).panelId).toBe('p_a')
+    expect(asSplit(next).sizes).toEqual(asSplit(tree()).sizes)
+  })
+
+  it('does nothing for a panel swapped with itself, or with a split', () => {
+    const root = tree()
+    expect(swapPanelNodes(root, 'a', 'a')).toEqual(root)
+    expect(swapPanelNodes(root, 'a', 'inner')).toEqual(root)
+    expect(swapPanelNodes(root, 'a', 'nope')).toEqual(root)
+  })
+
+  it('does not mutate the tree it was given', () => {
+    const root = tree()
+    const before = structuredClone(root)
+    swapPanelNodes(root, 'a', 'b')
+    expect(root).toEqual(before)
+  })
+})
+
+describe('resizing a panel from the keyboard', () => {
+  /* Rounded: a share is renormalised after every nudge, so the arithmetic is
+     exact to about a thousandth and no further. */
+  const sizesOf = (root: LayoutNode, splitId: string): number[] =>
+    asSplit(findNode(root, splitId)).sizes.map((size) => Math.round(size * 1000) / 1000)
+
+  it('moves the boundary after the panel, which is the handle beside it', () => {
+    const next = resizePanelShare(tree(), 'a', 'row', 0.1)
+    expect(sizesOf(next, 'root')).toEqual([0.6, 0.4])
+  })
+
+  it('moves the boundary before it when the panel is last', () => {
+    // Otherwise "wider" would mean "wider, unless you are on the right".
+    const next = resizePanelShare(tree(), 'b', 'column', 0.1)
+    expect(sizesOf(next, 'inner')).toEqual([0.6, 0.4])
+    const shrunk = resizePanelShare(tree(), 'c', 'column', 0.1)
+    expect(sizesOf(shrunk, 'inner')).toEqual([0.4, 0.6])
+  })
+
+  it('resizes the innermost split running that way, not the outermost', () => {
+    // `b` is inside a column inside a row: growing it downwards has to move the
+    // boundary it can see, and leave the one further out alone.
+    const next = resizePanelShare(tree(), 'b', 'column', 0.1)
+    expect(sizesOf(next, 'root')).toEqual([0.5, 0.5])
+  })
+
+  it('climbs past a split running the other way', () => {
+    // `b` has no vertical boundary of its own; the one that makes it wider is
+    // the root's.
+    const next = resizePanelShare(tree(), 'b', 'row', 0.1)
+    expect(sizesOf(next, 'root')).toEqual([0.4, 0.6])
+  })
+
+  it('stops at the floor rather than squeezing a pane to nothing', () => {
+    const root = split('root', 'row', [panel('a'), panel('b')])
+    root.sizes = [0.9, 0.1]
+    // A twentieth of the split is as thin as a pane gets; the rest of the ask is
+    // dropped rather than the pane being closed by keyboard.
+    expect(sizesOf(resizePanelShare(root, 'a', 'row', 0.2), 'root')).toEqual([0.95, 0.05])
+  })
+
+  it('returns the same tree when there is no room left, so nothing is dirtied', () => {
+    const root = split('root', 'row', [panel('a'), panel('b')])
+    root.sizes = [0.95, 0.05]
+    expect(resizePanelShare(root, 'a', 'row', 0.2)).toBe(root)
+  })
+
+  it('returns the same tree when nothing shares the panel’s axis', () => {
+    // A lone panel, and a panel whose only split runs the other way.
+    expect(resizePanelShare(panel('only'), 'only', 'row', 0.1)).toEqual(panel('only'))
+    const root = split('root', 'row', [panel('a'), panel('b')])
+    expect(resizePanelShare(root, 'a', 'column', 0.1)).toBe(root)
+  })
+
+  it('does not mutate the tree it was given', () => {
+    const root = tree()
+    const before = structuredClone(root)
+    resizePanelShare(root, 'a', 'row', 0.1)
+    expect(root).toEqual(before)
   })
 })
 

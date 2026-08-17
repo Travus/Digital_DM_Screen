@@ -387,6 +387,19 @@ export function menuTemplate({
           click: send('split:equalise')
         },
         { type: 'separator' },
+        // Flat rather than two submenus: these carry the only accelerators in
+        // the app anyone has to hunt for, and a key one level further in is a
+        // key nobody finds.
+        { ...item('panel:swapLeft', 'Swap With Panel Left'), click: send('panel:swapLeft') },
+        { ...item('panel:swapRight', 'Swap With Panel Right'), click: send('panel:swapRight') },
+        { ...item('panel:swapUp', 'Swap With Panel Above'), click: send('panel:swapUp') },
+        { ...item('panel:swapDown', 'Swap With Panel Below'), click: send('panel:swapDown') },
+        { type: 'separator' },
+        { ...item('panel:wider', 'Make Panel Wider'), click: send('panel:wider') },
+        { ...item('panel:narrower', 'Make Panel Narrower'), click: send('panel:narrower') },
+        { ...item('panel:taller', 'Make Panel Taller'), click: send('panel:taller') },
+        { ...item('panel:shorter', 'Make Panel Shorter'), click: send('panel:shorter') },
+        { type: 'separator' },
         {
           ...item('panel:maximize', 'Fullscreen Panel (Esc to exit)'),
           click: send('panel:maximize')

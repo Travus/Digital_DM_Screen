@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
-import { resolveKeymap, type ResolvedKeymap } from '../shared/actions'
+import { ACTIONS, resolveKeymap, type ResolvedKeymap } from '../shared/actions'
 import { findPreset, presetBindings } from '../shared/presets'
 import type { DataSnapshot } from '../shared/types'
 import { menuTemplate, type DataActions, type MenuTemplateOptions } from './menuTemplate'
@@ -245,11 +245,45 @@ describe('the accelerator column', () => {
         'Split Down',
         'Flip Surrounding Split',
         'Even Out Surrounding Split',
+        'Swap With Panel Left',
+        'Swap With Panel Right',
+        'Swap With Panel Above',
+        'Swap With Panel Below',
+        'Make Panel Wider',
+        'Make Panel Narrower',
+        'Make Panel Taller',
+        'Make Panel Shorter',
         'Fullscreen Panel (Esc to exit)',
         'Close Panel'
       ])
     )
     expect(JSON.stringify(build())).not.toContain('"Escape"')
+  })
+
+  it('registers every shipped default somewhere on the bar', () => {
+    // The list above says which rows exist; this says none of the catalogue's
+    // own keys was left without one — asked of `ACTIONS` rather than written out
+    // again, so an action added tomorrow is covered by the same assertion.
+    const registered = new Set<string>()
+    const walk = (list: MenuItemConstructorOptions[]): void => {
+      for (const entry of list) {
+        if (typeof entry.accelerator === 'string') registered.add(entry.accelerator)
+        if (Array.isArray(entry.submenu)) walk(entry.submenu)
+      }
+    }
+    walk(build())
+
+    const unplaced = ACTIONS.filter(
+      (action) =>
+        action.defaultAccelerator &&
+        // Escape belongs to the renderer, and Quit takes its key from the role
+        // rather than from `item()` — both are pinned by their own tests above.
+        action.id !== 'panel:restore' &&
+        action.id !== 'app:quit' &&
+        !registered.has(action.defaultAccelerator)
+    ).map((action) => action.id)
+
+    expect(unplaced).toEqual([])
   })
 })
 

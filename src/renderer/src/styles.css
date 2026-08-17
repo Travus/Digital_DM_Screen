@@ -297,6 +297,19 @@ h4 {
   border-color: var(--accent);
 }
 
+/* Mid-drag. The source dims rather than emptying: a panel that disappeared for
+   the duration would re-tile the screen the drop is being aimed across. */
+.panel.dragging {
+  opacity: 0.45;
+}
+
+/* The panel under the pointer. An inset ring rather than a thicker border, which
+   would move every pane in the split by a pixel as the pointer crossed it. */
+.panel.drop-target {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -305,6 +318,16 @@ h4 {
   background: var(--bg-3);
   border-bottom: 1px solid var(--line);
   flex: none;
+}
+
+/* The whole bar is the grip. Locked, or with its rename field open, the
+   attribute goes to "false" and the bar reads as an ordinary header again. */
+.panel-head[draggable='true'] {
+  cursor: grab;
+}
+
+.panel-head[draggable='true']:active {
+  cursor: grabbing;
 }
 
 /* The only places emoji are rendered — see the --font-emoji note above. */

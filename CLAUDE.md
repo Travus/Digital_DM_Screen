@@ -84,6 +84,26 @@ it on blur, which reads as the app losing the edit rather than declining it —
 so `setRenamingNode` refuses too. Only in the opening direction: closing has to
 keep working, or locking while a field is already up strands it on screen.
 
+## Moving panels
+
+A panel changes places with the one beside it — dragged onto it, or swapped with an arrow chord — and is resized from the keyboard as well as from the splitter.
+
+**A swap trades `panelId`s, never nodes.** A node id names a *place*: it is what `activeNodeId` and `maximizedNodeId` hold, what the pane's flex weight belongs to, and what React keys the subtree on. Moving the contents instead keeps a swap from re-tiling anything, so two panes of different sizes exchange modules and neither changes shape.
+
+**The selection follows the module.** `swapWithNode` hands `activeNodeId` to the panel the module landed in, so the same key pressed twice carries one panel across the screen rather than bouncing it between one pair of panes.
+
+**"The panel to the right" is a question about the screen, and is answered geometrically.** `panelBoxes` lays the tree out in fractions of the window and `neighbourPanels` takes the nearest box across the edge that also overlaps on the other axis. Walking up the tree answers a different question: in `column[row[a, b], row[c, d]]` the nearest ancestor running downwards is the outer column, whose next child is the whole second row — and choosing between *its* panels is the geometry again. Ties go to the largest shared edge, then to the topmost or leftmost, so a panel facing a stack always picks the same member of it.
+
+**Rearranging is refused while a panel is fullscreen**, in the store and not only in the catalogue. One pane fills the window, so a swap and a resize alike land entirely off screen and the only sign either happened is the layout going unsaved. A drag cannot reach a second panel there either, so this is the keyboard agreeing with the mouse.
+
+**The keyboard resize has no pixels, so its floor is a share.** The splitter stops at 90 px; `resizePanelShare` stops at a twentieth of the split it sits in. The boundary it moves is the innermost one on that axis — the handle the DM would have grabbed — and the one *before* the panel when the panel is last, or "wider" would mean "wider, unless you are on the right". It returns the same root when nothing moved and the store compares identity before mutating, so a key held at the limit does not go on dirtying the layout and restarting the autosave.
+
+**A panel drag is an HTML5 drag with a MIME type of its own.** Pointer events are already spoken for inside the modules — panning an image, drawing a block selection across table cells — so a gesture that crosses into one of those has to be a different kind of event rather than the same kind arbitrated by hand. `application/x-dmscreen-panel` is what tells a panel drop from a file drop, and `dataTransfer.types` is the only thing readable during `dragover`, which is what lets the highlight and the drop ask one question. Nothing goes on `text/plain`: a textarea would insert it.
+
+**The header is the grip, and stops being one while its rename field is open.** A draggable ancestor takes the pointer that would have selected text in the input. Locked, it stops being one too — the same rule the splitter grips follow.
+
+**The ⋯ panel menu carries the four swaps, and Flip and Even Out came off it to make room.** That menu hangs off the panel a DM is looking at, so it is worth spending on what gets reached for mid-session. Both of the commands it lost keep their rows on the native Panel menu and in the palette, which is also where the four resize commands stay — the divider is already right there to drag.
+
 ## Rendering
 
 **Never put an emoji font in the body font stack.** Noto Color Emoji also covers
@@ -314,6 +334,8 @@ deliberately is allowed to spend it.
 be free. Deliberately blunt: freeing it only on Darwin makes one
 `keybindings.json` behave differently per platform.
 
+**Alt is the arrow modifier, because the other two are text editing.** Ctrl+arrow moves by word and Shift+arrow extends a selection, on every platform, and a menu accelerator beats the renderer — so either would take that out of the Notes editor and every table cell rather than merely inconveniencing it, the way `CmdOrCtrl+I` would have taken italic. The four swaps are `CmdOrCtrl+Alt+arrow`; the four resizes add Shift, which reads as the finer version of the same gesture. Neither family is *reserved*: a keymap the user picked is allowed to spend them.
+
 ### Two-stroke sequences
 
 A binding is one stroke or two, space-separated: `"CmdOrCtrl+K CmdOrCtrl+S"`.
@@ -358,6 +380,10 @@ you get a prefix that still fires something on its own, which nothing can resolv
 
 **Every binding is sourced from the tool, not remembered.** A preset wearing a
 tool's name and guessing at its bindings is worse than not shipping it.
+
+**A stroke is written the way the app records it, not the way the tool prints it.** tmux calls its split `%`; the keypress arrives as `Shift+5`, because a stroke is built from `event.code` and the shift comes back as a modifier. The gap is one-sided: `canonicalKey` accepts 31 punctuation characters and `keyFromCode` can only emit the eleven unshifted ones, so `%` parses, validates, prints in the editor and the ⋯ menu, and can never equal a keypress — `advanceChord` compares strokes as strings. tmux shipped two of those, and both of its splits were dead. `isRecordableBinding` is the rule and a preset test holds every arm to it.
+
+**That check is for the presets only, and cannot be moved into `checkBinding`.** Refusing a hand-edited `%` would mean knowing where `%` is on that keyboard, and nothing can say: `getLayoutMap()` reports what a code produces *unmodified*, and no API exposes the shift level. So a user's file keeps taking `%` — what is ours to get right is what we ship. The cost is that a character's position is a US layout's, and the chord then stays on the same physical key rather than on the same character, which is the bargain `event.code` already makes everywhere else.
 
 **A preset must not contradict itself.** Vim's window commands sit behind
 `Ctrl+W`, which ships bound to Close Panel, so the preset must claim that too or
@@ -569,7 +595,8 @@ paths distinct.
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
 - `select` — `{ selector, start, end }`, for behaviour that acts on selected text
 - `wheel` — `{ selector, deltaY, offsetX, offsetY }`, one notch over an element
-- `steps` — those five as an ordered list, for a shot that needs two of a kind
+- `drag` — `{ from, to, hold }`, one element dropped onto another
+- `steps` — those six as an ordered list, for a shot that needs two of a kind
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
   long form taking `found`, `missing` and `text`
@@ -587,6 +614,14 @@ nobody wrote. Steps also take `wait` for a mid-sequence dwell.
 "narrow a list, then walk it" could not be written, and neither could any state
 two inputs deep — the palette showing a greyed row's reason and then a fresh
 query typed over it. Reach for `steps` when the behaviour *is* the transition.
+
+**A `drag` carries one `DataTransfer` through the whole sequence**, so the
+handlers do the work rather than being mimed: the source's `dragstart` writes the
+panel id into it and the target's `drop` reads it back. A constructed
+`DataTransfer` stays readable, unlike the protected one a live drag hands to
+`dragover`. `hold` stops after the dragover, because the drop indicator exists
+only between those two events — run the drop and there is nothing left to
+photograph.
 
 **`wheel` is off-centre on purpose.** A zoom aimed at the pointer and one taken
 from the middle draw the same picture when the pointer *is* the middle, so a shot

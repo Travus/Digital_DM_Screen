@@ -185,9 +185,9 @@ const shots = [
     // not merely present but complete.
     expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
-  // The one panel in a fresh window, which is inside no split. Flip and Even Out
-  // used to be absent here; they are now rows carrying the reason in a tooltip,
-  // so the menu is the same shape whatever the layout is.
+  // The one panel in a fresh window, which has no neighbour on any side. The
+  // four swap rows are present and greyed rather than absent, so the menu is the
+  // same shape whatever the layout is.
   {
     name: 'panel-menu-lone',
     layout: null,
@@ -195,9 +195,25 @@ const shots = [
     // The tooltip is the row's whole explanation, so its text is asserted from
     // the attribute — `innerText` never sees it.
     expect: {
-      found: ['.menu', '.menu-item.disabled[title*="not inside a split"]'],
-      text: ['Flip surrounding split']
+      found: ['.menu', '.menu-item.disabled[title*="no panel to the left"]'],
+      text: ['Swap with panel left']
     }
+  },
+  // A swap run from the ⋯ menu, which is its own route in: the row acts on the
+  // panel the menu hangs off, where the key acts on whichever panel was last
+  // touched. Initiative is on the left, so swapping right puts the party table
+  // there and initiative in the top-right pane.
+  {
+    name: 'panel-menu-swap',
+    layout: starter,
+    click: [
+      '.panel:has(.round-pill) .icon-btn[title="Panel menu"]',
+      '.panel:has(.round-pill) .menu-item[data-menu-item="swap-right"]'
+    ].join('\n'),
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:first-child .round-pill'
+    ]
   },
   // And near the foot of the window, where it has to open upwards instead.
   {
@@ -228,9 +244,68 @@ const shots = [
     // The grips going and the rows staying are both the shot. A menu that keeps
     // its length is the point of greying rather than dropping, so "Close panel"
     // present and disabled is what proves it.
+    // The header giving up its grip belongs here too: the lock freezes the
+    // arrangement, and dragging a panel onto another rearranges it.
     expect: {
-      found: ['.menu', '.lock-icon', '.menu-item.disabled.danger'],
+      found: [
+        '.menu',
+        '.lock-icon',
+        '.menu-item.disabled.danger',
+        '.panel-head[draggable="false"]'
+      ],
       missing: ['.splitter-grip']
+    }
+  },
+  // Dragging one panel onto another to swap them. The starter is initiative on
+  // the left, party top-right; after the drop they have changed places, which is
+  // what both halves of the assertion say — one alone would also pass on a
+  // module that had been duplicated rather than swapped.
+  {
+    name: 'panel-drag-swap',
+    layout: starter,
+    drag: { from: '.panel:has(.round-pill) .panel-head', to: '.panel:has(.table.resizable)' },
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:first-child .round-pill'
+    ]
+  },
+  // The same drag, stopped between `dragover` and `drop`, which is the only
+  // moment the indicator exists. Both ends are on screen at once: the panel
+  // being carried dims, the one under the pointer takes the ring.
+  {
+    name: 'panel-drag-over',
+    layout: starter,
+    drag: {
+      from: '.panel:has(.round-pill) .panel-head',
+      to: '.panel:has(.table.resizable)',
+      hold: true
+    },
+    expect: ['.panel.dragging:has(.round-pill)', '.panel.drop-target:has(.table.resizable)']
+  },
+  // The keyboard half, twice over: right, then down. The second press is the
+  // point — the selection follows the module it moved, so a repeated key carries
+  // one panel across the screen instead of swapping the same pair back.
+  {
+    name: 'panel-swap-keys',
+    layout: starter,
+    steps: [{ menu: 'panel:swapRight' }, { menu: 'panel:swapDown' }],
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:last-child .round-pill'
+    ]
+  },
+  // Resizing from the keyboard. The starter's left pane is seeded at 0.56 and
+  // each press moves a twentieth, so two of them put it past 0.6 — asserted as a
+  // prefix of the inline weight, since the exact digits are a renormalised
+  // float. The seeded value going is the other half: without it a pane that
+  // never moved would match nothing and say nothing.
+  {
+    name: 'panel-resize-keys',
+    layout: starter,
+    steps: [{ menu: 'panel:wider' }, { menu: 'panel:wider' }],
+    expect: {
+      found: ['.split.row > .pane:first-child[style*="flex-grow: 0.6"]'],
+      missing: ['.split.row > .pane:first-child[style*="flex-grow: 0.56"]']
     }
   },
   // Renaming the layout. The assertion is only that the field replaced the
@@ -512,8 +587,10 @@ const shots = [
     steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="cursor"]' }],
     expect: {
       found: ['.shortcuts-modal', '.shortcut-row'],
-      // Ctrl+S is still Save, alongside a sequence that ends on it.
-      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+S']
+      // Ctrl+S is still Save, alongside a sequence that ends on it. Ctrl+M Left
+      // is VS Code's group move on Cursor's leader, so it also says the whole
+      // arm moved rather than the three rows that were there before.
+      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+M Left', 'Ctrl+S']
     }
   },
   // The Zed preset applied through its button. Shift+Escape on Fullscreen Panel
@@ -526,7 +603,36 @@ const shots = [
     steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="zed"]' }],
     expect: {
       found: ['.shortcuts-modal', '.shortcut-row'],
-      text: ['Ctrl+K Down', 'Ctrl+K Ctrl+S', 'Shift+Escape']
+      // Ctrl+K Shift+Left is Zed's own swap, on the same leader as its split —
+      // the two sit one row apart, which is the pair that would collide if a
+      // second stroke ever stopped being allowed to reuse a bound one.
+      text: ['Ctrl+K Down', 'Ctrl+K Shift+Left', 'Ctrl+K Ctrl+S', 'Shift+Escape']
+    }
+  },
+  // The tmux preset, which is the one whose bindings are written as keys rather
+  // than as the characters tmux prints. `Ctrl+B Shift+5` is its split right: as
+  // `Ctrl+B %` it rendered here just as happily and could never fire, because a
+  // stroke is built from `event.code` and that key arrives as Shift+5. The
+  // Alt+arrow rows are its pane resizing.
+  {
+    name: 'shortcuts-tmux',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="tmux"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+B Shift+5', "Ctrl+B Shift+'", 'Ctrl+B Alt+Right']
+    }
+  },
+  // Vim's, where every window command hangs off Ctrl+W — including the four the
+  // preset has to claim back from Close Panel, and the resize keys written as
+  // the strokes that produce Vim's `<` and `>`.
+  {
+    name: 'shortcuts-vim',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="vim"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+W C', 'Ctrl+W Shift+H', 'Ctrl+W Shift+.']
     }
   },
 
@@ -571,6 +677,23 @@ const shots = [
     expect: {
       found: ['.palette-item.disabled[data-action-id="panel:close"]'],
       missing: ['.palette .note']
+    }
+  },
+  // A one-panel layout, where every swap and every resize is off for a reason
+  // that names the missing side rather than saying "not now". The row is clicked
+  // by id rather than reached with Enter: the greyed rows sink and then sort by
+  // name, so the cursor's first row is "above" and the reason would be too.
+  {
+    name: 'action-palette-no-neighbour',
+    layout: null,
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: 'swap' } },
+      { click: '.palette-item.disabled[data-action-id="panel:swapLeft"]' }
+    ],
+    expect: {
+      found: ['.palette-item.disabled[data-action-id="panel:swapLeft"]', '.palette-reason'],
+      text: ['there is no panel to the left']
     }
   },
   // Activating a greyed row. Nothing happening is the wrong answer to a
@@ -1176,15 +1299,16 @@ function normaliseExpect(expect, name) {
 }
 
 /** The actions a step may carry. Exactly one, which is what makes it ordered. */
-const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'hover', 'wait']
+const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'drag', 'hover', 'wait']
 
 /**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
  * shorthand fields — `menu`, `click`, `press`, `type`, `select`, `wheel`,
- * `hover` — which are sugar for one step each in that fixed order. A shot
- * needing two of a kind, or needing them interleaved, declares `steps` instead.
+ * `drag`, `hover` — which are sugar for one step each in that fixed order. A
+ * shot needing two of a kind, or needing them interleaved, declares `steps`
+ * instead.
  *
  * **The shorthand is desugared here, not executed separately.** There is one
  * executor in `src/main/index.ts` and one thing for it to read, so the two
@@ -1236,6 +1360,7 @@ function normaliseSteps(shot, name) {
     ...(shot.type ? [{ type: shot.type }] : []),
     ...(shot.select ? [{ select: shot.select }] : []),
     ...(shot.wheel ? [{ wheel: shot.wheel }] : []),
+    ...(shot.drag ? [{ drag: shot.drag }] : []),
     ...(shot.hover ? [{ hover: shot.hover }] : [])
   ]
 }

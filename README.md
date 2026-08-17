@@ -22,14 +22,17 @@ on the left, two stacked on the right" is two splits. Drag the bar between panes
 to resize; double-click it to even that row or column out. Closing a panel hands
 its space back to its neighbours.
 
+**Rearranging.** Drag a panel by its header onto another one and the two swap places — the panes keep their sizes, so a map dropped onto a narrow column stays in a narrow column. `Cmd/Ctrl+Alt+←/→/↑/↓` does the same to the panel next door without the mouse, and it follows what you moved, so pressing it again carries the same panel on across the screen. The `⋯` menu has the same four as rows. `Cmd/Ctrl+Alt+Shift+←/→/↑/↓` resizes the active panel a step at a time, which is the divider between panes done from the keyboard.
+
 **Fullscreen.** The `⤢` button in any panel header blows it up to fill the
 window; `Esc` or the floating button at the bottom brings the tiling back.
-`Cmd/Ctrl+Enter` does the same from the keyboard.
+`Cmd/Ctrl+Enter` does the same from the keyboard. Swapping and resizing are off
+while a panel is fullscreen — there is only one pane on screen to move.
 
 **Locking.** Once a screen is arranged the way you want it, hit the padlock in
-the top bar (or `Cmd/Ctrl+L`). Panes can no longer be resized, split, closed or
-renamed, and the drag handles between them disappear so there is nothing to
-catch by accident mid-session. Everything *inside* the panels carries on as
+the top bar (or `Cmd/Ctrl+L`). Panes can no longer be resized, split, swapped,
+closed or renamed; the drag handles between them disappear and the headers stop
+being grips, so there is nothing to catch by accident mid-session. Everything *inside* the panels carries on as
 normal — including dragging party tracker columns. The lock is saved with the
 layout.
 
@@ -157,12 +160,15 @@ exception, which is why `F2` is a default.
 | Key | Action |
 |---|---|
 | `Cmd/Ctrl+\` / `Cmd/Ctrl+Shift+\` | Split the active panel right / down |
+| `Cmd/Ctrl+Alt+←/→/↑/↓` | Swap the active panel with the one on that side |
+| `Cmd/Ctrl+Alt+Shift+←/→` | Make the active panel narrower / wider |
+| `Cmd/Ctrl+Alt+Shift+↑/↓` | Make the active panel shorter / taller |
 | `Cmd/Ctrl+Enter` / `Esc` | Fullscreen the active panel / return |
 | `Cmd/Ctrl+W` | Close the active panel |
 | `Cmd/Ctrl+N` / `Cmd/Ctrl+O` / `Cmd/Ctrl+S` / `Cmd/Ctrl+Shift+S` | New / open / save / save as |
 | `F2` / `Shift+F2` | Rename the active panel / the layout |
 | `Cmd/Ctrl+L` | Lock or unlock the layout |
-| `Cmd/Ctrl+I` | Import a data pack |
+| `Cmd/Ctrl+Shift+D` | Import a data pack |
 | `Cmd/Ctrl+Shift+P` | Open the action palette |
 
 Two cannot be changed. `Esc` leaves panel fullscreen, and it is handled by the
@@ -204,6 +210,8 @@ say nothing about saving files, so those keep their usual keys; Emacs is absent
 because its `C-x` prefix is unavailable, and a keymap that opens on anything else
 would not be Emacs. The one that moves the palette is **JetBrains**, onto
 `Ctrl+Shift+A` — IntelliJ calls it Find Action and has no `Ctrl+Shift+P`.
+
+Four of them have something to say about moving and resizing panels: Zed swaps panes with `Ctrl+K Shift+←`, VS Code and Cursor move a group with `Ctrl+K ←` (on Cursor's own leader), Vim uses `Ctrl+W H/J/K/L` and its `<`, `>`, `+`, `-` sizing, and tmux resizes with `Ctrl+B Alt+←`. A key that a tool writes as a character is listed here as the keys you press for it: tmux's `%` shows as `Ctrl+B Shift+5`, because that is what the app sees and what it will match.
 
 ## Building
 

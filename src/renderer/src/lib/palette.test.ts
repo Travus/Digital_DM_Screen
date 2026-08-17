@@ -17,6 +17,9 @@ const context = (overrides: Partial<ActionContext> = {}): ActionContext => ({
   hasPanel: true,
   maximized: false,
   hasSplit: true,
+  // Surrounded on all four sides by default, so a test says what it is about by
+  // taking a side away rather than by granting one.
+  neighbours: { left: true, right: true, up: true, down: true },
   ...overrides
 })
 
@@ -128,16 +131,25 @@ describe('what the palette offers', () => {
       'panel:maximize',
       'panel:changeModule',
       // Below: "Close panel", "Even out surrounding split", "Flip surrounding
-      // split", "Leave panel fullscreen", "Rename panel", "Split panel down",
-      // "Split panel right" — a tail nobody scans in order is a tail you look a
-      // name up in.
+      // split", "Leave panel fullscreen", "Make panel narrower/shorter/taller/
+      // wider", "Rename panel", "Split panel down", "Split panel right", "Swap
+      // with panel above/below/left/right" — a tail nobody scans in order is a
+      // tail you look a name up in.
       'panel:close',
       'split:equalise',
       'split:flip',
       'panel:restore',
+      'panel:narrower',
+      'panel:shorter',
+      'panel:taller',
+      'panel:wider',
       'panel:rename',
       'panel:splitDown',
-      'panel:splitRight'
+      'panel:splitRight',
+      'panel:swapUp',
+      'panel:swapDown',
+      'panel:swapLeft',
+      'panel:swapRight'
     ])
   })
 
@@ -224,8 +236,21 @@ describe('reading the context off a document', () => {
       locked: false,
       hasPanel: true,
       maximized: false,
-      hasSplit: false
+      hasSplit: false,
+      neighbours: { left: false, right: false, up: false, down: false }
     })
+  })
+
+  it('reports the sides the target has a neighbour on', () => {
+    // Two panes side by side: the left one can only swap rightwards, and there
+    // is nothing above or below either of them.
+    expect(actionContext(doc(split), 'node_a', null).neighbours).toEqual({
+      left: false,
+      right: true,
+      up: false,
+      down: false
+    })
+    expect(actionContext(doc(split), 'node_b', null).neighbours.left).toBe(true)
   })
 
   it('finds the split containing the target', () => {
@@ -263,11 +288,22 @@ describe('the catalogue behind it', () => {
         for (const hasPanel of [true, false]) {
           for (const maximized of [true, false]) {
             for (const hasSplit of [true, false]) {
-              const reason = action.unavailable({ locked, hasPanel, maximized, hasSplit })
-              if (reason === null) continue
-              expect([action.id, reason]).toEqual([action.id, reason.trim()])
-              expect([action.id, reason[0]]).toEqual([action.id, reason[0].toLowerCase()])
-              expect([action.id, reason.endsWith('.')]).toEqual([action.id, false])
+              // Both extremes of the neighbour map: hemmed in on every side, and
+              // alone on the screen, which is where the four directional reasons
+              // are the ones that speak.
+              for (const side of [true, false]) {
+                const reason = action.unavailable({
+                  locked,
+                  hasPanel,
+                  maximized,
+                  hasSplit,
+                  neighbours: { left: side, right: side, up: side, down: side }
+                })
+                if (reason === null) continue
+                expect([action.id, reason]).toEqual([action.id, reason.trim()])
+                expect([action.id, reason[0]]).toEqual([action.id, reason[0].toLowerCase()])
+                expect([action.id, reason.endsWith('.')]).toEqual([action.id, false])
+              }
             }
           }
         }

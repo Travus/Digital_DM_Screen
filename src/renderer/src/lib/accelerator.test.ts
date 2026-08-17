@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   acceleratorFromChord,
   checkAccelerator,
+  checkBinding,
   formatAccelerator,
+  isRecordableAccelerator,
+  isRecordableBinding,
   normaliseAccelerator,
   parseAccelerator,
   type KeyChord
@@ -125,6 +128,39 @@ describe('recording a chord', () => {
 
   it('ignores a key it cannot name rather than emitting a broken chord', () => {
     expect(acceleratorFromChord(press('MediaPlayPause'), 'win32')).toBeNull()
+  })
+})
+
+describe('what a keypress could produce', () => {
+  it('accepts everything a recording emits', () => {
+    // The round trip that defines the rule: anything `acceleratorFromChord`
+    // hands back has to pass, or a chord could be recorded and then rejected.
+    for (const code of ['KeyH', 'Digit5', 'Minus', 'Equal', 'Quote', 'F7', 'Numpad4', 'ArrowUp']) {
+      const stroke = acceleratorFromChord(press(code, { ctrlKey: true, shiftKey: true }), 'win32')
+      expect([code, isRecordableAccelerator(stroke as string)]).toEqual([code, true])
+    }
+  })
+
+  it('refuses a shifted character, which no keypress reports', () => {
+    // `%` arrives as Shift+5 and `"` as Shift+', because the stroke is built
+    // from `event.code`. Both spellings parse; only one can ever be pressed.
+    expect(isRecordableAccelerator('%')).toBe(false)
+    expect(isRecordableAccelerator('"')).toBe(false)
+    expect(isRecordableAccelerator('Shift+5')).toBe(true)
+    expect(isRecordableAccelerator("Shift+'")).toBe(true)
+  })
+
+  it('is not part of what the app will accept, only of what it ships', () => {
+    // A hand-edited `%` stays valid: refusing it would mean knowing where `%`
+    // sits on that keyboard, and the layout API reports unmodified keys only.
+    expect(checkBinding('CmdOrCtrl+B %')).toBeNull()
+    expect(isRecordableBinding('CmdOrCtrl+B %')).toBe(false)
+  })
+
+  it('reads every stroke of a sequence, not just the first', () => {
+    expect(isRecordableBinding("CmdOrCtrl+B Shift+'")).toBe(true)
+    expect(isRecordableBinding('CmdOrCtrl+W Shift+.')).toBe(true)
+    expect(isRecordableBinding('CmdOrCtrl+W >')).toBe(false)
   })
 })
 

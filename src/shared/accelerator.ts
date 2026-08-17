@@ -297,6 +297,37 @@ function keyFromCode(code: string): string | null {
 }
 
 /**
+ * Every key a keypress can arrive as, which is a *smaller* set than the keys an
+ * accelerator can name.
+ *
+ * `canonicalKey` accepts 31 punctuation characters, including every shifted one
+ * (`% + < > " ...`). `keyFromCode` can only ever emit the eleven unshifted ones,
+ * because it reads `event.code` and the shift comes back as a separate modifier:
+ * pressing `%` on a US layout arrives as `Shift+5`. So a binding written as `%`
+ * parses, normalises, validates and prints — and no keypress can ever equal it.
+ * `advanceChord` compares strokes as strings, so such a binding is decorative.
+ *
+ * Derived from `CODE_KEYS` rather than listed again, so the two cannot drift.
+ *
+ * **Deliberately not part of `checkBinding`.** Refusing an unrecordable chord
+ * would need to know where `%` sits on the user's keyboard, and nothing can say:
+ * `getLayoutMap()` reports the *unmodified* character for a code and no API
+ * exposes the shift level. What this is for is the bindings that are ours — the
+ * shipped presets, which a test holds to being pressable.
+ */
+const RECORDABLE_KEYS: ReadonlySet<string> = new Set(Object.values(CODE_KEYS))
+
+export function isRecordableAccelerator(accelerator: string): boolean {
+  const parsed = parseAccelerator(accelerator)
+  if (!parsed) return false
+  const { key } = parsed
+  if (/^[A-Z0-9]$/.test(key)) return true
+  if (/^F([1-9]|1\d|2[0-4])$/.test(key)) return true
+  if (/^num[0-9]$/.test(key)) return true
+  return RECORDABLE_KEYS.has(key)
+}
+
+/**
  * Builds an accelerator from a keypress, or null while only modifiers are held —
  * which is the normal state halfway through recording one.
  *
@@ -405,6 +436,11 @@ export function checkBinding(binding: string): BindingProblem | null {
 
 export function isValidBinding(binding: string): boolean {
   return checkBinding(binding) === null
+}
+
+/** Every stroke of a binding is one a keypress could actually produce. */
+export function isRecordableBinding(binding: string): boolean {
+  return bindingStrokes(binding).every(isRecordableAccelerator)
 }
 
 /** Canonical form of a whole binding, or null if any stroke fails to parse. */

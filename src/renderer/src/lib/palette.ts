@@ -23,7 +23,7 @@ import {
   type ActionId,
   type ResolvedKeymap
 } from '../../../shared/actions'
-import { findParent } from '../../../shared/layout'
+import { findParent, neighbourSides } from '../../../shared/layout'
 import type { LayoutDoc } from '../../../shared/types'
 import { searchFilter } from './search'
 
@@ -58,7 +58,10 @@ export function actionContext(
     maximized: maximizedNodeId !== null,
     // The split a Flip or Even Out acts on is the one *containing* the target,
     // which is also how `App`'s dispatcher and the ⋯ menu pick it.
-    hasSplit: targetNodeId !== null && findParent(doc.root, targetNodeId) !== null
+    hasSplit: targetNodeId !== null && findParent(doc.root, targetNodeId) !== null,
+    // Measured off the tiling, so the answer is the one the DM would give
+    // looking at the screen. `neighbourSides` handles a null target itself.
+    neighbours: neighbourSides(doc.root, targetNodeId)
   }
 }
 
