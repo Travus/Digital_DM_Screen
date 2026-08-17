@@ -469,7 +469,7 @@ export function findAction(id: ActionId): ActionDef | undefined {
  * Why one command cannot run right now, for a surface that asks by id.
  *
  * The palette walks the whole catalogue and reads `unavailable` itself; the ⋯
- * panel menu has a hand-written row order and asks about five commands by name.
+ * panel menu has a hand-written row order and asks about eight commands by name.
  * Both get their reasons from here rather than restating any guard locally —
  * that restatement is exactly what put a lock check in `PanelFrame` deciding
  * which rows to omit.

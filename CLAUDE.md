@@ -102,6 +102,8 @@ A panel changes places with the one beside it — dragged onto it, or swapped wi
 
 **The header is the grip, and stops being one while its rename field is open.** A draggable ancestor takes the pointer that would have selected text in the input. Locked, it stops being one too — the same rule the splitter grips follow.
 
+**The ⋯ panel menu carries the four swaps, and Flip and Even Out came off it to make room.** That menu hangs off the panel a DM is looking at, so it is worth spending on what gets reached for mid-session. Both of the commands it lost keep their rows on the native Panel menu and in the palette, which is also where the four resize commands stay — the divider is already right there to drag.
+
 ## Rendering
 
 **Never put an emoji font in the body font stack.** Noto Color Emoji also covers

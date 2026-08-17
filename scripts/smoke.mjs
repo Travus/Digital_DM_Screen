@@ -185,9 +185,9 @@ const shots = [
     // not merely present but complete.
     expect: { found: ['.menu', '.menu-item'], text: ['Close panel'] }
   },
-  // The one panel in a fresh window, which is inside no split. Flip and Even Out
-  // used to be absent here; they are now rows carrying the reason in a tooltip,
-  // so the menu is the same shape whatever the layout is.
+  // The one panel in a fresh window, which has no neighbour on any side. The
+  // four swap rows are present and greyed rather than absent, so the menu is the
+  // same shape whatever the layout is.
   {
     name: 'panel-menu-lone',
     layout: null,
@@ -195,9 +195,25 @@ const shots = [
     // The tooltip is the row's whole explanation, so its text is asserted from
     // the attribute — `innerText` never sees it.
     expect: {
-      found: ['.menu', '.menu-item.disabled[title*="not inside a split"]'],
-      text: ['Flip surrounding split']
+      found: ['.menu', '.menu-item.disabled[title*="no panel to the left"]'],
+      text: ['Swap with panel left']
     }
+  },
+  // A swap run from the ⋯ menu, which is its own route in: the row acts on the
+  // panel the menu hangs off, where the key acts on whichever panel was last
+  // touched. Initiative is on the left, so swapping right puts the party table
+  // there and initiative in the top-right pane.
+  {
+    name: 'panel-menu-swap',
+    layout: starter,
+    click: [
+      '.panel:has(.round-pill) .icon-btn[title="Panel menu"]',
+      '.panel:has(.round-pill) .menu-item[data-menu-item="swap-right"]'
+    ].join('\n'),
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:first-child .round-pill'
+    ]
   },
   // And near the foot of the window, where it has to open upwards instead.
   {

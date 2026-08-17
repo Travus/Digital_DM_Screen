@@ -22,7 +22,7 @@ on the left, two stacked on the right" is two splits. Drag the bar between panes
 to resize; double-click it to even that row or column out. Closing a panel hands
 its space back to its neighbours.
 
-**Rearranging.** Drag a panel by its header onto another one and the two swap places — the panes keep their sizes, so a map dropped onto a narrow column stays in a narrow column. `Cmd/Ctrl+Alt+←/→/↑/↓` does the same to the panel next door without the mouse, and it follows what you moved, so pressing it again carries the same panel on across the screen. `Cmd/Ctrl+Alt+Shift+←/→/↑/↓` resizes the active panel a step at a time, which is the divider between panes done from the keyboard.
+**Rearranging.** Drag a panel by its header onto another one and the two swap places — the panes keep their sizes, so a map dropped onto a narrow column stays in a narrow column. `Cmd/Ctrl+Alt+←/→/↑/↓` does the same to the panel next door without the mouse, and it follows what you moved, so pressing it again carries the same panel on across the screen. The `⋯` menu has the same four as rows. `Cmd/Ctrl+Alt+Shift+←/→/↑/↓` resizes the active panel a step at a time, which is the divider between panes done from the keyboard.
 
 **Fullscreen.** The `⤢` button in any panel header blows it up to fill the
 window; `Esc` or the floating button at the bottom brings the tiling back.

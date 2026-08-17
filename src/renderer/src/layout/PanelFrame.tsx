@@ -42,19 +42,21 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const updatePanelState = useAppStore((state) => state.updatePanelState)
   const updatePanelSettings = useAppStore((state) => state.updatePanelSettings)
 
-  // Selecting the id (not the node) keeps this a plain string compare, so the
-  // panel doesn't re-render every time anything in the document changes.
-  const parentSplitId = useAppStore((state) => findParent(state.doc.root, node.id)?.id ?? null)
-  const flipSplit = useAppStore((state) => state.flipSplit)
-  const equalise = useAppStore((state) => state.equalise)
   const swapWithNode = useAppStore((state) => state.swapWithNode)
+  const swapWithNeighbour = useAppStore((state) => state.swapWithNeighbour)
   const locked = useAppStore((state) => state.doc.locked)
   const anyMaximized = useAppStore((state) => state.maximizedNodeId !== null)
 
-  /* The tree itself, for the neighbour arithmetic below. Its identity only
-     changes when the arrangement does, so typing in a panel does not re-measure
-     anything — `doc` is replaced on every keystroke, `doc.root` is not. */
+  /* The tree, for the two questions the context struct below answers off it:
+     whether a split surrounds this panel, and which sides it has a neighbour on.
+     Both are answered whether or not a row here reads them, since the struct is
+     the palette's and is answered for this panel rather than trimmed to it.
+
+     Subscribing to `doc.root` rather than to `doc` is what keeps that cheap: the
+     document is replaced on every keystroke in any panel, the tree only when the
+     arrangement changes. */
   const root = useAppStore((state) => state.doc.root)
+  const parentSplitId = useMemo(() => findParent(root, node.id)?.id ?? null, [root, node.id])
   const neighbours = useMemo(() => neighbourSides(root, node.id), [root, node.id])
 
   const [menuOpen, setMenuOpen] = useState(false)
@@ -313,12 +315,18 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                     }
                   ]
                 : []),
-              /* The structural rows used to disappear — while the layout was
-                 locked, and Flip and Even Out whenever the panel stood alone.
-                 They stay and grey out instead, keeping every row at the
-                 position it is reached at, and each carrying the reason it is
-                 off. A menu whose length changes with the state is a menu you
-                 have to read every time. */
+              /* Splitting, then moving. Flipping and evening out are not here:
+                 they are the two commands nobody reaches for mid-session, and
+                 this menu hangs off the panel a DM is looking at. Swapping is
+                 what that space is worth spending on. Both keep their rows on
+                 the native Panel menu and in the palette, which is also where
+                 sizing stays — the divider is already right there to drag.
+
+                 The rows grey out rather than disappearing when a side is empty
+                 or the layout is locked, keeping every row at the position it is
+                 reached at and each carrying the reason it is off. A menu whose
+                 length changes with the state is a menu you have to read every
+                 time. */
               { separator: true },
               {
                 id: 'split-right',
@@ -334,21 +342,34 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
                 disabled: actionUnavailable('panel:splitDown', context),
                 onSelect: () => splitPanel(node.id, 'column')
               },
+              { separator: true },
               {
-                id: 'flip',
-                label: 'Flip surrounding split',
-                disabled: actionUnavailable('split:flip', context),
-                onSelect: () => {
-                  if (parentSplitId) flipSplit(parentSplitId)
-                }
+                id: 'swap-left',
+                label: 'Swap with panel left',
+                shortcut: shortcuts['panel:swapLeft'],
+                disabled: actionUnavailable('panel:swapLeft', context),
+                onSelect: () => swapWithNeighbour(node.id, 'left')
               },
               {
-                id: 'equalise',
-                label: 'Even out surrounding split',
-                disabled: actionUnavailable('split:equalise', context),
-                onSelect: () => {
-                  if (parentSplitId) equalise(parentSplitId)
-                }
+                id: 'swap-right',
+                label: 'Swap with panel right',
+                shortcut: shortcuts['panel:swapRight'],
+                disabled: actionUnavailable('panel:swapRight', context),
+                onSelect: () => swapWithNeighbour(node.id, 'right')
+              },
+              {
+                id: 'swap-up',
+                label: 'Swap with panel above',
+                shortcut: shortcuts['panel:swapUp'],
+                disabled: actionUnavailable('panel:swapUp', context),
+                onSelect: () => swapWithNeighbour(node.id, 'up')
+              },
+              {
+                id: 'swap-down',
+                label: 'Swap with panel below',
+                shortcut: shortcuts['panel:swapDown'],
+                disabled: actionUnavailable('panel:swapDown', context),
+                onSelect: () => swapWithNeighbour(node.id, 'down')
               },
               { separator: true },
               {
