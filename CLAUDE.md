@@ -54,12 +54,51 @@ on screen; whether it *looks right* is still eyes only.
   `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
 - `src/main/imageStore.ts` — the files the Image module is allowed to display,
   and the ids the `dmscreen-image://` handler serves them under.
+- `src/main/document.ts` — the layout document, and the one copy of it that
+  outlives a window.
 
 The layout is an n-ary tree: a `split` holds any number of children in a row or
 column, with `sizes` as flex weights; a `panel` leaf points at an entry in
 `doc.panels`. All tree operations are pure functions in `src/shared/layout.ts`.
 
 ## State
+
+**The document lives in main, and a renderer holds a view of it.**
+`src/main/document.ts` is that copy. Save, Save As, New and Open all run there,
+along with the unsaved-changes prompt the last two ask first, so a renderer's
+file commands are four thin invokes. It used to live in the store, with main
+mirroring the two fields the close prompt needs — which works while there is
+exactly one renderer and stops working the moment there are several, because a
+document spanning several windows has no renderer entitled to call itself the
+copy that gets written.
+
+**A renderer is still authoritative for what the document contains**, and
+publishes every mutation as it makes it. Not on a timer: the debounce in front of
+this guarded the *disk*, and that one is still there in `scheduleSession`.
+Debouncing the message too would only buy a window in which main's copy is behind
+the screen — and main's copy is the one a save reads, so Ctrl+S landing inside it
+would write the document as it stood a moment ago, with nothing on screen to say
+so.
+
+**`dirty` is set locally and cleared by main.** The dot beside the layout name is
+the app acknowledging a keystroke, and an acknowledgement an IPC round trip late
+is one the eye catches — so `mutate` sets it without waiting. The two cannot
+fight, because only a save clears it. Adopting a document from main goes through
+`set`, never `mutate`: catching up is not an edit, and publishing it back would
+echo.
+
+**Every path that ends in the app going away flushes the session.** On "Save and
+quit" the process exits within milliseconds, so a pending debounce never fires
+and `session.json` keeps the pre-save snapshot — including `dirty: true`. The
+layout file was always written correctly there; the next launch simply restored a
+stale flag and asked to save a document nothing had touched.
+
+**The document crosses to the renderer synchronously**, like the data snapshot
+and the keymap, because `restore()` runs before the window exists. An async
+restore means a first frame with an empty layout in it and the real one arriving
+over the top. It is also parsed rather than trusted: the renderer no longer gets
+a chance to reject `session.json`, and a malformed tree arriving at preload is a
+renderer that cannot draw at all.
 
 **Panel state is sparse.** `doc.panels[id].state` holds only what the user has
 changed; module defaults are merged over it at render time. Anything reading
@@ -247,8 +286,10 @@ than "go and find it", which would be the wrong instruction.
 
 **Gesture state is committed when the gesture settles, not while it runs.**
 Every write to panel state goes through the store's `mutate`, which marks the
-layout unsaved and restarts the autosave debounce — at pointer rate that is the
-whole document rewritten several times a second for a drag that has not finished.
+layout unsaved, sends the whole document to main and restarts the autosave
+debounce — at pointer rate that is the document serialised across the process
+boundary several times a second for a drag that has not finished, and written to
+disk once it has.
 The live view is mirrored in component state and lands in the panel 250 ms after
 the last event, and on unmount, so a panel closed mid-drag keeps its frame.
 
@@ -588,6 +629,8 @@ paths distinct.
 
 - `layout` — seed a session from a `.dmscreen` file, or `null` for empty
 - `mutate(doc)` — adjust that layout for states clicking can't reach
+- `writable` — copy that layout into the shot's own userData first, so the shot
+  can save
 - `data` / `keys` — seed `datapacks.json` / `keybindings.json` in userData
 - `menu` — fire a `MenuAction` before anything is clicked
 - `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
@@ -704,6 +747,19 @@ restore has committed, so it cannot appear before the render it stands for — t
 awaits `document.fonts.ready` and two frames, because the DOM being right is not
 yet the window being painted. **Do not reintroduce a constant here.** Adding one
 to "give it a moment" is how this becomes flaky again.
+
+**A shot that saves needs somewhere of its own to save to.** `writable` is that:
+without it a save shot would rewrite `examples/starter.dmscreen`, the fixture
+every other shot reads. The copy goes in the shot's userData, which is already
+the unit of isolation here. It is the only way to exercise Save at all — the path
+a save takes when the document already has a file is the one with no dialog in
+it, and a dialog is out of the harness's reach.
+
+**`layout-dirty` and `layout-save` are a pair, and mean nothing apart.**
+`missing: ['.dirty-dot']` after a save would pass just as happily against a
+command that never marked anything unsaved, so the first shot exists to pin that
+the same single step does put the dot on screen. Both were checked by breaking
+`markSaved` and watching only the second go red.
 
 **Each shot gets its own userData directory.** Every shot seeds `session.json`,
 `datapacks.json` and `keybindings.json` before it starts, so on a shared directory

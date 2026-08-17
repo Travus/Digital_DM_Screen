@@ -5,23 +5,34 @@ import { pathToFileURL } from 'node:url'
 import {
   IMAGE_SCHEME,
   type DataSnapshot,
+  type DocumentSnapshot,
+  type DocumentStatus,
   type ImageRef,
   type LayoutDoc,
-  type OpenResult,
-  type RecentEntry,
-  type SessionSnapshot
+  type RecentEntry
 } from '../shared/types'
-import { parseLayoutDoc } from '../shared/layout'
+import { createEmptyDoc, parseLayoutDoc } from '../shared/layout'
 import {
   addRecent,
   clearRecents,
   listRecents,
   readKeymap,
-  readSession,
   removeRecent,
-  writeKeymap,
-  writeSession
+  writeKeymap
 } from './userStore'
+import {
+  current as currentDoc,
+  flushSession,
+  isDirty,
+  markSaved,
+  name as documentName,
+  onStatus,
+  publish,
+  replace,
+  restore,
+  snapshot as documentSnapshot,
+  status as documentStatus
+} from './document'
 import { resolveKeymap, sanitiseKeymap, type Keymap, type ResolvedKeymap } from '../shared/actions'
 import { addPack, currentSnapshot, loadPacks, removePack, setDatasetEnabled } from './packStore'
 import { IMAGE_EXTENSIONS, imageId, mimeFor, registerImage, servedPath } from './imageStore'
@@ -33,9 +44,6 @@ const LAYOUT_FILTERS = [
 ]
 
 let mainWindow: BrowserWindow | null = null
-/** Mirrors the renderer's unsaved-changes flag so we can warn on close. */
-let documentDirty = false
-let documentName = 'Untitled layout'
 /** Set once the user has confirmed a close, so the second close event passes. */
 let forceClose = false
 /** Set by before-quit so a confirmed close resumes Cmd+Q instead of only hiding its window. */
@@ -71,6 +79,125 @@ async function writeLayoutFile(path: string, doc: LayoutDoc): Promise<void> {
     JSON.stringify({ ...doc, updatedAt: new Date().toISOString() }, null, 2),
     'utf8'
   )
+}
+
+/* --------------------------------------------------------------- document */
+
+/** A different document entirely, so the renderer redraws from scratch. */
+function announceDocument(snapshot: DocumentSnapshot): void {
+  mainWindow?.webContents.send('document:changed', snapshot)
+}
+
+function applyTitle(): void {
+  const dot = documentStatus().dirty ? '• ' : ''
+  mainWindow?.setTitle(`${dot}${documentName()} — Digital DM Screen`)
+}
+
+/**
+ * The file path and the unsaved flag, which move without the document moving —
+ * a save clears the flag and names the file, and neither touches a panel.
+ */
+onStatus((status: DocumentStatus) => {
+  mainWindow?.webContents.send('document:status', status)
+  applyTitle()
+})
+
+/**
+ * Asked before New or Open replaces the document.
+ *
+ * Deliberately the same shape as the close confirmation — three ways out, cancel
+ * last — so the two prompts are answered the same way rather than being subtly
+ * different dialogs. Returns false when the document must be left alone: the
+ * user cancelled, or asked to save first and that save failed or was dismissed.
+ */
+async function confirmDiscard(): Promise<boolean> {
+  if (!isDirty()) return true
+  const choice = dialog.showMessageBoxSync(mainWindow!, {
+    type: 'warning',
+    buttons: ['Save and continue', 'Discard changes', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Unsaved changes',
+    message: `"${documentName()}" has unsaved changes.`,
+    detail: 'Discarding loses them for good — this layout has not been written to a file.'
+  })
+  if (choice === 2) return false
+  if (choice === 1) return true
+  return saveDocument()
+}
+
+async function newDocument(): Promise<void> {
+  if (!(await confirmDiscard())) return
+  replace(createEmptyDoc(), null)
+  announceDocument(documentSnapshot())
+}
+
+async function openDocument(path?: string): Promise<void> {
+  // Guarded before the file picker, not after — being asked about unsaved work
+  // only once a file has been chosen is a worse order to answer in.
+  if (!(await confirmDiscard())) return
+
+  let target = path
+  if (!target) {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Open layout',
+      properties: ['openFile'],
+      filters: LAYOUT_FILTERS
+    })
+    if (result.canceled || result.filePaths.length === 0) return
+    target = result.filePaths[0]
+  }
+
+  try {
+    const doc = await readLayoutFile(target)
+    await addRecent(target, doc.name)
+    replace(doc, target)
+    announceDocument(documentSnapshot())
+  } catch (error) {
+    // A recent entry pointing at a moved or deleted file is the common case
+    // here; drop it so the list stays honest.
+    await removeRecent(target)
+    await dialog.showMessageBox(mainWindow!, {
+      type: 'error',
+      title: 'Could not open layout',
+      message: (error as Error).message
+    })
+  }
+  await refreshMenu()
+}
+
+async function saveDocument(): Promise<boolean> {
+  const { filePath } = documentStatus()
+  if (!filePath) return saveDocumentAs()
+  return writeDocument(filePath)
+}
+
+async function saveDocumentAs(): Promise<boolean> {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: 'Save layout as',
+    defaultPath: fileNameFor(documentName()),
+    filters: LAYOUT_FILTERS
+  })
+  if (result.canceled || !result.filePath) return false
+  return writeDocument(result.filePath)
+}
+
+async function writeDocument(path: string): Promise<boolean> {
+  try {
+    await writeLayoutFile(path, currentDoc())
+    // Before the recents, so the session records the save even if that fails.
+    await markSaved(path)
+    await addRecent(path, documentName())
+    await refreshMenu()
+    return true
+  } catch (error) {
+    await dialog.showMessageBox(mainWindow!, {
+      type: 'error',
+      title: 'Could not save layout',
+      message: (error as Error).message
+    })
+    return false
+  }
 }
 
 /** Pushes fresh data to the renderer and rebuilds the menu around it. */
@@ -686,6 +813,10 @@ function createWindow(): void {
     }
   })
 
+  // The restored document is already in hand, so the window opens named after
+  // it rather than showing the app's own name until the first edit.
+  applyTitle()
+
   mainWindow.on('ready-to-show', () => mainWindow?.show())
 
   installSmokeHook(mainWindow)
@@ -705,7 +836,7 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
 
   mainWindow.on('close', (event) => {
-    if (forceClose || !documentDirty) return
+    if (forceClose || !isDirty()) return
     event.preventDefault()
     const closingApp = quitRequested || process.platform !== 'darwin'
     const choice = dialog.showMessageBoxSync(mainWindow!, {
@@ -718,7 +849,7 @@ function createWindow(): void {
       defaultId: 0,
       cancelId: 2,
       title: 'Unsaved changes',
-      message: `"${documentName}" has unsaved changes.`,
+      message: `"${documentName()}" has unsaved changes.`,
       detail:
         `${closingApp ? 'Quitting' : 'Closing'} anyway is safe — the current screen is restored automatically next launch. ` +
         'It just will not be written to the layout file.'
@@ -737,13 +868,15 @@ function createWindow(): void {
     }
 
     if (choice === 1) {
-      finishClose()
+      // Nothing to write, but the session still has to record where the
+      // document got to — that is the whole point of "closing anyway is safe".
+      void flushSession().then(finishClose)
       return
     }
-    // Ask the renderer to save, then close once it reports success. A cancelled
-    // save dialog reports false and the window simply stays open.
-    mainWindow?.webContents.send('menu:action', 'layout:save')
-    ipcMain.once('window:saveComplete', (_event, saved: boolean) => {
+    // Saved here rather than asked of the renderer. Main holds the document, so
+    // this no longer needs a round trip and a reply channel to find out how it
+    // went. A cancelled save dialog returns false and the window stays open.
+    void saveDocument().then((saved) => {
       if (!saved) {
         quitRequested = false
         return
@@ -765,78 +898,23 @@ function createWindow(): void {
 
 /* -------------------------------------------------------------------- ipc */
 
-ipcMain.handle('layout:open', async (_event, path?: string): Promise<OpenResult | null> => {
-  let target = path
-  if (!target) {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Open layout',
-      properties: ['openFile'],
-      filters: LAYOUT_FILTERS
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    target = result.filePaths[0]
-  }
+ipcMain.handle('layout:new', (): Promise<void> => newDocument())
+ipcMain.handle('layout:open', (_event, path?: string): Promise<void> => openDocument(path))
+ipcMain.handle('layout:save', (): Promise<boolean> => saveDocument())
+ipcMain.handle('layout:saveAs', (): Promise<boolean> => saveDocumentAs())
 
-  try {
-    const doc = await readLayoutFile(target)
-    await addRecent(target, doc.name)
-    await refreshMenu()
-    return { filePath: target, doc }
-  } catch (error) {
-    // A recent entry pointing at a moved/deleted file is the common case here;
-    // drop it so the list stays honest.
-    await removeRecent(target)
-    await refreshMenu()
-    await dialog.showMessageBox(mainWindow!, {
-      type: 'error',
-      title: 'Could not open layout',
-      message: (error as Error).message
-    })
-    return null
-  }
-})
-
-ipcMain.handle(
-  'layout:save',
-  async (_event, filePath: string, doc: LayoutDoc): Promise<string | null> => {
-    try {
-      await writeLayoutFile(filePath, doc)
-      await addRecent(filePath, doc.name)
-      await refreshMenu()
-      return filePath
-    } catch (error) {
-      await dialog.showMessageBox(mainWindow!, {
-        type: 'error',
-        title: 'Could not save layout',
-        message: (error as Error).message
-      })
-      return null
-    }
-  }
-)
-
-ipcMain.handle('layout:saveAs', async (_event, doc: LayoutDoc): Promise<string | null> => {
-  const result = await dialog.showSaveDialog(mainWindow!, {
-    title: 'Save layout as',
-    defaultPath: fileNameFor(doc.name),
-    filters: LAYOUT_FILTERS
-  })
-  if (result.canceled || !result.filePath) return null
-
-  try {
-    await writeLayoutFile(result.filePath, doc)
-    await addRecent(result.filePath, doc.name)
-    await refreshMenu()
-    return result.filePath
-  } catch (error) {
-    await dialog.showMessageBox(mainWindow!, {
-      type: 'error',
-      title: 'Could not save layout',
-      message: (error as Error).message
-    })
-    return null
-  }
-})
+/**
+ * An edit, straight from the renderer that made it.
+ *
+ * Sent on every mutation rather than on a timer. The debounce that used to sit
+ * in front of this guarded the *disk* — serialising and pretty-printing the
+ * whole document — and that one is still here, one layer down in
+ * `scheduleSession`. Debouncing the message as well would only buy a window in
+ * which main's copy is behind the screen, which is exactly the copy a save
+ * reads: Ctrl+S landing inside it would write the document as it stood a moment
+ * ago, with nothing on screen to say so.
+ */
+ipcMain.handle('document:publish', (_event, doc: LayoutDoc): void => publish(doc))
 
 /**
  * Picks an image and puts it on the guest list. The renderer stores the path it
@@ -870,41 +948,6 @@ ipcMain.handle('recents:clear', async (): Promise<RecentEntry[]> => {
   return next
 })
 
-ipcMain.handle('session:read', (): Promise<SessionSnapshot | null> => readSession())
-
-ipcMain.handle('session:write', async (_event, snapshot: SessionSnapshot): Promise<void> => {
-  documentDirty = snapshot.dirty
-  documentName = snapshot.doc.name
-  await writeSession(snapshot)
-})
-
-ipcMain.handle('window:setDirty', (_event, dirty: boolean, name: string): void => {
-  documentDirty = dirty
-  documentName = name
-  if (mainWindow) {
-    mainWindow.setTitle(`${dirty ? '• ' : ''}${name} — Digital DM Screen`)
-  }
-})
-
-/**
- * Asked before New or Open replaces the document. Deliberately the same shape
- * as the close confirmation — three ways out, cancel last — so the two prompts
- * are answered the same way rather than being subtly different dialogs.
- */
-ipcMain.handle('window:confirmDiscard', (_event, name: string): 'save' | 'discard' | 'cancel' => {
-  const choice = dialog.showMessageBoxSync(mainWindow!, {
-    type: 'warning',
-    buttons: ['Save and continue', 'Discard changes', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    title: 'Unsaved changes',
-    message: `"${name}" has unsaved changes.`,
-    detail: 'Discarding loses them for good — this layout has not been written to a file.'
-  })
-  if (choice === 0) return 'save'
-  return choice === 1 ? 'discard' : 'cancel'
-})
-
 /**
  * Quit from the action palette, which has no menu item to click for it.
  *
@@ -923,10 +966,21 @@ ipcMain.handle('window:toggleFullScreen', (): boolean => {
 })
 
 /**
- * The one synchronous channel. Everything else is `handle`, but the renderer
- * needs this before its first paint: with an async gate there is a window where
+ * Synchronous, like the two below it. Everything else is `handle`, but the
+ * renderer needs this before its first paint — an async gate would mean a frame
+ * with no layout in it, and then the restored one arriving over the top.
+ *
+ * Cheap, because `restore()` already ran: this reads an object in memory rather
+ * than the file it came from.
+ */
+ipcMain.on('document:snapshot', (event) => {
+  event.returnValue = documentSnapshot()
+})
+
+/**
+ * Synchronous for the same reason. With an async gate there is a window where
  * no conditions are loaded, and every reference card renders through code that
- * assumes there are some. Cheap — the snapshot is already in memory.
+ * assumes there are some.
  */
 ipcMain.on('data:snapshot', (event) => {
   event.returnValue = currentSnapshot()
@@ -987,6 +1041,11 @@ if (!app.requestSingleInstanceLock()) {
     const loaded = await readKeymap()
     keymapOverrides = loaded.keymap
     for (const warning of loaded.warnings) console.warn(`keybindings.json: ${warning}`)
+
+    // Same reason, one rung up: the layout is read before the window exists, so
+    // the renderer takes it synchronously at preload and the first frame it
+    // paints is already the restored screen.
+    await restore()
 
     serveImages()
     await loadPacks()
