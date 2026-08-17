@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import type { LayoutDoc, LayoutNode, RecentEntry, SplitDirection } from '../../../shared/types'
+import type {
+  LayoutDoc,
+  LayoutNode,
+  MoveDirection,
+  RecentEntry,
+  SplitDirection
+} from '../../../shared/types'
 import {
   collectPanelNodes,
   createEmptyDoc,
@@ -7,10 +13,13 @@ import {
   findNode,
   makePanelData,
   makePanelNode,
+  neighbourPanels,
   pruneOrphanPanels,
   removeNode,
+  resizePanelShare,
   setSplitSizes,
   splitNode,
+  swapPanelNodes,
   toggleSplitDirection,
   uid,
   EMPTY_MODULE_ID
@@ -61,6 +70,9 @@ interface AppState {
   setSizes: (splitId: string, sizes: number[]) => void
   flipSplit: (splitId: string) => void
   equalise: (splitId: string) => void
+  swapWithNode: (nodeId: string, targetNodeId: string) => void
+  swapWithNeighbour: (nodeId: string, direction: MoveDirection) => void
+  resizePanel: (nodeId: string, axis: SplitDirection, delta: number) => void
 
   /* panel contents */
   setPanelModule: (panelId: string, moduleId: string) => void
@@ -248,6 +260,45 @@ export const useAppStore = create<AppState>((set, get) => {
     equalise: (splitId) => {
       if (get().doc.locked) return
       mutateTree((root) => equaliseSplit(root, splitId))
+    },
+
+    /**
+     * Trade two panels' contents, and hand the selection to where the module
+     * went.
+     *
+     * The selection following is what makes the command repeatable: swap right
+     * twice and the module the DM is moving carries on across the screen, rather
+     * than bouncing between the same two panes. The drop target of a drag gets
+     * the same treatment, since the module lands there either way.
+     */
+    swapWithNode: (nodeId, targetNodeId) => {
+      const { doc, maximizedNodeId } = get()
+      // Fullscreen would hide the whole of it — see `ifFullscreen` in the
+      // catalogue, which greys the same commands for the same reason.
+      if (doc.locked || maximizedNodeId) return
+      const next = swapPanelNodes(doc.root, nodeId, targetNodeId)
+      if (next === doc.root) return
+      mutateTree(() => next)
+      set({ activeNodeId: targetNodeId })
+    },
+
+    swapWithNeighbour: (nodeId, direction) => {
+      const neighbour = neighbourPanels(get().doc.root, nodeId)[direction]
+      if (neighbour) get().swapWithNode(nodeId, neighbour)
+    },
+
+    /**
+     * `delta` is a share of the split to grow by, negative to shrink. Skipped
+     * outright when the tree comes back unchanged: a key held down at the floor
+     * would otherwise go on marking the layout unsaved and restarting the
+     * session autosave for nothing.
+     */
+    resizePanel: (nodeId, axis, delta) => {
+      const { doc, maximizedNodeId } = get()
+      if (doc.locked || maximizedNodeId) return
+      const next = resizePanelShare(doc.root, nodeId, axis, delta)
+      if (next === doc.root) return
+      mutateTree(() => next)
     },
 
     /* ----------------------------------------------------------- panels */

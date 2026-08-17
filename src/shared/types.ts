@@ -4,6 +4,16 @@ export const LAYOUT_FORMAT_VERSION = 1
 
 export type SplitDirection = 'row' | 'column'
 
+/**
+ * Where a command reaches, relative to the panel it starts from — the four
+ * directions a panel can be swapped in. Screen directions rather than tree ones:
+ * "the panel to the right" is a question about what the DM is looking at, and
+ * `left`/`right` on a `column` split would be nonsense.
+ */
+export type MoveDirection = 'left' | 'right' | 'up' | 'down'
+
+export const MOVE_DIRECTIONS: MoveDirection[] = ['left', 'right', 'up', 'down']
+
 /** A leaf of the layout tree. Points at an entry in `LayoutDoc.panels`. */
 export interface PanelNode {
   type: 'panel'
@@ -221,6 +231,14 @@ export type MenuAction =
   | 'layout:toggleLock'
   | 'panel:splitRight'
   | 'panel:splitDown'
+  | 'panel:swapLeft'
+  | 'panel:swapRight'
+  | 'panel:swapUp'
+  | 'panel:swapDown'
+  | 'panel:wider'
+  | 'panel:narrower'
+  | 'panel:taller'
+  | 'panel:shorter'
   | 'panel:close'
   | 'panel:maximize'
   | 'panel:restore'

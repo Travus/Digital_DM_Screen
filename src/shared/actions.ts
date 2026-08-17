@@ -16,6 +16,7 @@
  */
 
 import { bindingStrokes, checkBinding, isChordBinding, normaliseBinding } from './accelerator'
+import type { MoveDirection, SplitDirection } from './types'
 
 export type ActionId =
   | 'layout:new'
@@ -26,6 +27,14 @@ export type ActionId =
   | 'layout:toggleLock'
   | 'panel:splitRight'
   | 'panel:splitDown'
+  | 'panel:swapLeft'
+  | 'panel:swapRight'
+  | 'panel:swapUp'
+  | 'panel:swapDown'
+  | 'panel:wider'
+  | 'panel:narrower'
+  | 'panel:taller'
+  | 'panel:shorter'
   | 'panel:maximize'
   | 'panel:restore'
   | 'panel:close'
@@ -61,6 +70,15 @@ export interface ActionContext {
   maximized: boolean
   /** The target panel sits inside a split, so there is one to flip or even out. */
   hasSplit: boolean
+  /**
+   * Which sides the target panel has a neighbouring panel on — where a swap has
+   * somewhere to go, and where a resize has something to trade with.
+   *
+   * Four booleans rather than a "can move" flag, because the palette has to name
+   * the side that is missing: on the left-hand panel of a two-pane screen,
+   * "Swap with panel left" is off and "Swap with panel right" is not.
+   */
+  neighbours: Record<MoveDirection, boolean>
 }
 
 export interface ActionDef {
@@ -130,6 +148,58 @@ const ifNoSplit = (context: ActionContext): string | null =>
 const ifNotFullscreen = (context: ActionContext): string | null =>
   context.maximized ? null : 'no panel is fullscreen'
 
+const NO_NEIGHBOUR: Record<MoveDirection, string> = {
+  left: 'there is no panel to the left',
+  right: 'there is no panel to the right',
+  up: 'there is no panel above',
+  down: 'there is no panel below'
+}
+
+const ifNoNeighbour =
+  (direction: MoveDirection) =>
+  (context: ActionContext): string | null =>
+    context.neighbours[direction] ? null : NO_NEIGHBOUR[direction]
+
+/**
+ * A resize trades with whichever neighbour is on that axis, so either side will
+ * do — it is the axis that has to have something on it.
+ */
+const ifNoRoom =
+  (axis: SplitDirection) =>
+  (context: ActionContext): string | null => {
+    const { left, right, up, down } = context.neighbours
+    if (axis === 'row') return left || right ? null : 'there is no panel to either side'
+    return up || down ? null : 'there is no panel above or below'
+  }
+
+/**
+ * Rearranging is off while a panel is fullscreen, and the store refuses it there
+ * too rather than leaving this as advice.
+ *
+ * Both commands move something the DM cannot see: one pane fills the window, so
+ * a swap and a resize alike land entirely off screen and the only sign either
+ * happened is the layout going unsaved. Dragging is already impossible there —
+ * there is no second panel to drop on — so this is the keyboard agreeing with
+ * what the mouse can reach.
+ */
+const ifFullscreen = (context: ActionContext): string | null =>
+  context.maximized ? 'the tiling is hidden while a panel is fullscreen' : null
+
+/**
+ * The guards a command answers to, asked in order — the first that holds is the
+ * reason shown. Composed rather than written out with `??` per entry, because a
+ * swap answers to four of them and the chain stopped being readable at three.
+ */
+const guards =
+  (...checks: ((context: ActionContext) => string | null)[]) =>
+  (context: ActionContext): string | null => {
+    for (const check of checks) {
+      const reason = check(context)
+      if (reason) return reason
+    }
+    return null
+  }
+
 /** Display order — the shortcuts editor groups on `category` and keeps this. */
 export const ACTIONS: readonly ActionDef[] = [
   {
@@ -177,15 +247,83 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Split panel right',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+\\',
-    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
+    unavailable: guards(ifLocked, ifNoPanel)
   },
   {
     id: 'panel:splitDown',
     label: 'Split panel down',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+Shift+\\',
-    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
+    unavailable: guards(ifLocked, ifNoPanel)
   },
+  /*
+   * Swapping and resizing, on the Alt+arrow family.
+   *
+   * Alt is the one modifier no text field wants: Ctrl+arrow and Shift+arrow are
+   * word movement and selection on every platform, and a menu accelerator beats
+   * the renderer, so binding either would take them out of the Notes editor and
+   * every table cell — the same trap that moved Import Data Pack off Ctrl+I.
+   *
+   * A swap is the arrow on its own, since it is the one reached for mid-session;
+   * a resize adds Shift, and reads as the finer version of the same gesture.
+   */
+  {
+    id: 'panel:swapLeft',
+    label: 'Swap with panel left',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Left',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoNeighbour('left'))
+  },
+  {
+    id: 'panel:swapRight',
+    label: 'Swap with panel right',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Right',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoNeighbour('right'))
+  },
+  {
+    id: 'panel:swapUp',
+    label: 'Swap with panel above',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Up',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoNeighbour('up'))
+  },
+  {
+    id: 'panel:swapDown',
+    label: 'Swap with panel below',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Down',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoNeighbour('down'))
+  },
+  {
+    id: 'panel:wider',
+    label: 'Make panel wider',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Shift+Right',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoRoom('row'))
+  },
+  {
+    id: 'panel:narrower',
+    label: 'Make panel narrower',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Shift+Left',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoRoom('row'))
+  },
+  {
+    id: 'panel:taller',
+    label: 'Make panel taller',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Shift+Down',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoRoom('column'))
+  },
+  {
+    id: 'panel:shorter',
+    label: 'Make panel shorter',
+    category: 'Panel',
+    defaultAccelerator: 'CmdOrCtrl+Alt+Shift+Up',
+    unavailable: guards(ifLocked, ifNoPanel, ifFullscreen, ifNoRoom('column'))
+  },
+
   {
     id: 'panel:maximize',
     label: 'Fullscreen panel',
@@ -206,7 +344,7 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Close panel',
     category: 'Panel',
     defaultAccelerator: 'CmdOrCtrl+W',
-    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
+    unavailable: guards(ifLocked, ifNoPanel)
   },
 
   {
@@ -217,7 +355,7 @@ export const ACTIONS: readonly ActionDef[] = [
     // A name is part of the arrangement, not part of the contents: a locked
     // screen is one nothing can be knocked out of place on mid-session, and a
     // title relabelled by a stray double-click is exactly that.
-    unavailable: (context) => ifLocked(context) ?? ifNoPanel(context)
+    unavailable: guards(ifLocked, ifNoPanel)
   },
   {
     id: 'panel:changeModule',
@@ -234,14 +372,14 @@ export const ACTIONS: readonly ActionDef[] = [
     label: 'Flip surrounding split',
     category: 'Panel',
     defaultAccelerator: null,
-    unavailable: (context) => ifLocked(context) ?? ifNoSplit(context)
+    unavailable: guards(ifLocked, ifNoSplit)
   },
   {
     id: 'split:equalise',
     label: 'Even out surrounding split',
     category: 'Panel',
     defaultAccelerator: null,
-    unavailable: (context) => ifLocked(context) ?? ifNoSplit(context)
+    unavailable: guards(ifLocked, ifNoSplit)
   },
 
   {

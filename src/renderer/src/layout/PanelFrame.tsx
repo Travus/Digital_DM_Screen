@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PanelNode } from '../../../shared/types'
 import { actionUnavailable, type ActionContext } from '../../../shared/actions'
-import { EMPTY_MODULE_ID, findParent } from '../../../shared/layout'
+import { EMPTY_MODULE_ID, findParent, neighbourSides } from '../../../shared/layout'
 import { getModule } from '../modules/registry'
 import { useAppStore } from '../state/store'
 import { parenthesised, useShortcuts } from '../lib/shortcuts'
@@ -16,6 +16,17 @@ import { ModulePicker } from './ModulePicker'
  * as `Function`, which is not callable without this.
  */
 type StatePatchFn = (previous: Record<string, unknown>) => Record<string, unknown>
+
+/**
+ * What a panel drag carries, and how a drop tells one apart from a file.
+ *
+ * A custom type rather than `text/plain`: the Image module accepts dropped files
+ * on the same panels, a textarea would happily insert dropped text, and
+ * `dataTransfer.types` is the one thing readable during `dragover` — so the
+ * highlight and the drop can both ask the same question. The payload is the
+ * source panel's *node* id, since that is what a swap is written in terms of.
+ */
+const PANEL_DRAG_TYPE = 'application/x-dmscreen-panel'
 
 export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const panel = useAppStore((state) => state.doc.panels[node.panelId])
@@ -36,11 +47,23 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const parentSplitId = useAppStore((state) => findParent(state.doc.root, node.id)?.id ?? null)
   const flipSplit = useAppStore((state) => state.flipSplit)
   const equalise = useAppStore((state) => state.equalise)
+  const swapWithNode = useAppStore((state) => state.swapWithNode)
   const locked = useAppStore((state) => state.doc.locked)
   const anyMaximized = useAppStore((state) => state.maximizedNodeId !== null)
 
+  /* The tree itself, for the neighbour arithmetic below. Its identity only
+     changes when the arrangement does, so typing in a panel does not re-measure
+     anything — `doc` is replaced on every keystroke, `doc.root` is not. */
+  const root = useAppStore((state) => state.doc.root)
+  const neighbours = useMemo(() => neighbourSides(root, node.id), [root, node.id])
+
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  /* Whether this panel is the one being carried, and whether it is the one under
+     the pointer. Local state: a drag in flight is a gesture, not a change to the
+     layout, and nothing outside this panel has to know about either. */
+  const [dragging, setDragging] = useState(false)
+  const [dropping, setDropping] = useState(false)
   /* In the store rather than local state so a keyboard command can open them —
      a shortcut has no way into another component's `useState`. */
   const renaming = useAppStore((state) => state.renamingNodeId === node.id)
@@ -141,19 +164,72 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
     locked,
     hasPanel: true,
     maximized: anyMaximized,
-    hasSplit: parentSplitId !== null
+    hasSplit: parentSplitId !== null,
+    neighbours
   }
 
   // Read once: the title button, the ⋯ row and the row that resets the name are
   // three ways to the same command, and they have to be off together.
   const renameOff = actionUnavailable('panel:rename', context)
 
+  /**
+   * Drag a panel onto another to swap the two.
+   *
+   * HTML5 drag-and-drop rather than pointer events, because the module bodies
+   * already take pointer drags of their own — panning an image, drawing a block
+   * selection across table cells — and a gesture crossing into one of those has
+   * to be a different kind of event, not the same kind arbitrated by hand.
+   *
+   * The header is the grip, minus the moment its rename field is open: a
+   * draggable ancestor takes the pointer that would have selected text in it.
+   */
+  const canDrag = !locked && !anyMaximized && !renaming
+
+  const acceptsDrag = (event: React.DragEvent): boolean =>
+    !locked && !anyMaximized && event.dataTransfer.types.includes(PANEL_DRAG_TYPE)
+
   return (
     <section
-      className={`panel ${maximized ? 'maximized' : ''} ${active ? 'active' : ''}`}
+      className={`panel ${maximized ? 'maximized' : ''} ${active ? 'active' : ''} ${
+        dragging ? 'dragging' : ''
+      } ${dropping ? 'drop-target' : ''}`}
       onPointerDownCapture={() => setActive(node.id)}
+      onDragOver={(event) => {
+        if (!acceptsDrag(event)) return
+        // Claims the drop from whatever is underneath: the Image module's own
+        // zone accepts anything dropped on it, and Chromium's default for the
+        // rest of the window is to navigate to what was dropped.
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+        if (!dragging) setDropping(true)
+      }}
+      onDragLeave={(event) => {
+        // Crossing from the header into the body fires a leave on the way past;
+        // only one landing outside the panel means the pointer has gone.
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        setDropping(false)
+      }}
+      onDrop={(event) => {
+        setDropping(false)
+        if (!acceptsDrag(event)) return
+        event.preventDefault()
+        const from = event.dataTransfer.getData(PANEL_DRAG_TYPE)
+        // Dropped on itself is a no-op the store recognises, so it needs no
+        // check here.
+        if (from) swapWithNode(from, node.id)
+      }}
     >
-      <header className="panel-head">
+      <header
+        className="panel-head"
+        draggable={canDrag}
+        title={canDrag ? 'Drag onto another panel to swap them' : undefined}
+        onDragStart={(event) => {
+          event.dataTransfer.setData(PANEL_DRAG_TYPE, node.id)
+          event.dataTransfer.effectAllowed = 'move'
+          setDragging(true)
+        }}
+        onDragEnd={() => setDragging(false)}
+      >
         <span className="panel-icon">{module?.icon ?? '▫'}</span>
 
         {renaming ? (

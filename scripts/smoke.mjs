@@ -228,9 +228,68 @@ const shots = [
     // The grips going and the rows staying are both the shot. A menu that keeps
     // its length is the point of greying rather than dropping, so "Close panel"
     // present and disabled is what proves it.
+    // The header giving up its grip belongs here too: the lock freezes the
+    // arrangement, and dragging a panel onto another rearranges it.
     expect: {
-      found: ['.menu', '.lock-icon', '.menu-item.disabled.danger'],
+      found: [
+        '.menu',
+        '.lock-icon',
+        '.menu-item.disabled.danger',
+        '.panel-head[draggable="false"]'
+      ],
       missing: ['.splitter-grip']
+    }
+  },
+  // Dragging one panel onto another to swap them. The starter is initiative on
+  // the left, party top-right; after the drop they have changed places, which is
+  // what both halves of the assertion say — one alone would also pass on a
+  // module that had been duplicated rather than swapped.
+  {
+    name: 'panel-drag-swap',
+    layout: starter,
+    drag: { from: '.panel:has(.round-pill) .panel-head', to: '.panel:has(.table.resizable)' },
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:first-child .round-pill'
+    ]
+  },
+  // The same drag, stopped between `dragover` and `drop`, which is the only
+  // moment the indicator exists. Both ends are on screen at once: the panel
+  // being carried dims, the one under the pointer takes the ring.
+  {
+    name: 'panel-drag-over',
+    layout: starter,
+    drag: {
+      from: '.panel:has(.round-pill) .panel-head',
+      to: '.panel:has(.table.resizable)',
+      hold: true
+    },
+    expect: ['.panel.dragging:has(.round-pill)', '.panel.drop-target:has(.table.resizable)']
+  },
+  // The keyboard half, twice over: right, then down. The second press is the
+  // point — the selection follows the module it moved, so a repeated key carries
+  // one panel across the screen instead of swapping the same pair back.
+  {
+    name: 'panel-swap-keys',
+    layout: starter,
+    steps: [{ menu: 'panel:swapRight' }, { menu: 'panel:swapDown' }],
+    expect: [
+      '.split.row > .pane:first-child .table.resizable',
+      '.split.column > .pane:last-child .round-pill'
+    ]
+  },
+  // Resizing from the keyboard. The starter's left pane is seeded at 0.56 and
+  // each press moves a twentieth, so two of them put it past 0.6 — asserted as a
+  // prefix of the inline weight, since the exact digits are a renormalised
+  // float. The seeded value going is the other half: without it a pane that
+  // never moved would match nothing and say nothing.
+  {
+    name: 'panel-resize-keys',
+    layout: starter,
+    steps: [{ menu: 'panel:wider' }, { menu: 'panel:wider' }],
+    expect: {
+      found: ['.split.row > .pane:first-child[style*="flex-grow: 0.6"]'],
+      missing: ['.split.row > .pane:first-child[style*="flex-grow: 0.56"]']
     }
   },
   // Renaming the layout. The assertion is only that the field replaced the
@@ -571,6 +630,23 @@ const shots = [
     expect: {
       found: ['.palette-item.disabled[data-action-id="panel:close"]'],
       missing: ['.palette .note']
+    }
+  },
+  // A one-panel layout, where every swap and every resize is off for a reason
+  // that names the missing side rather than saying "not now". The row is clicked
+  // by id rather than reached with Enter: the greyed rows sink and then sort by
+  // name, so the cursor's first row is "above" and the reason would be too.
+  {
+    name: 'action-palette-no-neighbour',
+    layout: null,
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: 'swap' } },
+      { click: '.palette-item.disabled[data-action-id="panel:swapLeft"]' }
+    ],
+    expect: {
+      found: ['.palette-item.disabled[data-action-id="panel:swapLeft"]', '.palette-reason'],
+      text: ['there is no panel to the left']
     }
   },
   // Activating a greyed row. Nothing happening is the wrong answer to a
@@ -1176,15 +1252,16 @@ function normaliseExpect(expect, name) {
 }
 
 /** The actions a step may carry. Exactly one, which is what makes it ordered. */
-const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'hover', 'wait']
+const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'drag', 'hover', 'wait']
 
 /**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
  * shorthand fields — `menu`, `click`, `press`, `type`, `select`, `wheel`,
- * `hover` — which are sugar for one step each in that fixed order. A shot
- * needing two of a kind, or needing them interleaved, declares `steps` instead.
+ * `drag`, `hover` — which are sugar for one step each in that fixed order. A
+ * shot needing two of a kind, or needing them interleaved, declares `steps`
+ * instead.
  *
  * **The shorthand is desugared here, not executed separately.** There is one
  * executor in `src/main/index.ts` and one thing for it to read, so the two
@@ -1236,6 +1313,7 @@ function normaliseSteps(shot, name) {
     ...(shot.type ? [{ type: shot.type }] : []),
     ...(shot.select ? [{ select: shot.select }] : []),
     ...(shot.wheel ? [{ wheel: shot.wheel }] : []),
+    ...(shot.drag ? [{ drag: shot.drag }] : []),
     ...(shot.hover ? [{ hover: shot.hover }] : [])
   ]
 }

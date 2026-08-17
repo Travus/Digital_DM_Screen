@@ -5,8 +5,10 @@
  */
 import {
   LAYOUT_FORMAT_VERSION,
+  MOVE_DIRECTIONS,
   type LayoutDoc,
   type LayoutNode,
+  type MoveDirection,
   type PanelData,
   type PanelNode,
   type SplitDirection,
@@ -178,6 +180,242 @@ export function equaliseSplit(root: LayoutNode, splitId: string): LayoutNode {
     splitId,
     split.children.map(() => 1)
   )
+}
+
+/* ------------------------------------------------------- moving and resizing */
+
+/**
+ * A node's share of the window, as fractions of it: `{ x: 0.5, width: 0.5 }` is
+ * the right-hand half. Splitters are a few pixels the tree knows nothing about,
+ * so the boxes abut exactly where the panes on screen very nearly do.
+ */
+export interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Where every panel sits, laid out the way the flex tiling lays it out.
+ *
+ * The neighbour lookup below is geometric rather than a walk up the tree,
+ * because a walk answers a different question. In `column[row[a, b], row[c, d]]`
+ * the panel under `b` is `d`, but the nearest ancestor running that way is the
+ * outer column, whose next child is the whole second row — and picking one of
+ * its panels means asking which of them is *under b*, which is the geometry
+ * again. Doing it in fractions keeps that answer pure and testable.
+ */
+export function panelBoxes(root: LayoutNode): Map<string, Box> {
+  const boxes = new Map<string, Box>()
+
+  const walk = (node: LayoutNode, box: Box): void => {
+    if (node.type === 'panel') {
+      boxes.set(node.id, box)
+      return
+    }
+    const total = node.sizes.reduce((sum, size) => sum + size, 0)
+    const horizontal = node.direction === 'row'
+    let offset = 0
+    node.children.forEach((child, index) => {
+      // A hand-edited file can carry sizes that sum to zero; equal shares are
+      // what the renderer draws for those, so they are what this measures.
+      const share = total > 0 ? (node.sizes[index] ?? 0) / total : 1 / node.children.length
+      walk(child, {
+        x: horizontal ? box.x + offset * box.width : box.x,
+        y: horizontal ? box.y : box.y + offset * box.height,
+        width: horizontal ? share * box.width : box.width,
+        height: horizontal ? box.height : share * box.height
+      })
+      offset += share
+    })
+  }
+
+  walk(root, { x: 0, y: 0, width: 1, height: 1 })
+  return boxes
+}
+
+/** Fractions of a window compare equal a long way below anything visible. */
+const EPSILON = 1e-6
+
+/** Comparable integers, so ties are ties rather than a rounding artefact. */
+const quantise = (value: number): number => Math.round(value / EPSILON)
+
+/**
+ * One box seen from the direction of travel: `near` and `far` are its edges
+ * along that axis, `from` and `to` its extent across it.
+ */
+function edges(
+  box: Box,
+  horizontal: boolean
+): { near: number; far: number; from: number; to: number } {
+  return horizontal
+    ? { near: box.x, far: box.x + box.width, from: box.y, to: box.y + box.height }
+    : { near: box.y, far: box.y + box.height, from: box.x, to: box.x + box.width }
+}
+
+/**
+ * The panel on each side of `nodeId`, or null where there is none.
+ *
+ * A candidate qualifies by lying wholly beyond the edge it would be reached
+ * across and overlapping the panel across the other axis — the two together are
+ * what "in that direction" means on screen. Of those, the nearest wins; on a tie
+ * the one sharing the most edge, and on a tie there the topmost or leftmost, so
+ * a panel facing a stack of equal ones always picks the same member of it.
+ */
+export function neighbourPanels(
+  root: LayoutNode,
+  nodeId: string | null
+): Record<MoveDirection, string | null> {
+  const found: Record<MoveDirection, string | null> = {
+    left: null,
+    right: null,
+    up: null,
+    down: null
+  }
+  if (!nodeId) return found
+
+  const boxes = panelBoxes(root)
+  const start = boxes.get(nodeId)
+  if (!start) return found
+
+  for (const direction of MOVE_DIRECTIONS) {
+    const horizontal = direction === 'left' || direction === 'right'
+    const forward = direction === 'right' || direction === 'down'
+    const mine = edges(start, horizontal)
+
+    const candidates = [...boxes]
+      .filter(([id]) => id !== nodeId)
+      .map(([id, box]) => {
+        const other = edges(box, horizontal)
+        return {
+          id,
+          gap: quantise(forward ? other.near - mine.far : mine.near - other.far),
+          overlap: quantise(Math.min(mine.to, other.to) - Math.max(mine.from, other.from)),
+          across: quantise(other.from)
+        }
+      })
+      // A gap of zero is the ordinary case — panes abut. Anything behind us, or
+      // merely touching a corner, is not in this direction at all.
+      .filter((candidate) => candidate.gap >= 0 && candidate.overlap > 0)
+      .sort((a, b) => a.gap - b.gap || b.overlap - a.overlap || a.across - b.across)
+
+    found[direction] = candidates[0]?.id ?? null
+  }
+
+  return found
+}
+
+/** Which sides a panel has a neighbour on — what the action guards ask. */
+export function neighbourSides(
+  root: LayoutNode,
+  nodeId: string | null
+): Record<MoveDirection, boolean> {
+  const neighbours = neighbourPanels(root, nodeId)
+  return {
+    left: neighbours.left !== null,
+    right: neighbours.right !== null,
+    up: neighbours.up !== null,
+    down: neighbours.down !== null
+  }
+}
+
+/**
+ * Trade what two panel nodes point at, leaving the tree exactly as it was.
+ *
+ * Only the `panelId` moves. A node id names a *place* — it is what
+ * `activeNodeId` and `maximizedNodeId` hold and what React keys the pane on — so
+ * moving the contents rather than the nodes keeps a swap from re-tiling: the
+ * sizes stay with the panes, and two panels of different sizes swap modules
+ * without either changing shape.
+ */
+export function swapPanelNodes(root: LayoutNode, aId: string, bId: string): LayoutNode {
+  if (aId === bId) return root
+  const a = findNode(root, aId)
+  const b = findNode(root, bId)
+  if (a?.type !== 'panel' || b?.type !== 'panel') return root
+
+  const swap = (node: LayoutNode): LayoutNode => {
+    if (node.type === 'panel') {
+      if (node.id === aId) return { ...node, panelId: b.panelId }
+      if (node.id === bId) return { ...node, panelId: a.panelId }
+      return node
+    }
+    return { ...node, children: node.children.map(swap) }
+  }
+  return swap(root)
+}
+
+/**
+ * How much of a split one press of the resize keys moves. Big enough to see and
+ * small enough to aim with, held down.
+ */
+export const RESIZE_STEP = 0.05
+
+/**
+ * The smallest share a pane may be keyed down to.
+ *
+ * The splitter stops at 90 px, which this cannot say: a fraction of a window is
+ * all the tree knows, and the pixels are the renderer's. A twentieth of the
+ * split it sits in lands near the same place on an ordinary window and, unlike a
+ * pixel count, cannot be shrunk to nothing by a smaller one.
+ */
+const MIN_SHARE = 0.05
+
+/** The splits from the root down to `id`, each with the child it descends into. */
+function ancestry(root: LayoutNode, id: string): { split: SplitNode; index: number }[] {
+  if (root.type !== 'split') return []
+  for (const [index, child] of root.children.entries()) {
+    if (child.id === id) return [{ split: root, index }]
+    const deeper = ancestry(child, id)
+    if (deeper.length) return [{ split: root, index }, ...deeper]
+  }
+  return []
+}
+
+/**
+ * Give a panel more or less of the split it sits in — the keyboard's half of the
+ * splitter, `delta` being a positive share to grow by.
+ *
+ * The boundary it moves is the innermost one on that axis: the same handle the
+ * DM would have grabbed. Where the panel is last in its split there is nothing
+ * on that side, so the boundary before it moves instead, which is what makes
+ * "wider" mean wider rather than "wider, unless you are on the right".
+ *
+ * Returns the root unchanged when there is nothing to trade with or no room
+ * left, so a key held at the limit does not go on marking the layout unsaved.
+ */
+export function resizePanelShare(
+  root: LayoutNode,
+  nodeId: string,
+  axis: SplitDirection,
+  delta: number
+): LayoutNode {
+  const chain = ancestry(root, nodeId)
+
+  for (let step = chain.length - 1; step >= 0; step -= 1) {
+    const { split, index } = chain[step]
+    if (split.direction !== axis || split.children.length < 2) continue
+
+    const total = split.sizes.reduce((sum, size) => sum + size, 0)
+    if (total <= 0) continue
+    const other = index < split.children.length - 1 ? index + 1 : index - 1
+
+    const mine = split.sizes[index]
+    const theirs = split.sizes[other]
+    const floor = MIN_SHARE * total
+    // Only the two panes either side of the boundary move, exactly as the drag
+    // does it, and neither may be pushed under the floor.
+    const move = Math.max(floor - mine, Math.min(theirs - floor, delta * total))
+    if (Math.abs(move) < EPSILON) return root
+
+    const sizes = [...split.sizes]
+    sizes[index] = mine + move
+    sizes[other] = theirs - move
+    return setSplitSizes(root, split.id, sizes)
+  }
+
+  return root
 }
 
 /** Drop any panel payloads no longer referenced by the tree. */

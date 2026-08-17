@@ -234,6 +234,7 @@ interface SmokeStep {
   type?: { selector: string; text: string }
   select?: { selector: string; start: number; end: number }
   wheel?: { selector: string; deltaY: number; offsetX?: number; offsetY?: number }
+  drag?: { from: string; to: string; hold?: boolean }
   hover?: string
   wait?: number
 }
@@ -380,6 +381,54 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
       })()`
     )) as boolean
     if (!found) console.log(`[renderer:error] no element matched ${step.wheel.selector}`)
+    return wait(400)
+  }
+
+  // Drag one element onto another. Nothing else reaches a drop: `click` cannot
+  // express a gesture with two ends, and a real drag is the OS's, not the page's.
+  //
+  // One DataTransfer is carried through the whole sequence, which is what makes
+  // this exercise the handlers rather than mime them — the source's `dragstart`
+  // writes the panel id into it and the target's `drop` reads it back out. A
+  // constructed DataTransfer stays in read/write mode, unlike the protected one
+  // a live drag hands to `dragover`.
+  //
+  // `hold` stops after the dragover, because the drop indicator only exists
+  // between those two events: run the drop and the highlight is already gone by
+  // the time anything is photographed.
+  if (step.drag !== undefined) {
+    const found = (await window.webContents.executeJavaScript(
+      `(() => {
+        const { from, to, hold } = ${JSON.stringify(step.drag)}
+        const source = document.querySelector(from)
+        const target = document.querySelector(to)
+        if (!source || !target) return false
+        const dataTransfer = new DataTransfer()
+        const fire = (el, type) => {
+          const box = el.getBoundingClientRect()
+          el.dispatchEvent(
+            new DragEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              dataTransfer,
+              clientX: box.left + box.width / 2,
+              clientY: box.top + box.height / 2
+            })
+          )
+        }
+        fire(source, 'dragstart')
+        fire(target, 'dragenter')
+        fire(target, 'dragover')
+        if (!hold) {
+          fire(target, 'drop')
+          fire(source, 'dragend')
+        }
+        return true
+      })()`
+    )) as boolean
+    if (!found) {
+      console.log(`[renderer:error] no element matched ${step.drag.from} or ${step.drag.to}`)
+    }
     return wait(400)
   }
 

@@ -36,7 +36,8 @@ export function TopBar(): JSX.Element {
     locked,
     hasPanel: false,
     maximized: false,
-    hasSplit: false
+    hasSplit: false,
+    neighbours: { left: false, right: false, up: false, down: false }
   })
   const file = filePath ?? 'Not saved to a file yet'
 
