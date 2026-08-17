@@ -211,6 +211,8 @@ because its `C-x` prefix is unavailable, and a keymap that opens on anything els
 would not be Emacs. The one that moves the palette is **JetBrains**, onto
 `Ctrl+Shift+A` — IntelliJ calls it Find Action and has no `Ctrl+Shift+P`.
 
+Four of them have something to say about moving and resizing panels: Zed swaps panes with `Ctrl+K Shift+←`, VS Code and Cursor move a group with `Ctrl+K ←` (on Cursor's own leader), Vim uses `Ctrl+W H/J/K/L` and its `<`, `>`, `+`, `-` sizing, and tmux resizes with `Ctrl+B Alt+←`. A key that a tool writes as a character is listed here as the keys you press for it: tmux's `%` shows as `Ctrl+B Shift+5`, because that is what the app sees and what it will match.
+
 ## Building
 
 Released installers are built by CI, natively, one runner per platform. What

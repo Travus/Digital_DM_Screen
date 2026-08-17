@@ -381,6 +381,10 @@ you get a prefix that still fires something on its own, which nothing can resolv
 **Every binding is sourced from the tool, not remembered.** A preset wearing a
 tool's name and guessing at its bindings is worse than not shipping it.
 
+**A stroke is written the way the app records it, not the way the tool prints it.** tmux calls its split `%`; the keypress arrives as `Shift+5`, because a stroke is built from `event.code` and the shift comes back as a modifier. The gap is one-sided: `canonicalKey` accepts 31 punctuation characters and `keyFromCode` can only emit the eleven unshifted ones, so `%` parses, validates, prints in the editor and the ⋯ menu, and can never equal a keypress — `advanceChord` compares strokes as strings. tmux shipped two of those, and both of its splits were dead. `isRecordableBinding` is the rule and a preset test holds every arm to it.
+
+**That check is for the presets only, and cannot be moved into `checkBinding`.** Refusing a hand-edited `%` would mean knowing where `%` is on that keyboard, and nothing can say: `getLayoutMap()` reports what a code produces *unmodified*, and no API exposes the shift level. So a user's file keeps taking `%` — what is ours to get right is what we ship. The cost is that a character's position is a US layout's, and the chord then stays on the same physical key rather than on the same character, which is the bargain `event.code` already makes everywhere else.
+
 **A preset must not contradict itself.** Vim's window commands sit behind
 `Ctrl+W`, which ships bound to Close Panel, so the preset must claim that too or
 the menu owns the prefix and no sequence starts. A test resolves each preset and

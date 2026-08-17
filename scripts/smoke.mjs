@@ -587,8 +587,10 @@ const shots = [
     steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="cursor"]' }],
     expect: {
       found: ['.shortcuts-modal', '.shortcut-row'],
-      // Ctrl+S is still Save, alongside a sequence that ends on it.
-      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+S']
+      // Ctrl+S is still Save, alongside a sequence that ends on it. Ctrl+M Left
+      // is VS Code's group move on Cursor's leader, so it also says the whole
+      // arm moved rather than the three rows that were there before.
+      text: ['Ctrl+M Ctrl+\\', 'Ctrl+M Ctrl+S', 'Ctrl+M Left', 'Ctrl+S']
     }
   },
   // The Zed preset applied through its button. Shift+Escape on Fullscreen Panel
@@ -601,7 +603,36 @@ const shots = [
     steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="zed"]' }],
     expect: {
       found: ['.shortcuts-modal', '.shortcut-row'],
-      text: ['Ctrl+K Down', 'Ctrl+K Ctrl+S', 'Shift+Escape']
+      // Ctrl+K Shift+Left is Zed's own swap, on the same leader as its split —
+      // the two sit one row apart, which is the pair that would collide if a
+      // second stroke ever stopped being allowed to reuse a bound one.
+      text: ['Ctrl+K Down', 'Ctrl+K Shift+Left', 'Ctrl+K Ctrl+S', 'Shift+Escape']
+    }
+  },
+  // The tmux preset, which is the one whose bindings are written as keys rather
+  // than as the characters tmux prints. `Ctrl+B Shift+5` is its split right: as
+  // `Ctrl+B %` it rendered here just as happily and could never fire, because a
+  // stroke is built from `event.code` and that key arrives as Shift+5. The
+  // Alt+arrow rows are its pane resizing.
+  {
+    name: 'shortcuts-tmux',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="tmux"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+B Shift+5', "Ctrl+B Shift+'", 'Ctrl+B Alt+Right']
+    }
+  },
+  // Vim's, where every window command hangs off Ctrl+W — including the four the
+  // preset has to claim back from Close Panel, and the resize keys written as
+  // the strokes that produce Vim's `<` and `>`.
+  {
+    name: 'shortcuts-vim',
+    layout: starter,
+    steps: [{ menu: 'app:shortcuts' }, { click: '.preset[data-preset-id="vim"]' }],
+    expect: {
+      found: ['.shortcuts-modal', '.shortcut-row'],
+      text: ['Ctrl+W C', 'Ctrl+W Shift+H', 'Ctrl+W Shift+.']
     }
   },
 

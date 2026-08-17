@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkBinding } from '../../../shared/accelerator'
+import { checkBinding, isRecordableBinding } from '../../../shared/accelerator'
 import {
   ACTIONS,
   findConflict,
@@ -40,6 +40,28 @@ describe('every preset', () => {
           for (const [id, binding] of Object.entries(bindings)) {
             if (!binding) continue
             expect([arm, id, checkBinding(binding)]).toEqual([arm, id, null])
+          }
+        }
+      })
+
+      /**
+       * Accepted is not the same as pressable, and the gap is where tmux lost
+       * both its splits.
+       *
+       * An accelerator may *name* any of 31 punctuation characters; a keypress
+       * can only produce the eleven unshifted ones, because a stroke is built
+       * from `event.code` and the shift comes back as a modifier. So a preset
+       * written in its tool's own notation — tmux prints its splits as `%` and
+       * `"` — passes every check above, prints in the editor and the ⋯ menu, and
+       * can never match a key. Only the presets are held to this: a user's
+       * hand-edited file cannot be, since refusing `%` there would mean knowing
+       * where `%` sits on their keyboard, and nothing can tell you that.
+       */
+      it('ships only bindings a keypress could produce', () => {
+        for (const [arm, bindings] of arms(preset)) {
+          for (const [id, binding] of Object.entries(bindings)) {
+            if (!binding) continue
+            expect([arm, id, isRecordableBinding(binding)]).toEqual([arm, id, true])
           }
         }
       })

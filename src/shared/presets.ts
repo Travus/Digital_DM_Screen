@@ -11,8 +11,23 @@ import { ACTIONS, type Keymap } from './actions'
  * with a prefix that still fires something on its own.
  *
  * Only bindings sourced from the tool itself are here — a preset wearing a
- * tool's name and guessing at its keymap is worse than not shipping it. One
- * absence is deliberate rather than an oversight:
+ * tool's name and guessing at its keymap is worse than not shipping it.
+ *
+ * **A stroke is written the way the app records it, not the way the tool prints
+ * it.** tmux calls its split `%`; what a keypress produces is `Shift+5`, because
+ * strokes are built from `event.code` and the shift arrives as a modifier. An
+ * accelerator can *name* `%` — the parser takes 31 punctuation characters and a
+ * keypress can only ever produce the eleven unshifted ones — so a preset written
+ * in the tool's notation validates, prints in the editor and the ⋯ menu, and
+ * never fires. tmux shipped two of those. `isRecordableBinding` is the rule, and
+ * a test holds every preset to it.
+ *
+ * The cost is that a character's *position* is a US layout's: `%` is Shift+5
+ * there and elsewhere on an AZERTY. The chord then stays on the same physical
+ * key rather than on the same character, which is the bargain `event.code`
+ * already makes for every other binding in the app.
+ *
+ * One absence is deliberate rather than an oversight:
  *
  * **Emacs.** Its prefix is `C-x`, which is Cut. On Windows and Linux that key is
  * handled by Chromium in any editable field whatever the menu says, so it is not
@@ -62,7 +77,15 @@ export const PRESETS: readonly KeymapPreset[] = [
       // even though the catalogue default is the same key today: a preset
       // reproduces its tool, and one that tracked our defaults instead would
       // quietly stop being VS Code the moment we moved one.
-      'app:palette': 'CmdOrCtrl+Shift+P'
+      'app:palette': 'CmdOrCtrl+Shift+P',
+      // `workbench.action.moveActiveEditorGroup{Left,Right,Up,Down}`, which move
+      // a group past its neighbour — the nearest thing VS Code has to a swap.
+      // Its own resize commands carry `f1: true` and no keybinding at all, so
+      // the four resizes here keep the catalogue default.
+      'panel:swapLeft': 'CmdOrCtrl+K Left',
+      'panel:swapRight': 'CmdOrCtrl+K Right',
+      'panel:swapUp': 'CmdOrCtrl+K Up',
+      'panel:swapDown': 'CmdOrCtrl+K Down'
     }
   },
   {
@@ -89,12 +112,22 @@ export const PRESETS: readonly KeymapPreset[] = [
       'app:shortcuts': 'CmdOrCtrl+M CmdOrCtrl+S',
       // Inherited from VS Code unchanged, and stated for the same reason it is
       // stated there.
-      'app:palette': 'CmdOrCtrl+Shift+P'
+      'app:palette': 'CmdOrCtrl+Shift+P',
+      // VS Code's group moves, on Cursor's leader. Every arm is complete, so
+      // these are written out twice rather than shared.
+      'panel:swapLeft': 'CmdOrCtrl+M Left',
+      'panel:swapRight': 'CmdOrCtrl+M Right',
+      'panel:swapUp': 'CmdOrCtrl+M Up',
+      'panel:swapDown': 'CmdOrCtrl+M Down'
     },
     darwin: {
       'panel:splitDown': 'CmdOrCtrl+R CmdOrCtrl+\\',
       'app:shortcuts': 'CmdOrCtrl+R CmdOrCtrl+S',
-      'app:palette': 'CmdOrCtrl+Shift+P'
+      'app:palette': 'CmdOrCtrl+Shift+P',
+      'panel:swapLeft': 'CmdOrCtrl+R Left',
+      'panel:swapRight': 'CmdOrCtrl+R Right',
+      'panel:swapUp': 'CmdOrCtrl+R Up',
+      'panel:swapDown': 'CmdOrCtrl+R Down'
     }
   },
   {
@@ -108,7 +141,16 @@ export const PRESETS: readonly KeymapPreset[] = [
       'app:shortcuts': 'CmdOrCtrl+K CmdOrCtrl+S',
       'panel:maximize': 'Shift+Escape',
       // `command_palette::Toggle`.
-      'app:palette': 'CmdOrCtrl+Shift+P'
+      'app:palette': 'CmdOrCtrl+Shift+P',
+      // `workspace::SwapPane{Left,Right,Up,Down}` — the one tool listed here
+      // whose commands are ours exactly rather than the nearest equivalent. Zed
+      // writes them `ctrl-k shift-left` and `cmd-k shift-left`, which is the
+      // difference `CmdOrCtrl` already spells, so this needs no darwin arm. Its
+      // own size keys move the docks, not the panes, so they are left out.
+      'panel:swapLeft': 'CmdOrCtrl+K Shift+Left',
+      'panel:swapRight': 'CmdOrCtrl+K Shift+Right',
+      'panel:swapUp': 'CmdOrCtrl+K Shift+Up',
+      'panel:swapDown': 'CmdOrCtrl+K Shift+Down'
     }
   },
   {
@@ -144,7 +186,24 @@ export const PRESETS: readonly KeymapPreset[] = [
       'panel:splitRight': 'CmdOrCtrl+W V',
       'panel:splitDown': 'CmdOrCtrl+W S',
       'panel:close': 'CmdOrCtrl+W C',
-      'panel:maximize': 'CmdOrCtrl+W O'
+      'panel:maximize': 'CmdOrCtrl+W O',
+      // `CTRL-W H/J/K/L` move the window to the far left, bottom, top or right.
+      // Not a swap with the neighbour, but it is what Vim has, and in two
+      // windows the two are the same act. Capitals, so each is a Shift stroke.
+      'panel:swapLeft': 'CmdOrCtrl+W Shift+H',
+      'panel:swapDown': 'CmdOrCtrl+W Shift+J',
+      'panel:swapUp': 'CmdOrCtrl+W Shift+K',
+      'panel:swapRight': 'CmdOrCtrl+W Shift+L',
+      // `CTRL-W -/+` change height and `CTRL-W </>` width. Three of the four are
+      // shifted characters, so they are written as the keys that produce them on
+      // a US layout: + is Shift+=, < is Shift+, and > is Shift+. — see the note
+      // at the top about what that costs elsewhere.
+      'panel:shorter': 'CmdOrCtrl+W -',
+      'panel:taller': 'CmdOrCtrl+W Shift+=',
+      'panel:narrower': 'CmdOrCtrl+W Shift+,',
+      'panel:wider': 'CmdOrCtrl+W Shift+.',
+      // `CTRL-W =` makes every window equally high and wide.
+      'split:equalise': 'CmdOrCtrl+W ='
     }
   },
   {
@@ -152,11 +211,25 @@ export const PRESETS: readonly KeymapPreset[] = [
     name: 'tmux',
     // % splits vertically (a vertical divider, panes side by side) and " splits
     // horizontally. Famously the opposite way round from how they read.
+    //
+    // Written as the keys that produce them rather than as the characters tmux
+    // prints: `%` is Shift+5 and `"` is Shift+' on a US layout, and a stroke is
+    // built from `event.code`, so the character spelling could never match a
+    // keypress. Both of these were dead bindings until they were written this
+    // way — see the note at the top of this file.
     bindings: {
-      'panel:splitRight': 'CmdOrCtrl+B %',
-      'panel:splitDown': 'CmdOrCtrl+B "',
+      'panel:splitRight': 'CmdOrCtrl+B Shift+5',
+      'panel:splitDown': "CmdOrCtrl+B Shift+'",
       'panel:close': 'CmdOrCtrl+B X',
-      'panel:maximize': 'CmdOrCtrl+B Z'
+      'panel:maximize': 'CmdOrCtrl+B Z',
+      // prefix M-arrow resizes the current pane in steps of five cells, moving
+      // the border in the direction pressed — so left narrows it and up shortens
+      // it. tmux's own pane swaps, `{` and `}`, take the previous or next pane
+      // rather than a direction, so they have nothing to map onto here.
+      'panel:narrower': 'CmdOrCtrl+B Alt+Left',
+      'panel:wider': 'CmdOrCtrl+B Alt+Right',
+      'panel:shorter': 'CmdOrCtrl+B Alt+Up',
+      'panel:taller': 'CmdOrCtrl+B Alt+Down'
     }
   },
   {
