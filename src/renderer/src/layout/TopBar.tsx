@@ -21,15 +21,59 @@ function SecondaryBar(): JSX.Element {
     (state) => state.doc.windows.find((entry) => entry.id === state.windowId)?.name
   )
   const layoutName = useAppStore((state) => state.doc.name)
+  const locked = useAppStore((state) => state.doc.locked)
+  const renameWindow = useAppStore((state) => state.renameWindow)
+
+  const [renaming, setRenaming] = useState(false)
 
   return (
     <header className="topbar secondary">
       <div className="brand" title="Digital DM Screen">
         <BrandMark />
       </div>
-      <span className="window-label" data-window-id={windowId} title={layoutName}>
-        {windowName ?? 'Window'}
-      </span>
+
+      {/* The name is a rename field here, exactly as the layout's name is on the
+          primary bar. This is the name that identifies the window a DM is
+          looking at, so it is the one worth being able to click — reaching it
+          only through the switcher made it look like a label. */}
+      {renaming ? (
+        <input
+          className="window-label-input"
+          autoFocus
+          defaultValue={windowName ?? ''}
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={(event) => {
+            const next = event.target.value.trim()
+            if (next) void renameWindow(windowId, next)
+            setRenaming(false)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            if (event.key === 'Escape') setRenaming(false)
+          }}
+        />
+      ) : (
+        <button
+          className="window-label"
+          data-window-id={windowId}
+          /* `aria-disabled`, not `disabled`: the row is still the window's name,
+             and Chromium suppresses the tooltip — the only place the reason can
+             go — on a disabled control. Same bargain as the layout name. */
+          aria-disabled={locked ? true : undefined}
+          title={
+            locked
+              ? `${layoutName} — the layout is locked, so the name cannot be changed`
+              : `${layoutName} — click to rename this window`
+          }
+          onClick={() => {
+            if (locked) return
+            setRenaming(true)
+          }}
+        >
+          {windowName ?? 'Window'}
+        </button>
+      )}
+
       <WindowsMenu />
       <span className="spacer" />
     </header>

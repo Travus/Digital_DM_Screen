@@ -216,6 +216,18 @@ const shots = [
       text: ['Player screen']
     }
   },
+  // The secondary window's own name is a rename field, not a label. Reaching it
+  // only through the switcher made the name beside it look like decoration.
+  {
+    name: 'windows-secondary-rename',
+    layout: twoScreens,
+    window: 2,
+    click: '.window-label',
+    expect: {
+      found: ['.window-label-input'],
+      missing: ['.window-label']
+    }
+  },
   // The switcher is on the secondary window too, and knows which screen it is
   // on — the row for this window is the one marked current.
   {

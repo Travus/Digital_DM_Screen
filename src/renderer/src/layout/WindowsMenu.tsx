@@ -21,6 +21,7 @@ export function WindowsMenu(): JSX.Element {
   const shortcuts = useShortcuts()
   const windows = useAppStore((state) => state.doc.windows)
   const windowId = useAppStore((state) => state.windowId)
+  const locked = useAppStore((state) => state.doc.locked)
 
   const addWindow = useAppStore((state) => state.addWindow)
   const openWindow = useAppStore((state) => state.openWindow)
@@ -137,10 +138,17 @@ export function WindowsMenu(): JSX.Element {
           >
             {entry.name}
           </button>
+          {/* Off while the layout is locked, which covers the names — and
+              greyed with the reason rather than dropped, so the row does not
+              change length with the state. */}
           <button
             className="icon-btn window-rename"
-            title="Rename this window"
-            onClick={() => setRenamingId(entry.id)}
+            aria-disabled={locked ? true : undefined}
+            title={locked ? 'Unavailable — the layout is locked' : 'Rename this window'}
+            onClick={() => {
+              if (locked) return
+              setRenamingId(entry.id)
+            }}
           >
             <PencilIcon />
           </button>

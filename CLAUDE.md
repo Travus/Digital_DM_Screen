@@ -241,6 +241,13 @@ so without the relay the players' screen stays dark until it is reopened.
 made it a control that changes what kind of control it is — the row it sits on
 stops being somewhere you can aim.
 
+**The secondary bar's name is a rename field, not a label.** It sits where the
+layout's name sits on the primary and behaves the same way, because it is the
+name identifying the window a DM is looking at. It keeps its own `.window-label`
+class rather than borrowing `.layout-name`: they are two different names, and one
+selector matching both makes "is this the layout's name" unanswerable from the
+DOM — which the smoke shots ask.
+
 **A row renames and deletes, and never closes.** Renaming has a control of its
 own because the name's own click closes the menu, so a double-click on it never
 landed and the field could not be opened at all. There is no close in the menu:
@@ -248,6 +255,22 @@ that is what a window's own frame is for, and a row offering both would be two
 similar buttons whose difference is invisible until one of them has lost you a
 screen. The bin deletes outright and does not ask; the primary has none, since a
 layout keeps one window and closing that one is quitting.
+
+**Every window's title reads window, layout, app.** The primary used to leave its
+own name out on the grounds that it *is* the document, which made two windows of
+one layout look like two different kinds of thing sitting side by side in the
+task bar.
+
+**The page's `<title>` has to be refused, or it wins.** Chromium applies it to
+the window the moment the document loads, which is after anything `createWindow`
+set — so a window came up called "Digital DM Screen" whatever the layout was
+called, and a reopened one came back the same way. `page-title-updated` is
+prevented per window; do not delete the `<title>` from `index.html` instead,
+since that is what a browser tab and the packaged app's own metadata read.
+
+**A window's name answers to the lock**, like the layout's and a panel's. Guarded
+in main's `window:rename`, which is where the command lands, rather than in the
+two controls that reach it.
 
 **A secondary window's bar is the mark, the window's name and the switcher.**
 Nothing else. A second window is usually the one an audience can see, and app

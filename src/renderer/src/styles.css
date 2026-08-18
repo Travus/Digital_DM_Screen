@@ -2854,10 +2854,42 @@ kbd {
   gap: 10px;
 }
 
+/* The secondary bar's name, which is the window's rather than the layout's.
+   Styled like `.layout-name` but not sharing its class: they are two different
+   names, and a selector that matched both would make "is this the layout name"
+   unanswerable from the DOM. */
 .window-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font: inherit;
   font-weight: 600;
   color: var(--text);
-  padding: 4px 2px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.window-label:not([aria-disabled='true']):hover {
+  border-color: var(--line);
+  background: var(--bg-3);
+}
+
+.window-label[aria-disabled='true'] {
+  cursor: default;
+}
+
+.window-label-input {
+  padding: 4px 8px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  min-width: 180px;
 }
 
 .windows-menu {

@@ -401,15 +401,21 @@ function broadcast(channel: string, ...args: unknown[]): void {
   for (const window of windows.values()) window.webContents.send(channel, ...args)
 }
 
+/**
+ * Every window's title, in one shape: window, layout, app.
+ *
+ * The primary used to leave its own name out, on the grounds that it *is* the
+ * document. That made the two windows of one layout read as two different kinds
+ * of thing in the task bar, where they sit side by side — so both say which
+ * screen they are, and the layout is the middle term in both.
+ */
 function applyTitle(): void {
   const dot = documentStatus().dirty ? '• ' : ''
   const doc = currentDoc()
   for (const [windowId, window] of windows) {
-    const name = findWindow(doc, windowId)?.name
-    // The primary is the document, so it is named after it. A second screen
-    // says which screen it is, since that is the question being asked of it.
-    const lead = isPrimaryWindow(doc, windowId) ? documentName() : `${name} — ${documentName()}`
-    window.setTitle(`${dot}${lead} — Digital DM Screen`)
+    if (window.isDestroyed()) continue
+    const name = findWindow(doc, windowId)?.name ?? 'Window'
+    window.setTitle(`${dot}${name} — ${documentName()} — Digital DM Screen`)
   }
 }
 
@@ -461,6 +467,14 @@ function createWindow(windowId: string): BrowserWindow {
   // Registered before the load, because the renderer asks which window it is
   // during preload — synchronously, before its first paint.
   windows.set(windowId, window)
+
+  /*
+   * The page has a `<title>` of its own, and Chromium applies it to the window
+   * the moment the document loads — after anything set here, which is why a
+   * window opened or reopened came up called "Digital DM Screen" whatever the
+   * layout was called. Refusing the update leaves the title ours.
+   */
+  window.on('page-title-updated', (event) => event.preventDefault())
 
   // The restored document is already in hand, so the window opens named after
   // it rather than showing the app's own name until the first edit.
@@ -804,6 +818,9 @@ ipcMain.handle('window:setOpen', (_event, windowId: string, open: boolean): void
 })
 
 ipcMain.handle('window:rename', (_event, windowId: string, name: string): void => {
+  // The lock covers the names, and a window's is one of them — the same rule
+  // `renameLayout` and `setPanelTitle` already follow.
+  if (currentDoc().locked) return
   publish(renameWindow(currentDoc(), windowId, name))
   announceWindows()
 })
