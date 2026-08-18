@@ -13,9 +13,6 @@ import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
 import { ActionPalette } from './components/ActionPalette'
 import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 
-/** How long the layout must sit still before we stash it in userData. */
-const SESSION_DEBOUNCE_MS = 700
-
 /** How long the fullscreen hint holds before it starts fading. */
 const RESTORE_HINT_MS = 4000
 
@@ -47,8 +44,6 @@ function isBareEscape(event: KeyboardEvent): boolean {
 
 export function App(): JSX.Element {
   const doc = useAppStore((state) => state.doc)
-  const filePath = useAppStore((state) => state.filePath)
-  const dirty = useAppStore((state) => state.dirty)
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
   const maximizedNodeId = useAppStore((state) => state.maximizedNodeId)
   const theme = useAppStore((state) => state.theme)
@@ -72,45 +67,29 @@ export function App(): JSX.Element {
   /* Keybindings likewise: main owns them because main owns the menu. */
   useEffect(() => window.dmscreen.onKeymapChanged(useKeymapStore.getState().apply), [])
 
-  /* Restore the previous session, then start tracking recents. */
+  /* The document arrives at preload, so there is nothing to restore here — only
+     the recents, which are a sidebar rather than the screen. */
   useEffect(() => {
-    void (async () => {
-      const [snapshot] = await Promise.all([
-        window.dmscreen.readSession(),
-        useAppStore.getState().refreshRecents()
-      ])
-      if (snapshot?.doc) {
-        useAppStore.getState().loadDoc(snapshot.doc, snapshot.filePath, snapshot.dirty)
-      }
-      setRestored(true)
-    })()
+    void useAppStore
+      .getState()
+      .refreshRecents()
+      .then(() => setRestored(true))
   }, [])
+
+  /* A different document: New, Open, or a save naming the file it went to. */
+  useEffect(() => window.dmscreen.onDocumentChanged(useAppStore.getState().adoptDocument), [])
+  useEffect(() => window.dmscreen.onDocumentStatus(useAppStore.getState().adoptStatus), [])
 
   /* The app's ready line, published to the DOM.
 
      The smoke harness waits on this rather than on a fixed dwell, because a
      dwell can only be tuned for one machine: too short and a shot drives an app
-     still showing its pre-restore state, too long and every shot in the suite
-     pays for the slowest. Set from an effect, so it cannot land before the
-     commit that rendered the restored layout — see `waitForReady` in
-     `src/main/index.ts`. */
+     that has not settled, too long and every shot in the suite pays for the
+     slowest. Set from an effect, so it cannot land before the commit it stands
+     for — see `waitForReady` in `src/main/index.ts`. */
   useEffect(() => {
     if (restored) document.documentElement.dataset.ready = 'true'
   }, [restored])
-
-  /* Stash the working state so a crash or an accidental quit costs nothing. */
-  useEffect(() => {
-    if (!restored) return
-    const timer = window.setTimeout(() => {
-      void window.dmscreen.writeSession({ doc, filePath, dirty })
-    }, SESSION_DEBOUNCE_MS)
-    return () => window.clearTimeout(timer)
-  }, [doc, filePath, dirty, restored])
-
-  /* Keep the window title and the close-confirmation in sync. */
-  useEffect(() => {
-    void window.dmscreen.setDirty(dirty, doc.name)
-  }, [dirty, doc.name])
 
   /* Menu commands run the same store actions the in-app buttons do.
      Lifted out of the subscription so the chord dispatcher below can reach the
@@ -137,25 +116,7 @@ export function App(): JSX.Element {
         void store.clearRecents()
         break
       case 'layout:save':
-        // Main may be waiting on the outcome before letting the window close.
-        //
-        // Flush the session before answering, rather than leaving it to the
-        // debounced write below. On "Save and quit" the app exits within
-        // milliseconds, so that timer never fires and session.json keeps the
-        // pre-save snapshot — including `dirty: true`. The layout file was
-        // always written correctly; the next launch just restored a stale flag
-        // and asked to save again.
-        void store.save().then(async (saved) => {
-          if (saved) {
-            const { doc: savedDoc, filePath: savedPath, dirty: savedDirty } = useAppStore.getState()
-            await window.dmscreen.writeSession({
-              doc: savedDoc,
-              filePath: savedPath,
-              dirty: savedDirty
-            })
-          }
-          window.dmscreen.notifySaveComplete(saved)
-        })
+        void store.save()
         break
       case 'layout:saveAs':
         void store.saveAs()

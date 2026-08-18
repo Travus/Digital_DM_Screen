@@ -64,17 +64,26 @@ export interface RecentEntry {
   openedAt: string
 }
 
-/** What gets stashed in userData so an unexpected quit loses nothing. */
-export interface SessionSnapshot {
-  doc: LayoutDoc
+/**
+ * What changes about a document without the document itself changing: a save
+ * clears the unsaved flag and names the file, and neither touches a panel.
+ */
+export interface DocumentStatus {
   filePath: string | null
   dirty: boolean
 }
 
-export interface OpenResult {
-  filePath: string
+/** The document and its status together — what a renderer boots from. */
+export interface DocumentSnapshot extends DocumentStatus {
   doc: LayoutDoc
 }
+
+/**
+ * What gets stashed in userData so an unexpected quit loses nothing. The same
+ * shape as a snapshot, and deliberately so: the session *is* the document as it
+ * last stood, and restoring is handing that straight back.
+ */
+export type SessionSnapshot = DocumentSnapshot
 
 /**
  * The scheme main serves picked image files over, and the URL shape the

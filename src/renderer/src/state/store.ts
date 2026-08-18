@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type {
+  DocumentSnapshot,
+  DocumentStatus,
   LayoutDoc,
   LayoutNode,
   MoveDirection,
@@ -8,7 +10,6 @@ import type {
 } from '../../../shared/types'
 import {
   collectPanelNodes,
-  createEmptyDoc,
   equaliseSplit,
   findNode,
   makePanelData,
@@ -50,14 +51,17 @@ interface AppState {
   theme: Theme
   sidebarOpen: boolean
 
-  /* layout file operations */
+  /* layout file operations — all of them main's, since main holds the document */
   newLayout: () => Promise<void>
   openLayout: (path?: string) => Promise<void>
   save: () => Promise<boolean>
   saveAs: () => Promise<boolean>
   renameLayout: (name: string) => void
   toggleLock: () => void
-  loadDoc: (doc: LayoutDoc, filePath: string | null, dirty: boolean) => void
+  /** A different document arriving from main: New, Open, or the restore. */
+  adoptDocument: (snapshot: DocumentSnapshot) => void
+  /** Just the file path and the unsaved flag, which a save moves on their own. */
+  adoptStatus: (status: DocumentStatus) => void
 
   /* recents */
   refreshRecents: () => Promise<void>
@@ -102,12 +106,20 @@ export function applyTheme(theme: Theme): void {
 }
 
 export const useAppStore = create<AppState>((set, get) => {
-  /** Every doc mutation funnels through here so `dirty` can never drift. */
+  /**
+   * Every doc mutation funnels through here, so `dirty` can never drift and main
+   * always has the edit.
+   *
+   * `dirty` is still set locally rather than waited for. Main sets it too, and
+   * says so back over `document:status` — but the dot beside the layout name is
+   * the app acknowledging a keystroke, and an acknowledgement that arrives an
+   * IPC round trip later is one the eye catches. A local `true` and main's
+   * authoritative `false` cannot fight: only a save clears it.
+   */
   const mutate = (fn: (doc: LayoutDoc) => LayoutDoc): void => {
-    set((state) => ({
-      doc: { ...fn(state.doc), updatedAt: new Date().toISOString() },
-      dirty: true
-    }))
+    const doc = { ...fn(get().doc), updatedAt: new Date().toISOString() }
+    set({ doc, dirty: true })
+    void window.dmscreen.publishDocument(doc)
   }
 
   const mutateTree = (fn: (root: LayoutNode) => LayoutNode): void => {
@@ -115,26 +127,17 @@ export const useAppStore = create<AppState>((set, get) => {
   }
 
   /**
-   * Gate for anything that replaces the whole document — New, Open, and Open
-   * Recent. Without it those actions discarded unsaved work silently, with no
-   * prompt and no undo.
-   *
-   * Returns false when the caller must leave the document alone: the user
-   * cancelled, or they asked to save first and that save failed or its file
-   * dialog was dismissed.
+   * What main handed over at preload. Read here rather than in an effect: an
+   * async restore means a first frame with an empty layout in it and the real
+   * one arriving over the top, which is a flash the smoke harness had to be
+   * taught to wait out.
    */
-  const guardUnsaved = async (): Promise<boolean> => {
-    if (!get().dirty) return true
-    const choice = await window.dmscreen.confirmDiscard(get().doc.name)
-    if (choice === 'cancel') return false
-    if (choice === 'discard') return true
-    return get().save()
-  }
+  const initial = window.dmscreen.initialDocument
 
   return {
-    doc: createEmptyDoc(),
-    filePath: null,
-    dirty: false,
+    doc: initial.doc,
+    filePath: initial.filePath,
+    dirty: initial.dirty,
     recents: [],
     maximizedNodeId: null,
     activeNodeId: null,
@@ -145,49 +148,30 @@ export const useAppStore = create<AppState>((set, get) => {
 
     /* ------------------------------------------------------------ files */
 
-    newLayout: async () => {
-      if (!(await guardUnsaved())) return
-      set({
-        doc: createEmptyDoc(),
-        filePath: null,
-        dirty: false,
-        maximizedNodeId: null,
-        activeNodeId: null
-      })
-    },
+    /*
+     * Four thin calls into main, which owns the document and therefore owns the
+     * unsaved-changes prompt, the file dialogs and the recents. What comes back
+     * is a `document:changed` or a `document:status`, adopted below — so the
+     * menu, the top bar and the palette all land on one code path, and none of
+     * them can leave the renderer holding a document main has moved past.
+     */
+    newLayout: () => window.dmscreen.newLayout(),
 
     openLayout: async (path) => {
-      // Guard before the file picker, not after — being asked about unsaved work
-      // only once a file has been chosen is a worse order to answer in.
-      if (!(await guardUnsaved())) return
-      const result = await window.dmscreen.openLayout(path)
-      if (!result) return
-      set({
-        doc: result.doc,
-        filePath: result.filePath,
-        dirty: false,
-        maximizedNodeId: null,
-        activeNodeId: null
-      })
+      await window.dmscreen.openLayout(path)
       await get().refreshRecents()
     },
 
     save: async () => {
-      const { doc, filePath } = get()
-      if (!filePath) return get().saveAs()
-      const saved = await window.dmscreen.saveLayout(filePath, doc)
-      if (!saved) return false
-      set({ dirty: false })
-      await get().refreshRecents()
-      return true
+      const saved = await window.dmscreen.saveLayout()
+      if (saved) await get().refreshRecents()
+      return saved
     },
 
     saveAs: async () => {
-      const saved = await window.dmscreen.saveLayoutAs(get().doc)
-      if (!saved) return false
-      set({ filePath: saved, dirty: false })
-      await get().refreshRecents()
-      return true
+      const saved = await window.dmscreen.saveLayoutAs()
+      if (saved) await get().refreshRecents()
+      return saved
     },
 
     // The lock covers the names as well as the shape, and is enforced here for
@@ -200,8 +184,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
     toggleLock: () => mutate((doc) => ({ ...doc, locked: !doc.locked })),
 
-    loadDoc: (doc, filePath, dirty) =>
+    /* Set, never mutated: adopting main's document is not an edit to it, and
+       publishing it back would echo. The same argument as `maximizedNodeId`
+       being outside `mutate` — this is the app catching up, not a change. */
+    adoptDocument: ({ doc, filePath, dirty }) =>
       set({ doc, filePath, dirty, maximizedNodeId: null, activeNodeId: null }),
+
+    adoptStatus: ({ filePath, dirty }) => set({ filePath, dirty }),
 
     /* ---------------------------------------------------------- recents */
 

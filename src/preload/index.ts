@@ -1,12 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   DataSnapshot,
+  DocumentSnapshot,
+  DocumentStatus,
   ImageRef,
   LayoutDoc,
   MenuAction,
-  OpenResult,
-  RecentEntry,
-  SessionSnapshot
+  RecentEntry
 } from '../shared/types'
 import type { Keymap, ResolvedKeymap } from '../shared/actions'
 
@@ -23,13 +23,49 @@ const api = {
   /** Available synchronously so rendered shortcut labels match the native menu. */
   platform: process.platform,
 
+  /**
+   * The document as main holds it, read synchronously at preload so the store is
+   * built around it and the first frame is already the restored screen.
+   */
+  initialDocument: ipcRenderer.sendSync('document:snapshot') as DocumentSnapshot,
+
+  /**
+   * An edit, sent to the copy that gets saved.
+   *
+   * The renderer stays authoritative for what the document contains — the tree
+   * operations and the module state both live there — so this hands over the
+   * result rather than a description of the change.
+   */
+  publishDocument: (doc: LayoutDoc): Promise<void> => ipcRenderer.invoke('document:publish', doc),
+
+  /** Subscribe to the document being replaced. Returns an unsubscribe function. */
+  onDocumentChanged: (handler: (snapshot: DocumentSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: DocumentSnapshot): void => handler(snapshot)
+    ipcRenderer.on('document:changed', listener)
+    return () => {
+      ipcRenderer.off('document:changed', listener)
+    }
+  },
+
+  /** Subscribe to the file path and unsaved flag moving without the document. */
+  onDocumentStatus: (handler: (status: DocumentStatus) => void): (() => void) => {
+    const listener = (_event: unknown, status: DocumentStatus): void => handler(status)
+    ipcRenderer.on('document:status', listener)
+    return () => {
+      ipcRenderer.off('document:status', listener)
+    }
+  },
+
+  /**
+   * The four file commands, which run entirely in main now that the document
+   * lives there — including the unsaved-changes prompt New and Open ask first.
+   * Save reports whether it happened, since a cancelled dialog is a "no".
+   */
+  newLayout: (): Promise<void> => ipcRenderer.invoke('layout:new'),
   /** Opens a layout. With no path, shows the system file picker. */
-  openLayout: (path?: string): Promise<OpenResult | null> =>
-    ipcRenderer.invoke('layout:open', path),
-  saveLayout: (filePath: string, doc: LayoutDoc): Promise<string | null> =>
-    ipcRenderer.invoke('layout:save', filePath, doc),
-  saveLayoutAs: (doc: LayoutDoc): Promise<string | null> =>
-    ipcRenderer.invoke('layout:saveAs', doc),
+  openLayout: (path?: string): Promise<void> => ipcRenderer.invoke('layout:open', path),
+  saveLayout: (): Promise<boolean> => ipcRenderer.invoke('layout:save'),
+  saveLayoutAs: (): Promise<boolean> => ipcRenderer.invoke('layout:saveAs'),
 
   /** Shows the image picker and puts the result on main's guest list. */
   pickImage: (): Promise<ImageRef | null> => ipcRenderer.invoke('image:pick'),
@@ -52,28 +88,10 @@ const api = {
     ipcRenderer.invoke('recents:remove', path),
   clearRecents: (): Promise<RecentEntry[]> => ipcRenderer.invoke('recents:clear'),
 
-  readSession: (): Promise<SessionSnapshot | null> => ipcRenderer.invoke('session:read'),
-  writeSession: (snapshot: SessionSnapshot): Promise<void> =>
-    ipcRenderer.invoke('session:write', snapshot),
-
-  setDirty: (dirty: boolean, name: string): Promise<void> =>
-    ipcRenderer.invoke('window:setDirty', dirty, name),
-  /** Prompts before New or Open throws away unsaved changes. */
-  confirmDiscard: (name: string): Promise<'save' | 'discard' | 'cancel'> =>
-    ipcRenderer.invoke('window:confirmDiscard', name),
   toggleWindowFullScreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggleFullScreen'),
   /** Quit, for the action palette — the menu's Quit item is a native role. */
   quitApp: (): Promise<void> => ipcRenderer.invoke('window:quit'),
   appInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:info'),
-
-  /**
-   * Reports the outcome of a save that may have been triggered by the
-   * close-confirmation dialog. `saved: false` (the file dialog was cancelled,
-   * or the write failed) leaves the window open.
-   */
-  notifySaveComplete: (saved: boolean): void => {
-    ipcRenderer.send('window:saveComplete', saved)
-  },
 
   /** Subscribe to menu commands. Returns an unsubscribe function. */
   onMenuAction: (handler: (action: MenuAction, payload?: string) => void): (() => void) => {

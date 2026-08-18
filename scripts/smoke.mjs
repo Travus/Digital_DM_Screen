@@ -83,6 +83,37 @@ const shots = [
     settle: 5000,
     expect: { found: ['.app.has-maximized', '.bigdice-past'], missing: ['.restore-hint'] }
   },
+  /*
+   * The two halves of the unsaved flag, which the document living in main is
+   * the whole of this change to.
+   *
+   * They are a pair on purpose. `missing: ['.dirty-dot']` below would pass just
+   * as happily against a lock command that never marked anything unsaved, so
+   * this shot is what pins that the same single step does put the dot on screen.
+   * Read alone, either one proves nothing.
+   */
+  {
+    name: 'layout-dirty',
+    layout: starter,
+    menu: 'layout:toggleLock',
+    expect: {
+      found: ['.dirty-dot', '.topbar .icon-btn.on[title^="Layout locked"]']
+    }
+  },
+  // And back off again, through the path that now runs entirely in main: the
+  // renderer asks, main writes the file it already holds, clears the flag and
+  // says so. The lock staying on is what says the document that reached the
+  // disk is the edited one rather than the copy main started with.
+  {
+    name: 'layout-save',
+    layout: starter,
+    writable: true,
+    steps: [{ menu: 'layout:toggleLock' }, { menu: 'layout:save' }, { wait: 600 }],
+    expect: {
+      found: ['.topbar .icon-btn.on[title^="Layout locked"]'],
+      missing: ['.dirty-dot']
+    }
+  },
   {
     name: 'light-theme',
     layout: starter,
@@ -1247,7 +1278,8 @@ const shots = [
   }
 ]
 
-async function seedSession(name, layoutPath, mutate, data, keys) {
+async function seedSession(shot) {
+  const { name, layout: layoutPath, mutate, data, keys, writable } = shot
   const userData = userDataFor(name)
   await rm(userData, { recursive: true, force: true })
   await mkdir(userData, { recursive: true })
@@ -1268,14 +1300,24 @@ async function seedSession(name, layoutPath, mutate, data, keys) {
   const doc = JSON.parse(await readFile(layoutPath, 'utf8'))
   // Lets a shot start from a state that can't be reached by clicking alone.
   mutate?.(doc)
+
+  // A shot that saves needs somewhere of its own to save to. Pointing one at
+  // `examples/starter.dmscreen` would have it rewrite the fixture every other
+  // shot reads, so `writable` copies the layout into this shot's userData —
+  // which is already the unit of isolation here — and points the session at the
+  // copy. Without it there is no way to exercise Save at all: the path a save
+  // takes when the document already has a file is the one with no dialog in it.
+  const filePath = writable ? join(userData, 'layout.dmscreen') : layoutPath
+  if (writable) await writeFile(filePath, JSON.stringify(doc, null, 2))
+
   await writeFile(
     join(userData, 'session.json'),
-    JSON.stringify({ doc, filePath: layoutPath, dirty: false }, null, 2)
+    JSON.stringify({ doc, filePath, dirty: false }, null, 2)
   )
   await writeFile(
     join(userData, 'recents.json'),
     JSON.stringify(
-      [{ path: layoutPath, name: doc.name, openedAt: new Date().toISOString() }],
+      [{ path: filePath, name: doc.name, openedAt: new Date().toISOString() }],
       null,
       2
     )
@@ -1486,7 +1528,7 @@ function run(shotPath, shot, name, slot) {
 async function runShot(shot, slot) {
   const shotPath = join(outDir, `${shot.name}.png`)
   await rm(shotPath, { force: true })
-  await seedSession(shot.name, shot.layout, shot.mutate, shot.data, shot.keys)
+  await seedSession(shot)
 
   try {
     const output = await run(shotPath, shot, shot.name, slot)
