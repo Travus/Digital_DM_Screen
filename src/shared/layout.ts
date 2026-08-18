@@ -12,7 +12,8 @@ import {
   type PanelData,
   type PanelNode,
   type SplitDirection,
-  type SplitNode
+  type SplitNode,
+  type WindowDef
 } from './types'
 
 let counter = 0
@@ -31,17 +32,188 @@ export function makePanelNode(panelId: string): PanelNode {
   return { type: 'panel', id: uid('node'), panelId }
 }
 
+/** What the first window of a layout is called, and what a v1 file migrates to. */
+export const PRIMARY_WINDOW_NAME = 'Main window'
+
+/**
+ * The id a version 1 layout's single window takes when it is migrated.
+ *
+ * Fixed rather than minted, so opening the same old file twice names the same
+ * window both times — which is what lets the remembered geometry in
+ * `session.json`, keyed by window id, still find it.
+ */
+export const PRIMARY_WINDOW_ID = 'win_main'
+
 export function createEmptyDoc(name = 'Untitled layout'): LayoutDoc {
   const panelId = uid('panel')
   const now = new Date().toISOString()
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
     name,
-    root: makePanelNode(panelId),
+    windows: [
+      { id: PRIMARY_WINDOW_ID, name: PRIMARY_WINDOW_NAME, root: makePanelNode(panelId), open: true }
+    ],
     panels: { [panelId]: makePanelData() },
     locked: false,
     createdAt: now,
     updatedAt: now
+  }
+}
+
+/* ------------------------------------------------------------------ windows */
+
+export function findWindow(doc: LayoutDoc, windowId: string): WindowDef | undefined {
+  return doc.windows.find((window) => window.id === windowId)
+}
+
+/** The primary, which carries the file commands and cannot be closed on its own. */
+export function primaryWindow(doc: LayoutDoc): WindowDef {
+  return doc.windows[0]
+}
+
+export function isPrimaryWindow(doc: LayoutDoc, windowId: string): boolean {
+  return doc.windows[0]?.id === windowId
+}
+
+/**
+ * Which window shows a panel, or null if none does.
+ *
+ * The panels are one flat map for the whole document, so a write aimed at a
+ * panel has to find out whose it is before it can be routed to the window that
+ * owns it — the initiative tracker pushing HP back to a party panel on the other
+ * screen is the case this exists for.
+ */
+export function windowOfPanel(doc: LayoutDoc, panelId: string): string | null {
+  for (const window of doc.windows) {
+    if (collectPanelNodes(window.root).some((node) => node.panelId === panelId)) return window.id
+  }
+  return null
+}
+
+/** Which window a node id names a place in, or null if none does. */
+export function windowOfNode(doc: LayoutDoc, nodeId: string): string | null {
+  return doc.windows.find((window) => findNode(window.root, nodeId))?.id ?? null
+}
+
+/** Replace one window's tiling, leaving every other window alone. */
+export function setWindowRoot(doc: LayoutDoc, windowId: string, root: LayoutNode): LayoutDoc {
+  return {
+    ...doc,
+    windows: doc.windows.map((window) => (window.id === windowId ? { ...window, root } : window))
+  }
+}
+
+export function setWindowOpen(doc: LayoutDoc, windowId: string, open: boolean): LayoutDoc {
+  // The primary is what closing the app goes through, so it is never marked
+  // closed — a session restored after a quit must not come back windowless.
+  if (isPrimaryWindow(doc, windowId)) return doc
+  return {
+    ...doc,
+    windows: doc.windows.map((window) => (window.id === windowId ? { ...window, open } : window))
+  }
+}
+
+export function renameWindow(doc: LayoutDoc, windowId: string, name: string): LayoutDoc {
+  const trimmed = name.trim()
+  if (!trimmed) return doc
+  return {
+    ...doc,
+    windows: doc.windows.map((window) =>
+      window.id === windowId ? { ...window, name: trimmed } : window
+    )
+  }
+}
+
+/**
+ * The next free "Window N".
+ *
+ * Counts up past names already taken rather than off the length, so closing
+ * window 3 and adding another does not produce a second window 3.
+ */
+export function defaultWindowName(doc: LayoutDoc): string {
+  const taken = new Set(doc.windows.map((window) => window.name))
+  for (let n = doc.windows.length + 1; ; n += 1) {
+    const candidate = `Window ${n}`
+    if (!taken.has(candidate)) return candidate
+  }
+}
+
+/** A new window, open, holding one empty panel. */
+export function addWindow(doc: LayoutDoc, name = defaultWindowName(doc)): LayoutDoc {
+  const panelId = uid('panel')
+  const window: WindowDef = {
+    id: uid('win'),
+    name,
+    root: makePanelNode(panelId),
+    open: true
+  }
+  return {
+    ...doc,
+    windows: [...doc.windows, window],
+    panels: { ...doc.panels, [panelId]: makePanelData() }
+  }
+}
+
+/**
+ * Drop a window and everything on it. The primary is refused — it is the one
+ * every layout has to have.
+ */
+export function removeWindow(doc: LayoutDoc, windowId: string): LayoutDoc {
+  if (isPrimaryWindow(doc, windowId)) return doc
+  const next = doc.windows.filter((window) => window.id !== windowId)
+  if (next.length === doc.windows.length) return doc
+  return pruneOrphanPanels({ ...doc, windows: next })
+}
+
+/**
+ * Fold one window's copy of the document into the shared one, taking only what
+ * that window owns.
+ *
+ * Several renderers hold the same document and each publishes the whole of it
+ * after an edit. Adopting an incoming copy wholesale would let the last message
+ * to arrive undo a change made in another window a moment earlier. So a message
+ * is read for the part its sender is entitled to speak for, and nothing else.
+ *
+ * A window owns **its own tiling and the contents of the panels on it**. It does
+ * not own the window list's shape: `name` and `open` stay as the base has them,
+ * because adding, closing and renaming a window are commands that go through
+ * main and come back to everyone. That split is what makes this conflict-free
+ * rather than merely unlikely to conflict — two windows editing at once are
+ * writing to disjoint halves by construction.
+ *
+ * Panels the window has stopped pointing at are dropped, and ones it has taken
+ * up are added, so closing a panel in one window does not leave its payload
+ * behind for `pruneOrphanPanels` to find later.
+ */
+export function mergeWindowSlice(
+  base: LayoutDoc,
+  incoming: LayoutDoc,
+  windowId: string
+): LayoutDoc {
+  const from = findWindow(incoming, windowId)
+  const onto = findWindow(base, windowId)
+  if (!from || !onto) return base
+
+  const owned = new Set(collectPanelNodes(from.root).map((node) => node.panelId))
+  const wasOwned = new Set(collectPanelNodes(onto.root).map((node) => node.panelId))
+
+  const panels: Record<string, PanelData> = {}
+  for (const [panelId, data] of Object.entries(base.panels)) {
+    // Another window's panel, or one this window still has: keep what is here.
+    if (!wasOwned.has(panelId) || owned.has(panelId)) panels[panelId] = data
+  }
+  for (const panelId of owned) {
+    const data = incoming.panels[panelId]
+    if (data) panels[panelId] = data
+  }
+
+  return {
+    ...base,
+    windows: base.windows.map((window) =>
+      window.id === windowId ? { ...window, root: from.root } : window
+    ),
+    panels,
+    updatedAt: incoming.updatedAt
   }
 }
 
@@ -347,6 +519,50 @@ export function swapPanelNodes(root: LayoutNode, aId: string, bId: string): Layo
 }
 
 /**
+ * Trade what two panel nodes point at, wherever in the document they are.
+ *
+ * The single-tree version above cannot do this: a drag from the players' screen
+ * onto the laptop names one node in each of two trees, and neither window owns
+ * both — which is why this takes the document and runs in main.
+ *
+ * Only the `panelId`s move, exactly as within one window. A node id names a
+ * *place*, and a place belongs to the window it is in: dragging a map to the
+ * other screen must not carry that pane's size across with it, or a panel
+ * dropped onto a narrow sidebar would take the sidebar's shape to the
+ * television.
+ */
+export function swapPanelsInDoc(doc: LayoutDoc, aId: string, bId: string): LayoutDoc {
+  if (aId === bId) return doc
+  const aWindow = windowOfNode(doc, aId)
+  const bWindow = windowOfNode(doc, bId)
+  if (!aWindow || !bWindow) return doc
+
+  // Both in one window: the tree operation already handles it, and going
+  // through the document would only rebuild the same root.
+  if (aWindow === bWindow) {
+    const window = findWindow(doc, aWindow)
+    if (!window) return doc
+    const next = swapPanelNodes(window.root, aId, bId)
+    return next === window.root ? doc : setWindowRoot(doc, aWindow, next)
+  }
+
+  const a = findNode(findWindow(doc, aWindow)!.root, aId)
+  const b = findNode(findWindow(doc, bWindow)!.root, bId)
+  if (a?.type !== 'panel' || b?.type !== 'panel') return doc
+
+  const point = (root: LayoutNode, nodeId: string, panelId: string): LayoutNode => {
+    const walk = (node: LayoutNode): LayoutNode => {
+      if (node.type === 'panel') return node.id === nodeId ? { ...node, panelId } : node
+      return { ...node, children: node.children.map(walk) }
+    }
+    return walk(root)
+  }
+
+  const withA = setWindowRoot(doc, aWindow, point(findWindow(doc, aWindow)!.root, aId, b.panelId))
+  return setWindowRoot(withA, bWindow, point(findWindow(withA, bWindow)!.root, bId, a.panelId))
+}
+
+/**
  * How much of a split one press of the resize keys moves. Big enough to see and
  * small enough to aim with, held down.
  */
@@ -418,9 +634,18 @@ export function resizePanelShare(
   return root
 }
 
-/** Drop any panel payloads no longer referenced by the tree. */
+/**
+ * Drop any panel payloads no longer referenced by a tree.
+ *
+ * Every window counts, including the closed ones. A closed window keeps its
+ * panels on purpose — that is the whole of what "closed rather than removed"
+ * buys — so pruning to the open ones would empty it the moment anything else
+ * changed.
+ */
 export function pruneOrphanPanels(doc: LayoutDoc): LayoutDoc {
-  const live = new Set(collectPanelNodes(doc.root).map((node) => node.panelId))
+  const live = new Set(
+    doc.windows.flatMap((window) => collectPanelNodes(window.root).map((node) => node.panelId))
+  )
   const panels: Record<string, PanelData> = {}
   for (const [panelId, data] of Object.entries(doc.panels)) {
     if (live.has(panelId)) panels[panelId] = data
@@ -456,7 +681,39 @@ function validateNode(value: unknown, panelIds: Set<string>): value is LayoutNod
 }
 
 /**
- * Structural check for a layout file. Deliberately strict about the tree (a
+ * The windows of a file, or null if it does not describe any.
+ *
+ * Two shapes are accepted. Version 2 carries a `windows` list. Version 1 carries
+ * one `root` at the top, which becomes the single primary window — files written
+ * before the app had more than one screen still open, and open unchanged.
+ */
+function readWindows(value: Record<string, unknown>, referenced: Set<string>): WindowDef[] | null {
+  if (value.windows === undefined) {
+    if (!validateNode(value.root, referenced)) return null
+    return [{ id: PRIMARY_WINDOW_ID, name: PRIMARY_WINDOW_NAME, root: value.root, open: true }]
+  }
+
+  if (!Array.isArray(value.windows) || value.windows.length === 0) return null
+
+  const windows: WindowDef[] = []
+  for (const [index, raw] of value.windows.entries()) {
+    if (!isRecord(raw)) return null
+    if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null
+    if (!validateNode(raw.root, referenced)) return null
+    windows.push({
+      id: raw.id,
+      name: raw.name,
+      root: raw.root,
+      // Absent means open. The primary is forced open whatever the file says —
+      // a layout whose only window is closed has nothing to show.
+      open: index === 0 || raw.open !== false
+    })
+  }
+  return windows
+}
+
+/**
+ * Structural check for a layout file. Deliberately strict about the trees (a
  * malformed tree crashes rendering) and permissive about panel settings/state,
  * since those are module-defined and each module falls back to its own defaults.
  */
@@ -465,9 +722,9 @@ export function parseLayoutDoc(value: unknown): LayoutDoc | null {
   if (typeof value.name !== 'string') return null
   if (!isRecord(value.panels)) return null
 
-  const root = value.root
   const referenced = new Set<string>()
-  if (!validateNode(root, referenced)) return null
+  const windows = readWindows(value, referenced)
+  if (!windows) return null
 
   const panels: Record<string, PanelData> = {}
   for (const panelId of referenced) {
@@ -488,9 +745,12 @@ export function parseLayoutDoc(value: unknown): LayoutDoc | null {
 
   const now = new Date().toISOString()
   return {
-    formatVersion: typeof value.formatVersion === 'number' ? value.formatVersion : 1,
+    // Stamped with what this build writes, not with what was read. A version 1
+    // file has been migrated by the time it gets here, and saying otherwise
+    // would put the old number back on the next save.
+    formatVersion: LAYOUT_FORMAT_VERSION,
     name: value.name,
-    root,
+    windows,
     panels,
     locked: value.locked === true,
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : now,

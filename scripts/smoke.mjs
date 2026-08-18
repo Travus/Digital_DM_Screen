@@ -35,6 +35,13 @@ function userDataFor(name) {
 }
 
 const starter = join(root, 'examples', 'starter.dmscreen')
+/**
+ * Two windows, and the only version 2 layout in the repo — every other shot
+ * seeds `starter.dmscreen`, which is version 1 and therefore exercises the
+ * migration instead. Initiative sits on one screen and the party panel it reads
+ * from on the other, which is the cross-window case.
+ */
+const twoScreens = join(root, 'examples', 'two-screens.dmscreen')
 const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
 /**
  * A map for the Image module. Absolute, because that is what the module stores
@@ -112,6 +119,194 @@ const shots = [
     expect: {
       found: ['.topbar .icon-btn.on[title^="Layout locked"]'],
       missing: ['.dirty-dot']
+    }
+  },
+
+  /* ------------------------------------------------------------- windows */
+
+  // One window, and still a dropdown. It used to be a bare "+ Add Window"
+  // button until a second screen existed, which made the control change what
+  // kind of control it was — so this pins that it does not.
+  {
+    name: 'windows-menu-alone',
+    layout: starter,
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: ['.windows-menu', '.window-row', '.windows-menu [data-windows="add"]'],
+      text: ['Main window', '+ New Window']
+    }
+  },
+  // Adding one from the bottom of that list.
+  {
+    name: 'windows-added',
+    layout: starter,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.windows-menu [data-windows="add"]' },
+      { wait: 900 },
+      { click: '.windows-btn[data-windows="menu"]' }
+    ],
+    expect: {
+      found: ['.window-row.current', '.windows-menu'],
+      text: ['Main window', 'Window 2']
+    }
+  },
+  // The list on a two-screen layout: both rows, the current one marked, and the
+  // per-row controls that rename and delete.
+  {
+    name: 'windows-menu',
+    layout: twoScreens,
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: [
+        '.windows-menu',
+        '.window-row.current[data-window-id="win_main"]',
+        '.window-row[data-window-id="win_player"]',
+        '.window-row[data-window-id="win_player"] .window-remove',
+        '.window-row[data-window-id="win_main"] .window-rename'
+      ],
+      // The primary keeps no bin: a layout has to have one window, and closing
+      // that one is quitting rather than deleting.
+      missing: ['.window-row[data-window-id="win_main"] .window-remove'],
+      text: ['Main window', 'Player screen', '+ New Window']
+    }
+  },
+  // Renaming, which was unreachable while the name carried a double-click: its
+  // first click closed the menu, so the second never landed.
+  {
+    name: 'windows-rename',
+    layout: twoScreens,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.window-row[data-window-id="win_player"] .window-rename' }
+    ],
+    expect: {
+      found: ['.window-row[data-window-id="win_player"] .window-name-input'],
+      missing: ['.window-row[data-window-id="win_player"] .window-name']
+    }
+  },
+  // The bin, which deletes outright and does not ask.
+  {
+    name: 'windows-deleted',
+    layout: twoScreens,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.window-row[data-window-id="win_player"] .window-remove' },
+      { wait: 900 }
+    ],
+    expect: {
+      found: ['.windows-btn[data-windows="menu"]'],
+      missing: ['.window-row[data-window-id="win_player"]']
+    }
+  },
+  // The second screen, photographed. Its bar carries the switcher and nothing
+  // else — no New, Open, Save or Save As, which is the point of a window the
+  // players can see.
+  {
+    name: 'windows-secondary',
+    layout: twoScreens,
+    window: 2,
+    expect: {
+      found: [
+        '.topbar.secondary',
+        '.window-label[data-window-id="win_player"]',
+        '.table.resizable'
+      ],
+      missing: ['.topbar-actions', '.layout-name'],
+      text: ['Player screen']
+    }
+  },
+  // The secondary window's own name is a rename field, not a label. Reaching it
+  // only through the switcher made the name beside it look like decoration.
+  {
+    name: 'windows-secondary-rename',
+    layout: twoScreens,
+    window: 2,
+    click: '.window-label',
+    expect: {
+      found: ['.window-label-input'],
+      missing: ['.window-label']
+    }
+  },
+  // The switcher is on the secondary window too, and knows which screen it is
+  // on — the row for this window is the one marked current.
+  {
+    name: 'windows-secondary-menu',
+    layout: twoScreens,
+    window: 2,
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: ['.window-row.current[data-window-id="win_player"]'],
+      text: ['Main window', 'Player screen']
+    }
+  },
+  // A window closed rather than deleted keeps its panels and its row. Seeded,
+  // because closing is what the window's own frame does and a native title bar
+  // is out of the harness's reach.
+  {
+    name: 'windows-closed-listed',
+    layout: twoScreens,
+    mutate: (doc) => {
+      doc.windows[1].open = false
+    },
+    click: '.windows-btn[data-windows="menu"]',
+    expect: {
+      found: ['.window-row.closed[data-window-id="win_player"]', '.menu-heading'],
+      // "CLOSED", not "Closed": the heading is uppercased in CSS, and the text
+      // check reads `innerText`, which reports the text as rendered.
+      text: ['CLOSED', 'Player screen']
+    }
+  },
+  /*
+   * Dragging a panel from one screen onto the other, which is most of what a
+   * second screen is for.
+   *
+   * The two halves run in their own windows, and the payload is left empty —
+   * a DataTransfer belongs to the renderer that made it and cannot be handed to
+   * a second one. That is the same reason the app records the drag in main at
+   * `dragstart` rather than trusting the payload to cross, so this drives the
+   * path a real cross-window drop actually takes.
+   *
+   * The party panel starts on the players' screen and the initiative tracker on
+   * the main one; after the drop they have traded places, which is what the two
+   * assertions say.
+   */
+  {
+    name: 'windows-drag-across',
+    layout: twoScreens,
+    steps: [
+      {
+        drag: {
+          fromWindow: 2,
+          from: '.panel:has(.table.resizable) .panel-head',
+          to: '.panel:has(.round-pill)'
+        }
+      },
+      { wait: 900 }
+    ],
+    expect: {
+      // The main window now shows the party panel where initiative was.
+      found: ['.panel:has(.table.resizable)'],
+      missing: ['.panel:has(.round-pill)']
+    }
+  },
+  /*
+   * The cross-window link. Initiative is on the main screen and the party panel
+   * it reads AC and HP from is on the other, so this shot fails if a window only
+   * ever sees its own panels.
+   */
+  {
+    name: 'windows-party-link',
+    layout: twoScreens,
+    expect: {
+      // The badge is rendered only for a combatant whose linked party panel was
+      // actually found, so it is the assertion: a window that could see nothing
+      // but its own panels would draw the row without it.
+      //
+      // Not a `text` check on the numbers. Those live in inputs, and the
+      // harness reads `document.body.innerText`, which does not include the
+      // value of a form control.
+      found: ['.combatant.pc .link-badge']
     }
   },
   {
@@ -1344,6 +1539,15 @@ function normaliseExpect(expect, name) {
 const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'drag', 'hover', 'wait']
 
 /**
+ * Keys a step may carry beside its one action.
+ *
+ * `window` says which screen the step acts on, 1-based, so a shot can reach past
+ * the one it photographs — a drag from the players' window onto the laptop is
+ * two halves in two renderers.
+ */
+const STEP_MODIFIERS = ['window']
+
+/**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
@@ -1373,7 +1577,9 @@ function normaliseSteps(shot, name) {
     }
     for (const [index, step] of shot.steps.entries()) {
       const set = STEP_KINDS.filter((kind) => step[kind] !== undefined)
-      const unknown = Object.keys(step).filter((key) => !STEP_KINDS.includes(key))
+      const unknown = Object.keys(step).filter(
+        (key) => !STEP_KINDS.includes(key) && !STEP_MODIFIERS.includes(key)
+      )
       if (unknown.length) {
         throw new Error(
           `shot "${name}" step ${index + 1} has no such action: ${unknown.join(', ')}`
@@ -1457,6 +1663,17 @@ function run(shotPath, shot, name, slot) {
   const expectations = JSON.stringify(normaliseExpect(shot.expect, name))
   const steps = JSON.stringify(normaliseSteps(shot, name))
   const { settle } = shot
+  /*
+   * Which window the shot drives and photographs, as an index into the
+   * document's open windows. A layout can have several now, and a second screen
+   * is UI like any other — unphotographed, it is the one part of the app nobody
+   * ever looks at.
+   *
+   * One window, not all of them: the steps and the capture belong to a single
+   * renderer, and installing the hook everywhere would have each of them fire
+   * the step list and race to exit the app.
+   */
+  const windowIndex = shot.window ? shot.window - 1 : 0
 
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
@@ -1486,6 +1703,7 @@ function run(shotPath, shot, name, slot) {
           XDG_CONFIG_HOME: join(configRoot, name),
           DMSCREEN_SMOKE_SHOT: shotPath,
           DMSCREEN_SMOKE_STEPS: steps,
+          DMSCREEN_SMOKE_WINDOW: String(windowIndex),
           ...(settle ? { DMSCREEN_SMOKE_SETTLE: String(settle) } : {}),
           DMSCREEN_SMOKE_EXPECT: expectations,
           ELECTRON_DISABLE_SECURITY_WARNINGS: '1'

@@ -48,6 +48,7 @@ export function ActionPalette({
 }): JSX.Element {
   const doc = useAppStore((state) => state.doc)
   const maximizedNodeId = useAppStore((state) => state.maximizedNodeId)
+  const windowId = useAppStore((state) => state.windowId)
   const keymap = useKeymapStore((state) => state.keymap)
 
   const [query, setQuery] = useState(lastQuery)
@@ -70,8 +71,8 @@ export function ActionPalette({
   // The target panel is resolved once, when the palette opens: it is the panel
   // the user was last in, and clicking into the palette must not move it.
   const context = useMemo(
-    () => actionContext(doc, resolveTargetNodeId(), maximizedNodeId),
-    [doc, maximizedNodeId]
+    () => actionContext(doc, windowId, resolveTargetNodeId(), maximizedNodeId),
+    [doc, windowId, maximizedNodeId]
   )
   const entries = useMemo(
     () => paletteEntries(keymap, context, query, platform),

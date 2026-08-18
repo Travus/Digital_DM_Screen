@@ -9,7 +9,7 @@ import { TopBar } from './layout/TopBar'
 import { advanceChord, CHORD_TIMEOUT_MS } from './lib/chords'
 import { useDataStore } from './state/dataStore'
 import { useKeymapStore } from './state/keymapStore'
-import { applyTheme, resolveTargetNodeId, useAppStore } from './state/store'
+import { applyTheme, myRoot, resolveTargetNodeId, useAppStore } from './state/store'
 import { ActionPalette } from './components/ActionPalette'
 import { ShortcutsDialog, ShortcutSummary } from './components/ShortcutsDialog'
 
@@ -43,7 +43,7 @@ function isBareEscape(event: KeyboardEvent): boolean {
 }
 
 export function App(): JSX.Element {
-  const doc = useAppStore((state) => state.doc)
+  const root = useAppStore(myRoot)
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
   const maximizedNodeId = useAppStore((state) => state.maximizedNodeId)
   const theme = useAppStore((state) => state.theme)
@@ -64,6 +64,16 @@ export function App(): JSX.Element {
   /* Reference data changes in the main process — importing a pack, or a toggle. */
   useEffect(() => window.dmscreen.onDataChanged(useDataStore.getState().apply), [])
 
+  /* The theme, changed in another window — this one has no control for it if it
+     is a secondary. */
+  useEffect(
+    () =>
+      window.dmscreen.onThemeChanged((theme) =>
+        useAppStore.getState().adoptTheme(theme === 'light' ? 'light' : 'dark')
+      ),
+    []
+  )
+
   /* Keybindings likewise: main owns them because main owns the menu. */
   useEffect(() => window.dmscreen.onKeymapChanged(useKeymapStore.getState().apply), [])
 
@@ -76,9 +86,27 @@ export function App(): JSX.Element {
       .then(() => setRestored(true))
   }, [])
 
-  /* A different document: New, Open, or a save naming the file it went to. */
+  /* A different document: New or Open. Resets what this window was looking at,
+     because what it was looking at is gone. */
   useEffect(() => window.dmscreen.onDocumentChanged(useAppStore.getState().adoptDocument), [])
   useEffect(() => window.dmscreen.onDocumentStatus(useAppStore.getState().adoptStatus), [])
+
+  /* The same document, moved by another window. Arrives on every keystroke over
+     there, so this one keeps its fullscreen and its selection. */
+  useEffect(() => window.dmscreen.onPeerDocument(useAppStore.getState().adoptPeerDocument), [])
+
+  /* A write another window aimed at a panel on this one — the initiative tracker
+     pushing HP back to a party panel across the screen. Applied here because
+     this window is the only one entitled to write these panels. */
+  useEffect(
+    () =>
+      window.dmscreen.onPatchPanel((panelId, patch, kind) => {
+        const store = useAppStore.getState()
+        if (kind === 'state') store.updatePanelState(panelId, patch)
+        else store.updatePanelSettings(panelId, patch)
+      }),
+    []
+  )
 
   /* The app's ready line, published to the DOM.
 
@@ -100,7 +128,8 @@ export function App(): JSX.Element {
     const target = resolveTargetNodeId()
     // The split a command like Flip or Even Out acts on is the one *containing*
     // the target panel, which is what the ⋯ menu offers too.
-    const surroundingSplit = target ? (findParent(store.doc.root, target)?.id ?? null) : null
+    const root = myRoot(store)
+    const surroundingSplit = target && root ? (findParent(root, target)?.id ?? null) : null
 
     switch (action) {
       case 'layout:new':
@@ -180,6 +209,14 @@ export function App(): JSX.Element {
         break
       case 'split:equalise':
         if (surroundingSplit) store.equalise(surroundingSplit)
+        break
+      case 'window:new':
+        void store.addWindow()
+        break
+      case 'window:close':
+        // Refused for the primary in the store as well as in the catalogue —
+        // closing that one is quitting, which has its own command.
+        if (!store.isPrimary) void store.closeWindow(store.windowId)
         break
       case 'view:toggleTheme':
         store.setTheme(store.theme === 'dark' ? 'light' : 'dark')
@@ -323,9 +360,7 @@ export function App(): JSX.Element {
       <TopBar />
 
       <div className="workspace">
-        <main className="canvas">
-          <LayoutView node={doc.root} />
-        </main>
+        <main className="canvas">{root && <LayoutView node={root} />}</main>
         {sidebarOpen && <RecentsPanel />}
       </div>
 

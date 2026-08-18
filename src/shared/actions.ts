@@ -42,6 +42,8 @@ export type ActionId =
   | 'panel:changeModule'
   | 'split:flip'
   | 'split:equalise'
+  | 'window:new'
+  | 'window:close'
   | 'view:toggleTheme'
   | 'view:toggleSidebar'
   | 'data:importPack'
@@ -51,7 +53,7 @@ export type ActionId =
   | 'app:shortcuts'
   | 'app:quit'
 
-export type ActionCategory = 'Layout' | 'Panel' | 'View' | 'Data' | 'Application'
+export type ActionCategory = 'Layout' | 'Panel' | 'Window' | 'View' | 'Data' | 'Application'
 
 /**
  * What an action needs to know about the app to say whether it currently
@@ -68,6 +70,14 @@ export interface ActionContext {
   hasPanel: boolean
   /** Some panel is currently fullscreen. */
   maximized: boolean
+  /**
+   * This is the primary window — the one carrying the file commands, and the one
+   * whose close takes the app with it. Closing it is therefore quitting, which
+   * is a different command with a different key.
+   */
+  isPrimary: boolean
+  /** The layout has more than one window, so there is one to switch to. */
+  hasWindows: boolean
   /** The target panel sits inside a split, so there is one to flip or even out. */
   hasSplit: boolean
   /**
@@ -184,6 +194,13 @@ const ifNoRoom =
  */
 const ifFullscreen = (context: ActionContext): string | null =>
   context.maximized ? 'the tiling is hidden while a panel is fullscreen' : null
+
+/**
+ * Closing the main window is quitting, which is its own command with its own
+ * key — so Close Window is off there rather than quietly meaning something else.
+ */
+const ifPrimaryWindow = (context: ActionContext): string | null =>
+  context.isPrimary ? 'this is the main window, so closing it quits the app' : null
 
 /**
  * The guards a command answers to, asked in order — the first that holds is the
@@ -382,6 +399,26 @@ export const ACTIONS: readonly ActionDef[] = [
     unavailable: guards(ifLocked, ifNoSplit)
   },
 
+  /*
+   * A second screen: the television the players can see, or a laptop beside the
+   * one being run from. Both keys follow the browsers' convention for the same
+   * pair, and neither is spoken for — Ctrl+N and Ctrl+W are the layout and the
+   * panel, and adding Shift is the window one rung out from each.
+   */
+  {
+    id: 'window:new',
+    label: 'New window',
+    category: 'Window',
+    defaultAccelerator: 'CmdOrCtrl+Shift+N'
+  },
+  {
+    id: 'window:close',
+    label: 'Close window',
+    category: 'Window',
+    defaultAccelerator: 'CmdOrCtrl+Shift+W',
+    unavailable: ifPrimaryWindow
+  },
+
   {
     id: 'view:toggleTheme',
     label: 'Switch light or dark theme',
@@ -454,6 +491,7 @@ export const ACTIONS: readonly ActionDef[] = [
 export const ACTION_CATEGORIES: readonly ActionCategory[] = [
   'Layout',
   'Panel',
+  'Window',
   'View',
   'Data',
   'Application'

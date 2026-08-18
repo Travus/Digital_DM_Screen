@@ -23,7 +23,7 @@ import {
   type ActionId,
   type ResolvedKeymap
 } from '../../../shared/actions'
-import { findParent, neighbourSides } from '../../../shared/layout'
+import { findParent, findWindow, isPrimaryWindow, neighbourSides } from '../../../shared/layout'
 import type { LayoutDoc } from '../../../shared/types'
 import { searchFilter } from './search'
 
@@ -46,24 +46,34 @@ export interface PaletteEntry {
  *
  * `targetNodeId` is whatever `resolveTargetNodeId()` says — the panel a command
  * would act on, which is the same one the menu and the keyboard use.
+ *
+ * `windowId` is which screen is asking. Every question about the tiling is a
+ * question about *this* window's tiling: the panel to the right of this one is
+ * not something the other screen has an opinion on.
  */
 export function actionContext(
   doc: LayoutDoc,
+  windowId: string,
   targetNodeId: string | null,
   maximizedNodeId: string | null
 ): ActionContext {
+  const root = findWindow(doc, windowId)?.root ?? null
   return {
     locked: doc.locked,
     hasPanel: targetNodeId !== null,
     maximized: maximizedNodeId !== null,
+    isPrimary: isPrimaryWindow(doc, windowId),
+    hasWindows: doc.windows.length > 1,
     // The split a Flip or Even Out acts on is the one *containing* the target,
     // which is also how `App`'s dispatcher and the ⋯ menu pick it.
-    hasSplit: targetNodeId !== null && findParent(doc.root, targetNodeId) !== null,
+    hasSplit: root !== null && targetNodeId !== null && findParent(root, targetNodeId) !== null,
     // Measured off the tiling, so the answer is the one the DM would give
     // looking at the screen. `neighbourSides` handles a null target itself.
-    neighbours: neighbourSides(doc.root, targetNodeId)
+    neighbours: root ? neighbourSides(root, targetNodeId) : NO_NEIGHBOURS
   }
 }
+
+const NO_NEIGHBOURS = { left: false, right: false, up: false, down: false }
 
 /**
  * The rows to show, in catalogue order but with the unavailable ones sorted by

@@ -303,9 +303,9 @@ export function menuTemplate({
    * Only when the stroke is actually wanted. Expanding it unconditionally would
    * trade the OS's window handling for nothing: a plain submenu is not
    * registered as the application's Window menu, so the system stops listing
-   * open windows in it. One window is all this app has, which is what makes that
-   * an acceptable price for a key the user asked for — and no price at all for
-   * everyone who never binds it.
+   * open windows in it. A layout can now have several, so that listing is worth
+   * something — which makes this a real price rather than a nominal one, paid
+   * only by a keymap that actually claims Cmd+M, and by nobody else.
    */
   const macWindowMenu: MenuItemConstructorOptions[] = !isMac
     ? []
@@ -349,6 +349,16 @@ export function menuTemplate({
         { ...item('layout:saveAs', 'Save As…'), click: send('layout:saveAs') },
         { ...item('layout:rename', 'Rename…'), click: send('layout:rename') },
         { ...item('layout:toggleLock', 'Lock / Unlock Layout'), click: send('layout:toggleLock') },
+        { type: 'separator' },
+        /*
+         * The document's own windows, here rather than in a Window menu of their
+         * own. On macOS "Window" is the system's menu — `role: 'windowMenu'`
+         * below — and a second one with the same name is a menu bar with two
+         * Windows in it. These are commands about the layout, which is the menu
+         * they are in.
+         */
+        { ...item('window:new', 'New Window'), click: send('window:new') },
+        { ...item('window:close', 'Close Window'), click: send('window:close') },
         ...layoutQuitItems
       ]
     },

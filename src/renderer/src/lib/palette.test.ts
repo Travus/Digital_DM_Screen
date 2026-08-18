@@ -16,6 +16,8 @@ const context = (overrides: Partial<ActionContext> = {}): ActionContext => ({
   locked: false,
   hasPanel: true,
   maximized: false,
+  isPrimary: true,
+  hasWindows: false,
   hasSplit: true,
   // Surrounded on all four sides by default, so a test says what it is about by
   // taking a side away rather than by granting one.
@@ -214,9 +216,9 @@ describe('reading the context off a document', () => {
   const panel = (id: string): LayoutNode => ({ type: 'panel', id, panelId: `p_${id}` })
 
   const doc = (root: LayoutNode, locked = false): LayoutDoc => ({
-    formatVersion: 1,
+    formatVersion: 2,
     name: 'Test',
-    root,
+    windows: [{ id: 'w1', name: 'Main window', root, open: true }],
     panels: {},
     locked,
     createdAt: '',
@@ -232,10 +234,12 @@ describe('reading the context off a document', () => {
   }
 
   it('reports a lone panel as having no surrounding split', () => {
-    expect(actionContext(doc(panel('node_a')), 'node_a', null)).toEqual({
+    expect(actionContext(doc(panel('node_a')), 'w1', 'node_a', null)).toEqual({
       locked: false,
       hasPanel: true,
       maximized: false,
+      isPrimary: true,
+      hasWindows: false,
       hasSplit: false,
       neighbours: { left: false, right: false, up: false, down: false }
     })
@@ -244,26 +248,26 @@ describe('reading the context off a document', () => {
   it('reports the sides the target has a neighbour on', () => {
     // Two panes side by side: the left one can only swap rightwards, and there
     // is nothing above or below either of them.
-    expect(actionContext(doc(split), 'node_a', null).neighbours).toEqual({
+    expect(actionContext(doc(split), 'w1', 'node_a', null).neighbours).toEqual({
       left: false,
       right: true,
       up: false,
       down: false
     })
-    expect(actionContext(doc(split), 'node_b', null).neighbours.left).toBe(true)
+    expect(actionContext(doc(split), 'w1', 'node_b', null).neighbours.left).toBe(true)
   })
 
   it('finds the split containing the target', () => {
-    expect(actionContext(doc(split), 'node_b', null).hasSplit).toBe(true)
+    expect(actionContext(doc(split), 'w1', 'node_b', null).hasSplit).toBe(true)
   })
 
   it('carries the lock and the fullscreen state through', () => {
-    const state = actionContext(doc(split, true), 'node_a', 'node_a')
+    const state = actionContext(doc(split, true), 'w1', 'node_a', 'node_a')
     expect(state).toMatchObject({ locked: true, maximized: true })
   })
 
   it('copes with no panel at all', () => {
-    expect(actionContext(doc(split), null, null)).toMatchObject({
+    expect(actionContext(doc(split), 'w1', null, null)).toMatchObject({
       hasPanel: false,
       hasSplit: false
     })
@@ -292,17 +296,23 @@ describe('the catalogue behind it', () => {
               // alone on the screen, which is where the four directional reasons
               // are the ones that speak.
               for (const side of [true, false]) {
-                const reason = action.unavailable({
-                  locked,
-                  hasPanel,
-                  maximized,
-                  hasSplit,
-                  neighbours: { left: side, right: side, up: side, down: side }
-                })
-                if (reason === null) continue
-                expect([action.id, reason]).toEqual([action.id, reason.trim()])
-                expect([action.id, reason[0]]).toEqual([action.id, reason[0].toLowerCase()])
-                expect([action.id, reason.endsWith('.')]).toEqual([action.id, false])
+                // The primary flag both ways too: "this is the main window" is a
+                // reason only one of them produces.
+                for (const isPrimary of [true, false]) {
+                  const reason = action.unavailable({
+                    locked,
+                    hasPanel,
+                    maximized,
+                    isPrimary,
+                    hasWindows: !isPrimary,
+                    hasSplit,
+                    neighbours: { left: side, right: side, up: side, down: side }
+                  })
+                  if (reason === null) continue
+                  expect([action.id, reason]).toEqual([action.id, reason.trim()])
+                  expect([action.id, reason[0]]).toEqual([action.id, reason[0].toLowerCase()])
+                  expect([action.id, reason.endsWith('.')]).toEqual([action.id, false])
+                }
               }
             }
           }

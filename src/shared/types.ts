@@ -1,6 +1,13 @@
 /** Types shared between the Electron main process and the renderer. */
 
-export const LAYOUT_FORMAT_VERSION = 1
+/**
+ * Bumped to 2 when the document grew a list of windows in place of one `root`.
+ *
+ * `parseLayoutDoc` reads either, so every layout written before this still
+ * opens. The migration is one way: a version 2 file has no `root` at the top and
+ * an older build rejects it rather than half-loading it.
+ */
+export const LAYOUT_FORMAT_VERSION = 2
 
 export type SplitDirection = 'row' | 'column'
 
@@ -44,14 +51,41 @@ export interface PanelData {
   state: Record<string, unknown>
 }
 
+/**
+ * One window of a layout: its own tiling, over the document's shared panels.
+ *
+ * A DM screen is often two screens — the laptop and the television the players
+ * can see — so a layout is a list of these rather than one tree. `windows[0]` is
+ * the primary: it carries the file buttons and closing it closes the app.
+ */
+export interface WindowDef {
+  id: string
+  name: string
+  root: LayoutNode
+  /**
+   * False when the DM closed it. The window stays in the layout and keeps its
+   * panels, and the Windows menu offers it back — a stray close of the players'
+   * screen should not cost the arrangement on it.
+   */
+  open: boolean
+}
+
 export interface LayoutDoc {
   formatVersion: number
   name: string
-  root: LayoutNode
+  /** Never empty. The primary window is `windows[0]` and cannot be removed. */
+  windows: WindowDef[]
+  /**
+   * Every panel in the document, whichever window shows it. Flat rather than
+   * per-window so a panel keeps its identity if it ever moves between them, and
+   * so anything reading another panel's state does not first have to find out
+   * where it is.
+   */
   panels: Record<string, PanelData>
   /**
    * Freezes the arrangement: no splitting, closing or resizing of panes.
-   * Panel contents stay fully editable. Saved with the layout.
+   * Panel contents stay fully editable. Saved with the layout, and covering
+   * every window of it.
    */
   locked: boolean
   createdAt: string
@@ -78,12 +112,45 @@ export interface DocumentSnapshot extends DocumentStatus {
   doc: LayoutDoc
 }
 
+/** Where a window sat on screen, in screen pixels. */
+export interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /**
- * What gets stashed in userData so an unexpected quit loses nothing. The same
- * shape as a snapshot, and deliberately so: the session *is* the document as it
- * last stood, and restoring is handing that straight back.
+ * A remembered window position, plus whether it was maximized.
+ *
+ * The rectangle is always the *normal* one — where the window sits when it is
+ * not maximized — so un-maximizing a restored window puts it back somewhere
+ * sensible rather than filling the screen a second time.
+ *
+ * Minimized is deliberately absent. Maximizing is an arrangement someone chose
+ * and expects to find again; minimizing is "get out of the way for a moment",
+ * and a layout that came back with its main window minimized would read as an
+ * app that failed to start.
  */
-export type SessionSnapshot = DocumentSnapshot
+export interface WindowPlacement extends WindowBounds {
+  maximized?: boolean
+}
+
+/**
+ * What gets stashed in userData so an unexpected quit loses nothing.
+ *
+ * A document snapshot plus where its windows were. The geometry is deliberately
+ * here rather than in the `.dmscreen`: a layout describes a tiling, and which
+ * monitor the players' screen is on is a fact about this desk. A layout copied
+ * to another machine would otherwise arrive carrying an arrangement of displays
+ * that machine does not have.
+ *
+ * Keyed by window id, and only the current document's windows are kept — open a
+ * second layout and the first one's geometry is gone.
+ */
+export interface SessionSnapshot extends DocumentSnapshot {
+  bounds?: Record<string, WindowPlacement>
+}
 
 /**
  * The scheme main serves picked image files over, and the URL shape the
@@ -255,6 +322,8 @@ export type MenuAction =
   | 'panel:changeModule'
   | 'split:flip'
   | 'split:equalise'
+  | 'window:new'
+  | 'window:close'
   | 'view:toggleTheme'
   | 'view:toggleSidebar'
   | 'app:palette'
