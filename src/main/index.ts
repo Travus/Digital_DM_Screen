@@ -10,7 +10,8 @@ import {
   type ImageRef,
   type LayoutDoc,
   type RecentEntry,
-  type WindowBounds
+  type WindowBounds,
+  type WindowPlacement
 } from '../shared/types'
 import {
   addWindow,
@@ -18,6 +19,7 @@ import {
   findWindow,
   isPrimaryWindow,
   mergeWindowSlice,
+  swapPanelsInDoc,
   parseLayoutDoc,
   removeWindow,
   renameWindow,
@@ -416,12 +418,14 @@ function workAreas(): WindowBounds[] {
 }
 
 /** Where a window should open: what was remembered for it, else beside the last. */
-function placementFor(windowId: string): WindowBounds {
+function placementFor(windowId: string): WindowPlacement {
   const remembered = rememberedBounds()[windowId]
-  if (isUsableBounds(remembered)) return clampToDisplays(remembered, workAreas())
+  if (isUsableBounds(remembered)) {
+    return { ...clampToDisplays(remembered, workAreas()), maximized: remembered.maximized }
+  }
 
   const last = [...windows.values()].pop()
-  return cascadeFrom(last ? last.getBounds() : null, workAreas())
+  return cascadeFrom(last ? last.getNormalBounds() : null, workAreas())
 }
 
 function createWindow(windowId: string): BrowserWindow {
@@ -430,8 +434,12 @@ function createWindow(windowId: string): BrowserWindow {
   // previous window's one-shot bypass.
   forceClose = false
 
+  const placement = placementFor(windowId)
   const window = new BrowserWindow({
-    ...placementFor(windowId),
+    x: placement.x,
+    y: placement.y,
+    width: placement.width,
+    height: placement.height,
     minWidth: 720,
     minHeight: 480,
     show: false,
@@ -458,9 +466,13 @@ function createWindow(windowId: string): BrowserWindow {
   // it rather than showing the app's own name until the first edit.
   applyTitle()
 
+  // Maximized before the first paint, so the window does not open at its normal
+  // size and then jump. The normal bounds above are what it un-maximizes to.
+  if (placement.maximized) window.maximize()
+
   window.on('ready-to-show', () => window.show())
 
-  installSmokeHook(window, windows.size - 1)
+  installSmokeHook(window, windows.size - 1, (index) => [...windows.values()][index])
 
   // Keep the app self-contained; anything the UI links out to opens in the
   // system browser rather than an in-app window.
@@ -476,14 +488,27 @@ function createWindow(windowId: string): BrowserWindow {
   // that misses.
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  // Geometry is remembered per machine, so it is tracked here rather than
-  // published by the renderer, which cannot see where its own window sits.
+  /*
+   * Geometry is remembered per machine, so it is tracked here rather than
+   * published by the renderer, which cannot see where its own window sits.
+   *
+   * `getNormalBounds()` rather than `getBounds()`, always: the rectangle worth
+   * keeping is where the window sits when it is *not* maximized, so a restored
+   * window has somewhere to go when it is un-maximized. Maximized is carried
+   * beside it as a flag.
+   *
+   * Skipped entirely while minimized. A minimized window reports a rectangle
+   * that means nothing, and the state itself is not one worth restoring — see
+   * `WindowPlacement`.
+   */
   const remember = (): void => {
     if (window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
-    rememberBounds(windowId, window.getBounds())
+    rememberBounds(windowId, { ...window.getNormalBounds(), maximized: window.isMaximized() })
   }
   window.on('resize', remember)
   window.on('move', remember)
+  window.on('maximize', remember)
+  window.on('unmaximize', remember)
 
   window.on('close', (event) => onWindowClose(windowId, window, event))
   window.on('closed', () => windows.delete(windowId))
@@ -707,6 +732,54 @@ ipcMain.handle('theme:set', (event, theme: string): void => {
   for (const window of windows.values()) {
     if (window.webContents !== event.sender) window.webContents.send('theme:changed', theme)
   }
+})
+
+/* ------------------------------------------------------------ panel drag */
+
+/**
+ * The panel currently being dragged, and the window it started in.
+ *
+ * A drag that crosses windows carries its payload in the `DataTransfer` like any
+ * other, but that crossing goes through the OS rather than through Chromium, and
+ * a custom MIME type does not survive it everywhere. So the source is recorded
+ * here at `dragstart` as well, and the drop falls back to it — the record is
+ * always right, because only one drag can be in flight at a time.
+ */
+let panelDrag: { windowId: string; nodeId: string } | null = null
+
+ipcMain.handle('panel:beginDrag', (event, nodeId: string): void => {
+  const windowId = windowIdFor(event.sender)
+  panelDrag = windowId ? { windowId, nodeId } : null
+})
+
+ipcMain.handle('panel:endDrag', (): void => {
+  panelDrag = null
+})
+
+ipcMain.handle('panel:dragSource', () => panelDrag)
+
+/**
+ * Trade two panels that are not in the same window.
+ *
+ * Neither window owns both trees, so neither may do this itself: a renderer
+ * publishing a document with the other window's tree changed would have exactly
+ * that half discarded by `mergeWindowSlice`. Main holds the whole document, so
+ * it is the one place the swap can happen at all.
+ *
+ * Broadcast to everyone including the sender, because both windows changed shape
+ * and main is the one that worked out how.
+ */
+ipcMain.handle('panel:swapAcrossWindows', (_event, aNodeId: string, bNodeId: string): boolean => {
+  const doc = currentDoc()
+  // The lock is checked here as well as in the store, for the reason every other
+  // guard is: a check written into one route in is one every later route has to
+  // remember, and this one arrives from a different process.
+  if (doc.locked) return false
+  const next = swapPanelsInDoc(doc, aNodeId, bNodeId)
+  if (next === doc) return false
+  publish(next)
+  broadcast('document:peer', documentSnapshot())
+  return true
 })
 
 /* ----------------------------------------------------------- window list */

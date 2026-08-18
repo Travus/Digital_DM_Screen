@@ -2822,8 +2822,25 @@ kbd {
 /* The switcher, beside the layout name. Lighter than the file buttons on
    purpose: it names a place rather than doing something to the document. */
 .windows-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-weight: 500;
   color: var(--text-dim);
+}
+
+.chevron-icon {
+  width: 11px;
+  height: 11px;
+  /* Nudged down so the stroke sits on the label's optical centre rather than
+     its box centre, which reads high next to a cap-height word. */
+  margin-top: 1px;
+}
+
+.row-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .windows-btn:hover,
@@ -2877,9 +2894,14 @@ kbd {
   color: var(--text-dim);
 }
 
+/* Dim rather than hidden. Hover-to-reveal is the usual trick for row actions
+   and it is the wrong one here: renaming a window is reachable from nowhere
+   else, so a control that is invisible until the pointer is already on the row
+   reads as a control that does not exist. */
 .window-row .icon-btn {
-  opacity: 0;
-  padding: 0 4px;
+  opacity: 0.5;
+  padding: 0 3px;
+  color: var(--text-dim);
 }
 
 .window-row:hover .icon-btn,
@@ -2887,6 +2909,12 @@ kbd {
   opacity: 1;
 }
 
+.window-row .window-rename:hover {
+  color: var(--text);
+}
+
+/* The one destructive control in the menu, and it does not ask first — so it
+   says what it is on hover rather than only in its tooltip. */
 .window-row .window-remove:hover {
   color: var(--danger);
 }

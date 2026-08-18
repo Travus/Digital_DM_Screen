@@ -28,9 +28,11 @@ interface SmokeStep {
   type?: { selector: string; text: string }
   select?: { selector: string; start: number; end: number }
   wheel?: { selector: string; deltaY: number; offsetX?: number; offsetY?: number }
-  drag?: { from: string; to: string; hold?: boolean }
+  drag?: { from: string; to: string; hold?: boolean; fromWindow?: number }
   hover?: string
   wait?: number
+  /** Which window this step acts on, 1-based. Defaults to the shot's own. */
+  window?: number
 }
 
 /**
@@ -47,7 +49,16 @@ function readSteps(): SmokeStep[] {
   return raw ? (JSON.parse(raw) as SmokeStep[]) : []
 }
 
+let windowAt: (index: number) => BrowserWindow | undefined = () => undefined
+
 async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
+  // A step may name another window — a drag from the players' screen onto the
+  // laptop is two halves in two renderers, and only main can see both.
+  if (step.window !== undefined && !step.drag) {
+    const other = windowAt(step.window - 1)
+    if (other) return runStep(other, { ...step, window: undefined })
+  }
+
   // A menu command, for UI that has no other way in. The About and Keyboard
   // Shortcuts dialogs open from the native menu only, and a native menu is not
   // something a CSS selector can reach — without this they had no coverage.
@@ -191,16 +202,64 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
   // between those two events: run the drop and the highlight is already gone by
   // the time anything is photographed.
   if (step.drag !== undefined) {
-    const found = (await window.webContents.executeJavaScript(
+    const source = step.drag.fromWindow ? windowAt(step.drag.fromWindow - 1) : window
+    if (!source) {
+      console.log(`[renderer:error] no window ${step.drag.fromWindow} to drag from`)
+      return
+    }
+
+    /*
+     * A drag that stays in one window carries one DataTransfer through the whole
+     * sequence, so the handlers do the work rather than being mimed: the
+     * source's `dragstart` writes the panel id into it and the target's `drop`
+     * reads it back out.
+     *
+     * A drag that *crosses* windows cannot. A DataTransfer belongs to the
+     * renderer that made it, and there is no way to hand one to a second
+     * renderer — which is the same reason the app itself does not rely on the
+     * payload crossing, and records the drag in main at `dragstart` instead. So
+     * the two halves are fired in their own windows and the payload is left
+     * empty, which is exactly the state a real cross-window drop has to cope
+     * with: the handlers meet through main or not at all.
+     */
+    const crossing = source !== window
+
+    const started = (await source.webContents.executeJavaScript(
       `(() => {
-        const { from, to, hold } = ${JSON.stringify(step.drag)}
-        const source = document.querySelector(from)
+        const el = document.querySelector(${JSON.stringify(step.drag.from)})
+        if (!el) return false
+        window.__smokeDrag = new DataTransfer()
+        const box = el.getBoundingClientRect()
+        el.dispatchEvent(
+          new DragEvent('dragstart', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: window.__smokeDrag,
+            clientX: box.left + box.width / 2,
+            clientY: box.top + box.height / 2
+          })
+        )
+        return true
+      })()`
+    )) as boolean
+    if (!started) {
+      console.log(`[renderer:error] no element matched ${step.drag.from}`)
+      return wait(400)
+    }
+
+    const dropped = (await window.webContents.executeJavaScript(
+      `(() => {
+        const { to, hold, crossing } = ${JSON.stringify({ ...step.drag, crossing })}
         const target = document.querySelector(to)
-        if (!source || !target) return false
-        const dataTransfer = new DataTransfer()
-        const fire = (el, type) => {
-          const box = el.getBoundingClientRect()
-          el.dispatchEvent(
+        if (!target) return false
+        // Same window: the transfer the source wrote into. Across windows:
+        // a fresh one carrying the type and nothing else, since the value
+        // cannot travel and the app is built not to need it.
+        const dataTransfer = crossing ? new DataTransfer() : window.__smokeDrag
+        if (crossing) dataTransfer.setData('application/x-dmscreen-panel', '')
+        const fire = (type) => {
+          const box = target.getBoundingClientRect()
+          target.dispatchEvent(
             new DragEvent(type, {
               bubbles: true,
               cancelable: true,
@@ -210,20 +269,28 @@ async function runStep(window: BrowserWindow, step: SmokeStep): Promise<void> {
             })
           )
         }
-        fire(source, 'dragstart')
-        fire(target, 'dragenter')
-        fire(target, 'dragover')
-        if (!hold) {
-          fire(target, 'drop')
-          fire(source, 'dragend')
-        }
+        fire('dragenter')
+        fire('dragover')
+        // Held drags stop here: the drop indicator only exists between those
+        // two events, so running the drop leaves nothing to photograph.
+        if (!hold) fire('drop')
         return true
       })()`
     )) as boolean
-    if (!found) {
-      console.log(`[renderer:error] no element matched ${step.drag.from} or ${step.drag.to}`)
+    if (!dropped) console.log(`[renderer:error] no element matched ${step.drag.to}`)
+
+    if (!step.drag.hold) {
+      await source.webContents.executeJavaScript(
+        `(() => {
+          const el = document.querySelector(${JSON.stringify(step.drag.from)})
+          el?.dispatchEvent(
+            new DragEvent('dragend', { bubbles: true, dataTransfer: window.__smokeDrag })
+          )
+          return true
+        })()`
+      )
     }
-    return wait(400)
+    return wait(crossing ? 700 : 400)
   }
 
   // Park the pointer on one control, for UI that only a hover reveals.
@@ -371,7 +438,12 @@ async function checkExpectations(window: BrowserWindow, spec: string): Promise<s
  * screenshots the window and exits. Used by `scripts/smoke.mjs` to check the UI
  * actually renders in a headless container.
  */
-export function installSmokeHook(window: BrowserWindow, index: number): void {
+export function installSmokeHook(
+  window: BrowserWindow,
+  index: number,
+  lookup: (index: number) => BrowserWindow | undefined
+): void {
+  windowAt = lookup
   const shotPath = process.env['DMSCREEN_SMOKE_SHOT']
   if (!shotPath) return
   // A shot drives and photographs one window. Which one is the shot's business —

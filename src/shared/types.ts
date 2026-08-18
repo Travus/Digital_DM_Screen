@@ -121,6 +121,22 @@ export interface WindowBounds {
 }
 
 /**
+ * A remembered window position, plus whether it was maximized.
+ *
+ * The rectangle is always the *normal* one — where the window sits when it is
+ * not maximized — so un-maximizing a restored window puts it back somewhere
+ * sensible rather than filling the screen a second time.
+ *
+ * Minimized is deliberately absent. Maximizing is an arrangement someone chose
+ * and expects to find again; minimizing is "get out of the way for a moment",
+ * and a layout that came back with its main window minimized would read as an
+ * app that failed to start.
+ */
+export interface WindowPlacement extends WindowBounds {
+  maximized?: boolean
+}
+
+/**
  * What gets stashed in userData so an unexpected quit loses nothing.
  *
  * A document snapshot plus where its windows were. The geometry is deliberately
@@ -133,7 +149,7 @@ export interface WindowBounds {
  * second layout and the first one's geometry is gone.
  */
 export interface SessionSnapshot extends DocumentSnapshot {
-  bounds?: Record<string, WindowBounds>
+  bounds?: Record<string, WindowPlacement>
 }
 
 /**

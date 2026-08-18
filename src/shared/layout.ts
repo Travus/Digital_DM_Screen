@@ -519,6 +519,50 @@ export function swapPanelNodes(root: LayoutNode, aId: string, bId: string): Layo
 }
 
 /**
+ * Trade what two panel nodes point at, wherever in the document they are.
+ *
+ * The single-tree version above cannot do this: a drag from the players' screen
+ * onto the laptop names one node in each of two trees, and neither window owns
+ * both — which is why this takes the document and runs in main.
+ *
+ * Only the `panelId`s move, exactly as within one window. A node id names a
+ * *place*, and a place belongs to the window it is in: dragging a map to the
+ * other screen must not carry that pane's size across with it, or a panel
+ * dropped onto a narrow sidebar would take the sidebar's shape to the
+ * television.
+ */
+export function swapPanelsInDoc(doc: LayoutDoc, aId: string, bId: string): LayoutDoc {
+  if (aId === bId) return doc
+  const aWindow = windowOfNode(doc, aId)
+  const bWindow = windowOfNode(doc, bId)
+  if (!aWindow || !bWindow) return doc
+
+  // Both in one window: the tree operation already handles it, and going
+  // through the document would only rebuild the same root.
+  if (aWindow === bWindow) {
+    const window = findWindow(doc, aWindow)
+    if (!window) return doc
+    const next = swapPanelNodes(window.root, aId, bId)
+    return next === window.root ? doc : setWindowRoot(doc, aWindow, next)
+  }
+
+  const a = findNode(findWindow(doc, aWindow)!.root, aId)
+  const b = findNode(findWindow(doc, bWindow)!.root, bId)
+  if (a?.type !== 'panel' || b?.type !== 'panel') return doc
+
+  const point = (root: LayoutNode, nodeId: string, panelId: string): LayoutNode => {
+    const walk = (node: LayoutNode): LayoutNode => {
+      if (node.type === 'panel') return node.id === nodeId ? { ...node, panelId } : node
+      return { ...node, children: node.children.map(walk) }
+    }
+    return walk(root)
+  }
+
+  const withA = setWindowRoot(doc, aWindow, point(findWindow(doc, aWindow)!.root, aId, b.panelId))
+  return setWindowRoot(withA, bWindow, point(findWindow(withA, bWindow)!.root, bId, a.panelId))
+}
+
+/**
  * How much of a split one press of the resize keys moves. Big enough to see and
  * small enough to aim with, held down.
  */

@@ -124,30 +124,35 @@ const shots = [
 
   /* ------------------------------------------------------------- windows */
 
-  // One window, so the control is the command rather than a list.
+  // One window, and still a dropdown. It used to be a bare "+ Add Window"
+  // button until a second screen existed, which made the control change what
+  // kind of control it was — so this pins that it does not.
   {
-    name: 'windows-alone',
+    name: 'windows-menu-alone',
     layout: starter,
+    click: '.windows-btn[data-windows="menu"]',
     expect: {
-      found: ['.windows-btn[data-windows="add"]'],
-      missing: ['.windows-menu'],
-      text: ['+ Add Window']
+      found: ['.windows-menu', '.window-row', '.windows-menu [data-windows="add"]'],
+      text: ['Main window', '+ New Window']
     }
   },
-  // Adding one. The button becomes a list, because from here on the question it
-  // answers is "which screen".
+  // Adding one from the bottom of that list.
   {
     name: 'windows-added',
     layout: starter,
-    steps: [{ click: '.windows-btn[data-windows="add"]' }, { wait: 900 }],
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.windows-menu [data-windows="add"]' },
+      { wait: 900 },
+      { click: '.windows-btn[data-windows="menu"]' }
+    ],
     expect: {
-      found: ['.windows-btn[data-windows="menu"]'],
-      missing: ['.windows-btn[data-windows="add"]'],
-      text: ['Windows']
+      found: ['.window-row.current', '.windows-menu'],
+      text: ['Main window', 'Window 2']
     }
   },
-  // The list itself: both screens, the current one marked, and the command that
-  // was the whole control a moment ago now at the bottom of it.
+  // The list on a two-screen layout: both rows, the current one marked, and the
+  // per-row controls that rename and delete.
   {
     name: 'windows-menu',
     layout: twoScreens,
@@ -157,9 +162,41 @@ const shots = [
         '.windows-menu',
         '.window-row.current[data-window-id="win_main"]',
         '.window-row[data-window-id="win_player"]',
-        '.windows-menu [data-windows="add"]'
+        '.window-row[data-window-id="win_player"] .window-remove',
+        '.window-row[data-window-id="win_main"] .window-rename'
       ],
+      // The primary keeps no bin: a layout has to have one window, and closing
+      // that one is quitting rather than deleting.
+      missing: ['.window-row[data-window-id="win_main"] .window-remove'],
       text: ['Main window', 'Player screen', '+ New Window']
+    }
+  },
+  // Renaming, which was unreachable while the name carried a double-click: its
+  // first click closed the menu, so the second never landed.
+  {
+    name: 'windows-rename',
+    layout: twoScreens,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.window-row[data-window-id="win_player"] .window-rename' }
+    ],
+    expect: {
+      found: ['.window-row[data-window-id="win_player"] .window-name-input'],
+      missing: ['.window-row[data-window-id="win_player"] .window-name']
+    }
+  },
+  // The bin, which deletes outright and does not ask.
+  {
+    name: 'windows-deleted',
+    layout: twoScreens,
+    steps: [
+      { click: '.windows-btn[data-windows="menu"]' },
+      { click: '.window-row[data-window-id="win_player"] .window-remove' },
+      { wait: 900 }
+    ],
+    expect: {
+      found: ['.windows-btn[data-windows="menu"]'],
+      missing: ['.window-row[data-window-id="win_player"]']
     }
   },
   // The second screen, photographed. Its bar carries the switcher and nothing
@@ -191,17 +228,16 @@ const shots = [
       text: ['Main window', 'Player screen']
     }
   },
-  // Closed rather than removed: the row stays, under its own heading, and the
-  // panels behind it are still in the document. Closing from the list rather
-  // than from the window's own frame, which the harness cannot reach.
+  // A window closed rather than deleted keeps its panels and its row. Seeded,
+  // because closing is what the window's own frame does and a native title bar
+  // is out of the harness's reach.
   {
     name: 'windows-closed-listed',
     layout: twoScreens,
-    steps: [
-      { click: '.windows-btn[data-windows="menu"]' },
-      { click: '.window-row[data-window-id="win_player"] .window-close' },
-      { wait: 900 }
-    ],
+    mutate: (doc) => {
+      doc.windows[1].open = false
+    },
+    click: '.windows-btn[data-windows="menu"]',
     expect: {
       found: ['.window-row.closed[data-window-id="win_player"]', '.menu-heading'],
       // "CLOSED", not "Closed": the heading is uppercased in CSS, and the text
@@ -210,13 +246,42 @@ const shots = [
     }
   },
   /*
+   * Dragging a panel from one screen onto the other, which is most of what a
+   * second screen is for.
+   *
+   * The two halves run in their own windows, and the payload is left empty —
+   * a DataTransfer belongs to the renderer that made it and cannot be handed to
+   * a second one. That is the same reason the app records the drag in main at
+   * `dragstart` rather than trusting the payload to cross, so this drives the
+   * path a real cross-window drop actually takes.
+   *
+   * The party panel starts on the players' screen and the initiative tracker on
+   * the main one; after the drop they have traded places, which is what the two
+   * assertions say.
+   */
+  {
+    name: 'windows-drag-across',
+    layout: twoScreens,
+    steps: [
+      {
+        drag: {
+          fromWindow: 2,
+          from: '.panel:has(.table.resizable) .panel-head',
+          to: '.panel:has(.round-pill)'
+        }
+      },
+      { wait: 900 }
+    ],
+    expect: {
+      // The main window now shows the party panel where initiative was.
+      found: ['.panel:has(.table.resizable)'],
+      missing: ['.panel:has(.round-pill)']
+    }
+  },
+  /*
    * The cross-window link. Initiative is on the main screen and the party panel
    * it reads AC and HP from is on the other, so this shot fails if a window only
    * ever sees its own panels.
-   *
-   * The numbers are the party panel's, not the combatant's own: the fixture
-   * gives Thora 44/52 in both, so the assertion is on the AC, which the party
-   * panel puts at 18 against the combatant record's own copy.
    */
   {
     name: 'windows-party-link',
@@ -1462,6 +1527,15 @@ function normaliseExpect(expect, name) {
 const STEP_KINDS = ['menu', 'click', 'press', 'type', 'select', 'wheel', 'drag', 'hover', 'wait']
 
 /**
+ * Keys a step may carry beside its one action.
+ *
+ * `window` says which screen the step acts on, 1-based, so a shot can reach past
+ * the one it photographs — a drag from the players' window onto the laptop is
+ * two halves in two renderers.
+ */
+const STEP_MODIFIERS = ['window']
+
+/**
  * What a shot does before its screenshot, as one ordered list.
  *
  * Most shots want one menu command, or a run of clicks, and say so with the
@@ -1491,7 +1565,9 @@ function normaliseSteps(shot, name) {
     }
     for (const [index, step] of shot.steps.entries()) {
       const set = STEP_KINDS.filter((kind) => step[kind] !== undefined)
-      const unknown = Object.keys(step).filter((key) => !STEP_KINDS.includes(key))
+      const unknown = Object.keys(step).filter(
+        (key) => !STEP_KINDS.includes(key) && !STEP_MODIFIERS.includes(key)
+      )
       if (unknown.length) {
         throw new Error(
           `shot "${name}" step ${index + 1} has no such action: ${unknown.join(', ')}`

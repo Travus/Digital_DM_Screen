@@ -13,7 +13,7 @@
  * here, from one copy, whatever is on screen.
  */
 import { createEmptyDoc, parseLayoutDoc } from '../shared/layout'
-import type { DocumentSnapshot, DocumentStatus, LayoutDoc, WindowBounds } from '../shared/types'
+import type { DocumentSnapshot, DocumentStatus, LayoutDoc, WindowPlacement } from '../shared/types'
 import { readSession, writeSession } from './userStore'
 import { isUsableBounds } from './windowBounds'
 
@@ -30,7 +30,7 @@ let dirty = false
  * which monitor the players' screen is on is a fact about this desk. This rides
  * the session, so it never travels with a `.dmscreen`.
  */
-let bounds: Record<string, WindowBounds> = {}
+let bounds: Record<string, WindowPlacement> = {}
 
 let sessionTimer: ReturnType<typeof setTimeout> | null = null
 let announce: (status: DocumentStatus) => void = () => {}
@@ -70,12 +70,12 @@ function setStatus(nextPath: string | null, nextDirty: boolean): void {
   announce(status())
 }
 
-export function rememberedBounds(): Record<string, WindowBounds> {
+export function rememberedBounds(): Record<string, WindowPlacement> {
   return bounds
 }
 
 /** A window was moved or resized. Cheap, and debounced by the session write. */
-export function rememberBounds(windowId: string, next: WindowBounds): void {
+export function rememberBounds(windowId: string, next: WindowPlacement): void {
   bounds = { ...bounds, [windowId]: next }
   scheduleSession()
 }

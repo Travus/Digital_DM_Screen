@@ -199,6 +199,28 @@ unplugged television never appears, which reads as the app failing to start. A
 window merely hanging over an edge is left alone: that is somewhere people
 deliberately put windows.
 
+**Maximized is remembered; minimized is not.** The rectangle stored is always
+`getNormalBounds()`, so a restored maximized window has somewhere to go when it
+is un-maximized, and `maximize()` is called before the first paint so it does not
+open at its normal size and jump. Minimizing is left out on purpose: maximizing
+is an arrangement someone chose and expects to find again, while minimizing is
+"get out of the way for a moment", and a layout that came back with its main
+window minimized would read as an app that failed to start.
+
+**A panel can be dragged from one screen to the other, and that swap is main's.**
+Neither window owns both trees, so neither may do it: a renderer publishing a
+document with the other window's tree changed would have exactly that half
+discarded by `mergeWindowSlice`. `swapPanelsInDoc` is the document-level version
+of `swapPanelNodes` and runs in main, which broadcasts to everyone including the
+sender — both windows changed shape and main is what worked out how.
+
+**The drag payload is `windowId:nodeId`, and main records the drag as well.**
+The window half is what tells a drop from the other screen apart from one of this
+window's own. The record in main is the fallback, because a drag that crosses
+windows goes through the OS rather than through Chromium and a custom MIME type
+does not survive that everywhere — the record always does, since only one drag is
+ever in flight.
+
 **The menu dispatches to the focused window.** The menu is the application's, so
 "Split Right" run from the players' screen has to split a panel there. Dialogs
 hang off `dialogParent()` for the same reason.
@@ -213,6 +235,19 @@ in the catalogue, which is what the shortcuts editor groups on.
 windows share, so one opened later already has it. What it cannot do is notice a
 change made next door — and a secondary window has no theme control of its own,
 so without the relay the players' screen stays dark until it is reopened.
+
+**The switcher is always a dropdown, even with one window.** It was a plain
+"+ Add Window" button until a second screen existed and a list after that, which
+made it a control that changes what kind of control it is — the row it sits on
+stops being somewhere you can aim.
+
+**A row renames and deletes, and never closes.** Renaming has a control of its
+own because the name's own click closes the menu, so a double-click on it never
+landed and the field could not be opened at all. There is no close in the menu:
+that is what a window's own frame is for, and a row offering both would be two
+similar buttons whose difference is invisible until one of them has lost you a
+screen. The bin deletes outright and does not ask; the primary has none, since a
+layout keeps one window and closing that one is quitting.
 
 **A secondary window's bar is the mark, the window's name and the switcher.**
 Nothing else. A second window is usually the one an audience can see, and app
@@ -233,6 +268,10 @@ A panel changes places with the one beside it — dragged onto it, or swapped wi
 **Rearranging is refused while a panel is fullscreen**, in the store and not only in the catalogue. One pane fills the window, so a swap and a resize alike land entirely off screen and the only sign either happened is the layout going unsaved. A drag cannot reach a second panel there either, so this is the keyboard agreeing with the mouse.
 
 **The keyboard resize has no pixels, so its floor is a share.** The splitter stops at 90 px; `resizePanelShare` stops at a twentieth of the split it sits in. The boundary it moves is the innermost one on that axis — the handle the DM would have grabbed — and the one *before* the panel when the panel is last, or "wider" would mean "wider, unless you are on the right". It returns the same root when nothing moved and the store compares identity before mutating, so a key held at the limit does not go on dirtying the layout and restarting the autosave.
+
+**A drag that crosses windows is the same gesture, resolved differently.** The
+drop asks whether the source window is this one: if it is, the swap is a tree
+operation here, and if it is not it goes to main. See the Windows section above.
 
 **A panel drag is an HTML5 drag with a MIME type of its own.** Pointer events are already spoken for inside the modules — panning an image, drawing a block selection across table cells — so a gesture that crosses into one of those has to be a different kind of event rather than the same kind arbitrated by hand. `application/x-dmscreen-panel` is what tells a panel drop from a file drop, and `dataTransfer.types` is the only thing readable during `dragover`, which is what lets the highlight and the drop ask one question. Nothing goes on `text/plain`: a textarea would insert it.
 
@@ -735,9 +774,10 @@ paths distinct.
 - `type` — `{ selector, text }`, for UI whose interesting state is a *query*
 - `select` — `{ selector, start, end }`, for behaviour that acts on selected text
 - `wheel` — `{ selector, deltaY, offsetX, offsetY }`, one notch over an element
-- `drag` — `{ from, to, hold }`, one element dropped onto another
+- `drag` — `{ from, to, hold, fromWindow }`, one element dropped onto another
 - `steps` — those six as an ordered list, for a shot that needs two of a kind
-- `window` — which window to drive and photograph, 1-based, default the first
+- `window` — which window to drive and photograph, 1-based, default the first;
+  also settable per step, to reach past the window being photographed
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
   long form taking `found`, `missing` and `text`
@@ -756,7 +796,14 @@ nobody wrote. Steps also take `wait` for a mid-sequence dwell.
 two inputs deep — the palette showing a greyed row's reason and then a fresh
 query typed over it. Reach for `steps` when the behaviour *is* the transition.
 
-**A `drag` carries one `DataTransfer` through the whole sequence**, so the
+**A drag that crosses windows cannot carry its `DataTransfer`.** One belongs to
+the renderer that made it and there is no handing it to a second — which is the
+same reason the app records the drag in main at `dragstart` rather than trusting
+the payload to cross. So `fromWindow` fires the two halves in their own windows
+and leaves the payload empty, which is exactly the state a real cross-window drop
+has to cope with.
+
+**A same-window `drag` carries one `DataTransfer` through the whole sequence**, so the
 handlers do the work rather than being mimed: the source's `dragstart` writes the
 panel id into it and the target's `drop` reads it back. A constructed
 `DataTransfer` stays readable, unlike the protected one a live drag hands to

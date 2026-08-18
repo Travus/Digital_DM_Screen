@@ -16,6 +16,7 @@ import {
   renameWindow,
   setWindowOpen,
   setWindowRoot,
+  swapPanelsInDoc,
   windowOfNode,
   windowOfPanel,
   neighbourPanels,
@@ -844,5 +845,71 @@ describe('merging one window copy of the document', () => {
     expect(mergeWindowSlice(base, removeWindow(base, base.windows[1].id), base.windows[1].id)).toBe(
       base
     )
+  })
+})
+
+describe('swapping panels across windows', () => {
+  const twoScreens = (): LayoutDoc => addWindow(createEmptyDoc('Two screens'))
+
+  const nodeOf = (doc: LayoutDoc, index: number): string =>
+    collectPanelNodes(doc.windows[index].root)[0].id
+
+  const panelOf = (doc: LayoutDoc, index: number): string =>
+    collectPanelNodes(doc.windows[index].root)[0].panelId
+
+  /** Two screens, the first of them split in two, so a swap has a shape to keep. */
+  const splitFirstWindow = (): LayoutDoc => {
+    const doc = twoScreens()
+    const root = doc.windows[0].root
+    return setWindowRoot(doc, 'win_main', splitNode(root, root.id, 'row', makePanelNode('p_extra')))
+  }
+
+  it('trades what two panes point at, one on each screen', () => {
+    const doc = twoScreens()
+    const [aNode, bNode] = [nodeOf(doc, 0), nodeOf(doc, 1)]
+    const [aPanel, bPanel] = [panelOf(doc, 0), panelOf(doc, 1)]
+
+    const next = swapPanelsInDoc(doc, aNode, bNode)
+    expect(panelOf(next, 0)).toBe(bPanel)
+    expect(panelOf(next, 1)).toBe(aPanel)
+  })
+
+  /*
+   * A node id names a place, and a place belongs to its window. Dragging a map
+   * to the television must not carry the laptop pane's shape across with it.
+   */
+  it('leaves both trees the shape they were', () => {
+    const doc = splitFirstWindow()
+    const before = structuredClone(doc.windows[0].root)
+    const next = swapPanelsInDoc(doc, nodeOf(doc, 0), nodeOf(doc, 1))
+    const shape = (node: LayoutNode): unknown =>
+      node.type === 'panel'
+        ? { type: 'panel', id: node.id }
+        : { type: 'split', id: node.id, sizes: node.sizes, children: node.children.map(shape) }
+    expect(shape(next.windows[0].root)).toEqual(shape(before))
+  })
+
+  it('falls back to the single-tree swap inside one window', () => {
+    const doc = splitFirstWindow()
+    const [first, second] = collectPanelNodes(doc.windows[0].root)
+    const next = swapPanelsInDoc(doc, first.id, second.id)
+    const after = collectPanelNodes(next.windows[0].root)
+    expect(after[0].panelId).toBe(second.panelId)
+    expect(after[1].panelId).toBe(first.panelId)
+    // The other screen is untouched, by identity rather than by value.
+    expect(next.windows[1]).toBe(doc.windows[1])
+  })
+
+  it('leaves the document alone for a node it cannot place', () => {
+    const doc = twoScreens()
+    expect(swapPanelsInDoc(doc, nodeOf(doc, 0), 'node_nowhere')).toBe(doc)
+    expect(swapPanelsInDoc(doc, nodeOf(doc, 0), nodeOf(doc, 0))).toBe(doc)
+  })
+
+  it('does not mutate the document it was given', () => {
+    const doc = twoScreens()
+    const before = structuredClone(doc)
+    swapPanelsInDoc(doc, nodeOf(doc, 0), nodeOf(doc, 1))
+    expect(doc).toEqual(before)
   })
 })

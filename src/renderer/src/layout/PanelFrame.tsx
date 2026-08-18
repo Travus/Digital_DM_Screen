@@ -23,8 +23,11 @@ type StatePatchFn = (previous: Record<string, unknown>) => Record<string, unknow
  * A custom type rather than `text/plain`: the Image module accepts dropped files
  * on the same panels, a textarea would happily insert dropped text, and
  * `dataTransfer.types` is the one thing readable during `dragover` — so the
- * highlight and the drop can both ask the same question. The payload is the
- * source panel's *node* id, since that is what a swap is written in terms of.
+ * highlight and the drop can both ask the same question.
+ *
+ * The payload is `windowId:nodeId`. The window half is what tells a drop from
+ * the other screen apart from one of this window's own, which decides whether
+ * the swap is a tree operation here or a document operation in main.
  */
 const PANEL_DRAG_TYPE = 'application/x-dmscreen-panel'
 
@@ -43,6 +46,8 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const updatePanelSettings = useAppStore((state) => state.updatePanelSettings)
 
   const swapWithNode = useAppStore((state) => state.swapWithNode)
+  const swapAcrossWindows = useAppStore((state) => state.swapAcrossWindows)
+  const windowId = useAppStore((state) => state.windowId)
   const swapWithNeighbour = useAppStore((state) => state.swapWithNeighbour)
   const locked = useAppStore((state) => state.doc.locked)
   const anyMaximized = useAppStore((state) => state.maximizedNodeId !== null)
@@ -197,6 +202,25 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
   const acceptsDrag = (event: React.DragEvent): boolean =>
     !locked && !anyMaximized && event.dataTransfer.types.includes(PANEL_DRAG_TYPE)
 
+  /**
+   * Resolve where the drop came from, and trade the two panels.
+   *
+   * The `DataTransfer` is read first, because within one window it is always
+   * there and needs no round trip. A drag that crossed windows went through the
+   * OS, which does not carry a custom MIME type everywhere — so main's record of
+   * the drag is the fallback, and it is always right: only one drag is ever in
+   * flight.
+   */
+  const dropPanel = async (payload: string): Promise<void> => {
+    let source = payload ? parseDragPayload(payload) : null
+    source ??= await window.dmscreen.panelDragSource()
+    if (!source) return
+
+    // Dropped on itself is a no-op the store recognises, so it needs no check.
+    if (source.windowId === windowId) swapWithNode(source.nodeId, node.id)
+    else await swapAcrossWindows(source.nodeId, node.id)
+  }
+
   return (
     <section
       className={`panel ${maximized ? 'maximized' : ''} ${active ? 'active' : ''} ${
@@ -222,10 +246,7 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         setDropping(false)
         if (!acceptsDrag(event)) return
         event.preventDefault()
-        const from = event.dataTransfer.getData(PANEL_DRAG_TYPE)
-        // Dropped on itself is a no-op the store recognises, so it needs no
-        // check here.
-        if (from) swapWithNode(from, node.id)
+        void dropPanel(event.dataTransfer.getData(PANEL_DRAG_TYPE))
       }}
     >
       <header
@@ -233,11 +254,17 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
         draggable={canDrag}
         title={canDrag ? 'Drag onto another panel to swap them' : undefined}
         onDragStart={(event) => {
-          event.dataTransfer.setData(PANEL_DRAG_TYPE, node.id)
+          event.dataTransfer.setData(PANEL_DRAG_TYPE, `${windowId}:${node.id}`)
           event.dataTransfer.effectAllowed = 'move'
+          // Told to main as well, which is what a drop in another window reads
+          // when the OS has not carried the payload across.
+          void window.dmscreen.beginPanelDrag(node.id)
           setDragging(true)
         }}
-        onDragEnd={() => setDragging(false)}
+        onDragEnd={() => {
+          setDragging(false)
+          void window.dmscreen.endPanelDrag()
+        }}
       >
         <span className="panel-icon">{module?.icon ?? '▫'}</span>
 
@@ -441,6 +468,13 @@ export function PanelFrame({ node }: { node: PanelNode }): JSX.Element {
       </div>
     </section>
   )
+}
+
+/** `windowId:nodeId`, or null for anything that is not that. */
+function parseDragPayload(payload: string): { windowId: string; nodeId: string } | null {
+  const at = payload.indexOf(':')
+  if (at <= 0) return null
+  return { windowId: payload.slice(0, at), nodeId: payload.slice(at + 1) }
 }
 
 interface MenuItem {

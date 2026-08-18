@@ -1,20 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { WindowDef } from '../../../shared/types'
 import { useAppStore } from '../state/store'
-import { parenthesised, useShortcuts } from '../lib/shortcuts'
+import { useShortcuts } from '../lib/shortcuts'
 import { placeMenu, type Placement, type Size } from '../lib/menuPlacement'
 
 /**
  * The window switcher, beside the layout name.
  *
- * With one window there is nothing to switch between, so the control is the
- * command instead: a plain "+ Add Window". A second window turns it into a list,
- * because from then on the question being asked of it is "which screen", and
- * adding another moves to the bottom of that list.
+ * Always a dropdown, including with one window. It used to be a plain
+ * "+ Add Window" button until a second screen existed and a list after that, and
+ * a control that changes what kind of control it is has to be re-read every time
+ * you look at it — the row it lives on stops being somewhere you can aim.
  *
- * Closed windows are listed too, greyed, below the open ones. A window that is
- * closed still has its panels — that is the whole of what closing rather than
- * removing buys — so it has to be reachable, and a list that silently forgot
- * them would make the panels unreachable with nothing on screen to say why.
+ * Closed windows are listed too, under their own heading. A closed window still
+ * has its panels — that is the whole of what closing rather than deleting buys —
+ * so it has to be reachable, and a list that quietly forgot them would put those
+ * panels out of reach with nothing on screen to say why.
  */
 export function WindowsMenu(): JSX.Element {
   const shortcuts = useShortcuts()
@@ -23,7 +24,6 @@ export function WindowsMenu(): JSX.Element {
 
   const addWindow = useAppStore((state) => state.addWindow)
   const openWindow = useAppStore((state) => state.openWindow)
-  const closeWindow = useAppStore((state) => state.closeWindow)
   const removeWindow = useAppStore((state) => state.removeWindow)
   const renameWindow = useAppStore((state) => state.renameWindow)
   const focusWindow = useAppStore((state) => state.focusWindow)
@@ -35,8 +35,6 @@ export function WindowsMenu(): JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null)
   const [placement, setPlacement] = useState<Placement | null>(null)
 
-  const alone = windows.length === 1
-
   useEffect(() => {
     if (!open) return
     const onPointerDown = (event: PointerEvent): void => {
@@ -44,6 +42,12 @@ export function WindowsMenu(): JSX.Element {
     }
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [open])
+
+  /* Closing the menu drops a half-finished rename with it, rather than leaving a
+     field that springs back open the next time the menu is. */
+  useEffect(() => {
+    if (!open) setRenamingId(null)
   }, [open])
 
   /* Placed from JS for the reason the ⋯ panel menu is: `.panel` and the top bar
@@ -70,27 +74,91 @@ export function WindowsMenu(): JSX.Element {
     return () => window.removeEventListener('resize', reposition)
   }, [open])
 
-  // One window: the control is the command, so there is no list to open.
-  if (alone) {
-    return (
-      <button
-        className="btn windows-btn"
-        data-windows="add"
-        title={`Open a second screen${parenthesised(shortcuts['window:new'])} — a players' view on another monitor`}
-        onClick={() => void addWindow()}
-      >
-        + Add Window
-      </button>
-    )
-  }
-
   const openWindows = windows.filter((entry) => entry.open)
   const closedWindows = windows.filter((entry) => !entry.open)
+  const primaryId = windows[0]?.id
 
   const commitRename = (id: string, value: string): void => {
     if (value.trim()) void renameWindow(id, value)
     setRenamingId(null)
   }
+
+  /**
+   * One row: the name focuses the window, or reopens a closed one, and the two
+   * icons rename and delete it.
+   *
+   * Renaming has a control of its own rather than a double-click on the name.
+   * The name's first click closes the menu, so the second click of a double
+   * never landed and the field could not be opened at all.
+   *
+   * There is no close here, only delete. Closing a window is what its own frame
+   * is for, and a row offering both would be two similar buttons whose
+   * difference is invisible until one of them has lost you a screen.
+   */
+  const row = (entry: WindowDef): JSX.Element => (
+    <div
+      key={entry.id}
+      className={`menu-item window-row ${entry.id === windowId ? 'current' : ''} ${
+        entry.open ? '' : 'closed'
+      }`}
+      data-window-id={entry.id}
+    >
+      {renamingId === entry.id ? (
+        <input
+          className="window-name-input"
+          autoFocus
+          defaultValue={entry.name}
+          /* Selected on arrival so typing replaces — the same bargain the layout
+             and panel name fields make, and hung off focus for the same reason:
+             a ref callback would reselect under someone mid-edit. */
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={(event) => commitRename(entry.id, event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            if (event.key === 'Escape') setRenamingId(null)
+          }}
+        />
+      ) : (
+        <>
+          <button
+            className="menu-label window-name"
+            title={
+              !entry.open
+                ? 'Open this window again, with the panels it had'
+                : entry.id === windowId
+                  ? 'This window'
+                  : 'Bring this window to the front'
+            }
+            onClick={() => {
+              if (entry.open) void focusWindow(entry.id)
+              else void openWindow(entry.id)
+              setOpen(false)
+            }}
+          >
+            {entry.name}
+          </button>
+          <button
+            className="icon-btn window-rename"
+            title="Rename this window"
+            onClick={() => setRenamingId(entry.id)}
+          >
+            <PencilIcon />
+          </button>
+          {/* The primary has none: every layout keeps one window, and closing
+              that one is quitting rather than deleting. */}
+          {entry.id !== primaryId && (
+            <button
+              className="icon-btn window-remove"
+              title="Delete this window and the panels on it"
+              onClick={() => void removeWindow(entry.id)}
+            >
+              <BinIcon />
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
 
   return (
     <div className="menu-anchor" ref={anchorRef}>
@@ -101,7 +169,8 @@ export function WindowsMenu(): JSX.Element {
         title="Screens in this layout"
         onClick={() => setOpen(!open)}
       >
-        Windows <span aria-hidden="true">⌄</span>
+        Windows
+        <ChevronIcon />
       </button>
 
       {open && (
@@ -110,89 +179,13 @@ export function WindowsMenu(): JSX.Element {
           ref={menuRef}
           style={placement ? { ...placement } : { visibility: 'hidden' }}
         >
-          {openWindows.map((entry) => (
-            <div
-              key={entry.id}
-              className={`menu-item window-row ${entry.id === windowId ? 'current' : ''}`}
-              data-window-id={entry.id}
-            >
-              {renamingId === entry.id ? (
-                <input
-                  className="window-name-input"
-                  autoFocus
-                  defaultValue={entry.name}
-                  /* Selected on arrival so typing replaces — the same bargain the
-                     layout and panel name fields make, and hung off focus for the
-                     same reason: a ref callback would reselect mid-edit. */
-                  onFocus={(event) => event.currentTarget.select()}
-                  onBlur={(event) => commitRename(entry.id, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.currentTarget.blur()
-                    if (event.key === 'Escape') setRenamingId(null)
-                  }}
-                />
-              ) : (
-                <button
-                  className="menu-label window-name"
-                  title={
-                    entry.id === windowId
-                      ? 'This window — double-click to rename it'
-                      : 'Bring this window to the front — double-click to rename it'
-                  }
-                  onDoubleClick={() => setRenamingId(entry.id)}
-                  onClick={() => {
-                    void focusWindow(entry.id)
-                    setOpen(false)
-                  }}
-                >
-                  {entry.name}
-                </button>
-              )}
-              {/* The primary has no close: closing it quits, which is a
-                  different command and belongs on the window itself. */}
-              {entry.id !== windows[0].id && (
-                <button
-                  className="icon-btn window-close"
-                  title="Close this window — its panels are kept"
-                  onClick={() => void closeWindow(entry.id)}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
+          {openWindows.map(row)}
 
           {closedWindows.length > 0 && (
             <>
               <div className="menu-sep" />
               <div className="menu-heading">Closed</div>
-              {closedWindows.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="menu-item window-row closed"
-                  data-window-id={entry.id}
-                >
-                  <button
-                    className="menu-label window-name"
-                    title="Open this window again, with the panels it had"
-                    onClick={() => {
-                      void openWindow(entry.id)
-                      setOpen(false)
-                    }}
-                  >
-                    {entry.name}
-                  </button>
-                  {/* The only way to be rid of a window for good. Without it a
-                      closed one is kept forever, and the list only grows. */}
-                  <button
-                    className="icon-btn window-remove"
-                    title="Remove this window and the panels on it"
-                    onClick={() => void removeWindow(entry.id)}
-                  >
-                    🗑
-                  </button>
-                </div>
-              ))}
+              {closedWindows.map(row)}
             </>
           )}
 
@@ -211,5 +204,56 @@ export function WindowsMenu(): JSX.Element {
         </div>
       )}
     </div>
+  )
+}
+
+/*
+ * Inline SVG rather than glyphs, the same bargain the brand mark and the lock
+ * icon already make: a chevron character depends on a font having it, and the
+ * one that answered drew it thin, oversized and off the baseline beside the
+ * label. These are drawn at the weight of everything else on the row.
+ */
+
+function ChevronIcon(): JSX.Element {
+  return (
+    <svg className="chevron-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M2.75 4.5 6 7.75 9.25 4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function PencilIcon(): JSX.Element {
+  return (
+    <svg className="row-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M11.1 2.4a1.35 1.35 0 0 1 1.9 1.9l-6.8 6.8-2.5.6.6-2.5 6.8-6.8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function BinIcon(): JSX.Element {
+  return (
+    <svg className="row-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 4.5h10M6.5 4.5V3h3v1.5M4.6 4.5l.6 8a1 1 0 0 0 1 .95h3.6a1 1 0 0 0 1-.95l.6-8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }

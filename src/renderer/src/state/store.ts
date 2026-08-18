@@ -93,6 +93,8 @@ interface AppState {
   flipSplit: (splitId: string) => void
   equalise: (splitId: string) => void
   swapWithNode: (nodeId: string, targetNodeId: string) => void
+  /** The same trade, where the two panels are on different screens. */
+  swapAcrossWindows: (sourceNodeId: string, targetNodeId: string) => Promise<void>
   swapWithNeighbour: (nodeId: string, direction: MoveDirection) => void
   resizePanel: (nodeId: string, axis: SplitDirection, delta: number) => void
 
@@ -352,6 +354,22 @@ export const useAppStore = create<AppState>((set, get) => {
       if (next === root) return
       mutateTree(() => next)
       set({ activeNodeId: targetNodeId })
+    },
+
+    /**
+     * A panel dropped onto one in another window.
+     *
+     * Routed through main because neither window owns both trees — publishing a
+     * document with the other window's tree changed would have exactly that half
+     * discarded by the merge. The selection follows the module here as it does
+     * within a window, and it lands on this side, since this is where the module
+     * arrived.
+     */
+    swapAcrossWindows: async (sourceNodeId, targetNodeId) => {
+      const { doc, maximizedNodeId } = get()
+      if (doc.locked || maximizedNodeId) return
+      const swapped = await window.dmscreen.swapPanelsAcrossWindows(sourceNodeId, targetNodeId)
+      if (swapped) set({ activeNodeId: targetNodeId })
     },
 
     swapWithNeighbour: (nodeId, direction) => {

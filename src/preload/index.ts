@@ -119,6 +119,20 @@ const api = {
   },
 
   /**
+   * A panel drag, told to main so a drop in another window can find its source.
+   * The `DataTransfer` carries the same thing, but a custom MIME type does not
+   * survive the OS crossing everywhere, and this always does.
+   */
+  beginPanelDrag: (nodeId: string): Promise<void> => ipcRenderer.invoke('panel:beginDrag', nodeId),
+  endPanelDrag: (): Promise<void> => ipcRenderer.invoke('panel:endDrag'),
+  panelDragSource: (): Promise<{ windowId: string; nodeId: string } | null> =>
+    ipcRenderer.invoke('panel:dragSource'),
+
+  /** Trade two panels in different windows. Only main can: it holds both trees. */
+  swapPanelsAcrossWindows: (aNodeId: string, bNodeId: string): Promise<boolean> =>
+    ipcRenderer.invoke('panel:swapAcrossWindows', aNodeId, bNodeId),
+
+  /**
    * The theme, which every window shares. Stored in `localStorage`, so a window
    * opened later already has it — this is only for a change made while another
    * window is up, which it has no other way to hear about.
