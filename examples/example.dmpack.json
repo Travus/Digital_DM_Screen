@@ -1,0 +1,107 @@
+{
+  "formatVersion": 1,
+  "id": "salt-marches",
+  "name": "The Salt Marches",
+  "description": "An example data pack. Every entry is invented for this file, and shows one of the four kinds of content a pack can carry.",
+  "conditions": [
+    {
+      "id": "waterlogged",
+      "name": "Waterlogged",
+      "meta": "Salt Marches",
+      "summary": "Soaked through and slowed by the weight of it.",
+      "lines": [
+        "The creature's speed is halved, and it has disadvantage on Dexterity checks.",
+        "Ends when the creature spends a short rest somewhere dry."
+      ],
+      "note": "Invented content. Nothing here is from any published book."
+    }
+  ],
+  "diseases": [
+    {
+      "id": "dock-fever",
+      "name": "Dock Fever",
+      "meta": "Salt Marches",
+      "summary": "A shivering sickness picked up in the harbour.",
+      "lines": [
+        "On a failed DC 12 Constitution save, the creature contracts the disease.",
+        "While infected, it gains one level of exhaustion that a long rest does not remove.",
+        "A DC 12 Wisdom (Medicine) check ends the disease on a success."
+      ],
+      "note": "Invented content, written to show the shape of a disease entry."
+    }
+  ],
+  "abilityGroups": [
+    {
+      "id": "metamagic",
+      "entries": [
+        {
+          "id": "echoing-spell",
+          "name": "Echoing Spell",
+          "meta": "Salt Marches · 2 sorcery points",
+          "summary": "The spell repeats, faintly, one round later.",
+          "lines": [
+            "When you cast a spell that deals damage, it echoes at the start of your next turn.",
+            "The echo deals half the original damage to one creature that was in the area."
+          ],
+          "note": "This group id matches the one the app already ships, so the option joins the Metamagic tab instead of making a new one."
+        }
+      ]
+    },
+    {
+      "id": "tidal-boons",
+      "title": "Tidal Boons",
+      "blurb": "Favours the marsh grants to those who bargain with it.",
+      "entries": [
+        {
+          "id": "salt-blessing",
+          "name": "Salt Blessing",
+          "meta": "Salt Marches · Once per long rest",
+          "summary": "Reroll a failed save while standing in salt water.",
+          "lines": [
+            "When you fail a saving throw while in contact with salt water, you may reroll it and must use the new result."
+          ]
+        },
+        {
+          "id": "marsh-step",
+          "name": "Marsh Step",
+          "meta": "Salt Marches",
+          "summary": "Mud and shallow water are not difficult terrain for you.",
+          "lines": [
+            "You ignore difficult terrain caused by mud, silt or water no deeper than your knees."
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "sailing",
+      "title": "Sailing",
+      "items": [
+        {
+          "term": "Crewing a boat",
+          "text": "A vessel needs half its crew slots filled to move at all, and all of them to make its full speed."
+        },
+        {
+          "term": "Running aground",
+          "text": "A pilot who fails a DC 13 Wisdom (Survival) check in shallow water runs the vessel aground. Freeing it takes an hour."
+        }
+      ],
+      "tables": [
+        {
+          "caption": "What the tide brings in",
+          "head": ["d6", "Find"],
+          "rows": [
+            ["1", "A sealed clay jar, still full."],
+            ["2", "Rigging from a ship nobody recognises."],
+            ["3", "A drowned sailor's boots, the right size."],
+            ["4", "Fish, and enough of them to sell."],
+            ["5", "A chart with one island marked and no name."],
+            ["6", "Nothing, for the third day running."]
+          ]
+        }
+      ],
+      "note": "Invented content. A rules section can carry items, tables, or both."
+    }
+  ]
+}

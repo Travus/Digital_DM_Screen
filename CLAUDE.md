@@ -840,10 +840,14 @@ that does not pass an offset proves only that the number changed. It also reache
 what a button cannot: the element's own non-passive listener, which is the half
 that stops the panel scrolling while it zooms.
 
-**Some UI needs a file on disk, and those fixtures live in `examples/`.**
-`smoke-map.png` is the Image module's map. `smoke-broken.png` is named like an
-image and is not one, which is the only way to reach the decode failure —
-`exists` is a path check and passes it happily.
+**Some UI needs a file on disk, and those fixtures live in `scripts/fixtures/`.**
+`map.png` is the Image module's map. `broken.png` is named like an image and is
+not one, which is the only way to reach the decode failure — `exists` is a path
+check and passes it happily. `pack.dmpack.json` is the data pack the reference
+shots load. They sit beside the harness rather than in `examples/`, which is
+documentation a reader is pointed at: a deliberately corrupt PNG is an example
+of nothing. The two layouts there are the exception, and stay — a starter layout
+is a real example whether or not the harness also seeds it.
 
 **A shot without `expect` is a shot that cannot fail**, so the harness refuses one
 before the spawn. The check runs in the renderer and is reported over stdout as
