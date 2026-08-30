@@ -42,15 +42,21 @@ const starter = join(root, 'examples', 'starter.dmscreen')
  * from on the other, which is the cross-window case.
  */
 const twoScreens = join(root, 'examples', 'two-screens.dmscreen')
-const fixturePack = join(root, 'examples', 'smoke-pack.dmpack.json')
+/**
+ * The rest live in `scripts/fixtures/` rather than beside the layouts above.
+ * `examples/` is documentation a user is pointed at, and a deliberately broken
+ * PNG is an example of nothing — while a layout there is one whether or not the
+ * harness also seeds it.
+ */
+const fixturePack = join(root, 'scripts', 'fixtures', 'pack.dmpack.json')
 /**
  * A map for the Image module. Absolute, because that is what the module stores
  * and what main registers — and it is resolved here, in the driver, since
  * `mutate` runs before the child is spawned.
  */
-const fixtureMap = join(root, 'examples', 'smoke-map.png')
+const fixtureMap = join(root, 'scripts', 'fixtures', 'map.png')
 /** Named like an image, and not one. The half a path check cannot see. */
-const fixtureBrokenMap = join(root, 'examples', 'smoke-broken.png')
+const fixtureBrokenMap = join(root, 'scripts', 'fixtures', 'broken.png')
 
 const shots = [
   {
