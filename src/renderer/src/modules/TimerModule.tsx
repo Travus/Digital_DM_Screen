@@ -196,7 +196,15 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
                   placeholder="Name"
                   onChange={(event) => patch(timer.id, { label: event.target.value })}
                 />
-                <button className="icon-btn" title="Reset to zero" onClick={() => reset(timer)}>
+                {/* "To zero" only describes a count-up. The same call puts a
+                    countdown back to its full duration, and the button beneath
+                    now calls that Reset too, so the two have to say the same
+                    thing about it. */}
+                <button
+                  className="icon-btn"
+                  title={timer.mode === 'down' ? 'Reset to the full time' : 'Reset to zero'}
+                  onClick={() => reset(timer)}
+                >
                   ↺
                 </button>
                 <button
@@ -242,23 +250,26 @@ function Timers({ state, setState, settings }: ModuleProps<State, Settings>): JS
               )}
 
               <div className="toolbar">
+                {/* A countdown at zero offers Reset, not Pause. Pausing a clock
+                    that has stopped moving does nothing you can see, and it used
+                    to leave the timer somewhere with no way out: finished and
+                    paused disabled Start, so the only way back was the ↺ in the
+                    header. Reset puts the full duration back and stops, which is
+                    the state the next Start wants anyway. */}
                 <button
-                  className={`btn ${running ? '' : 'primary'}`}
-                  onClick={() => toggle(timer)}
-                  disabled={finished && !running}
+                  className={`btn ${running && !finished ? '' : 'primary'}`}
+                  onClick={() => (finished ? reset(timer) : toggle(timer))}
                 >
-                  {running ? 'Pause' : 'Start'}
+                  {finished ? 'Reset' : running ? 'Pause' : 'Start'}
                 </button>
 
-                {running ? (
+                {running && !finished ? (
                   <span className="note">Pause to set the clock.</span>
                 ) : (
                   <span className="note">
                     {timer.mode === 'down' ? 'Counts down' : 'Counts up'}
                   </span>
                 )}
-
-                {finished && <span className="note warn">Time.</span>}
               </div>
             </div>
           )
