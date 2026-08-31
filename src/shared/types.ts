@@ -150,6 +150,17 @@ export interface WindowPlacement extends WindowBounds {
  */
 export interface SessionSnapshot extends DocumentSnapshot {
   bounds?: Record<string, WindowPlacement>
+  /**
+   * Epoch ms this session was written, which is the last moment the app is
+   * known to have been running.
+   *
+   * A running timer stores the wall-clock instant it started, so without this
+   * there is nothing to tell "counting for ten minutes" from "counting for ten
+   * minutes, eight of which the app was shut". `pauseRunningTimers` banks a
+   * timer up to here and stops it. Optional because a session written by an
+   * older build has none, and a missing stamp means leaving the timers alone.
+   */
+  savedAt?: number
 }
 
 /**
