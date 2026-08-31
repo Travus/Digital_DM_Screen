@@ -1416,8 +1416,14 @@ code {
 }
 
 /* The Notes mirror. Both halves take the caller's class — `.notes-area` here —
-   so font, padding, border and radius are declared once and cannot drift. Only
-   the differences belong below.
+   so padding, border and radius are declared once and cannot drift.
+ *
+ * A caller's class covers only what it thinks to name, and the half it is on is
+ * a textarea, which inherits no font at all. Anything left unsaid there reaches
+ * the mirror by inheritance and the textarea from the UA sheet, which is a
+ * silent disagreement rather than an obvious one. So every metric deciding
+ * where a glyph lands is declared below on `.markup-box`, which both halves
+ * carry — see `line-height`.
  *
  * Every rule is scoped under `.markup-editor` on purpose. The caller's class is
  * a plain one too, so an unscoped `.markup-input` ties with it on specificity
@@ -1438,6 +1444,21 @@ code {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 4;
+  /* Declared here because a textarea will not inherit it. Chromium's UA sheet
+     styles one with the `font` shorthand, which resets `line-height` to
+     `normal` — so the mirror took the 1.45 from `body` and the textarea took
+     the font's own — 20.3px against about 16px, so their lines drifted 4px
+     further apart on every row down the note. Five rows in, the caret was a
+     whole line off the glyph it was on. Unitless, so the Notes font-size
+     slider moves both halves together. `.cell-input` gets this for free from
+     `font: inherit`, which is why a table cell never showed it. */
+  line-height: 1.45;
+  /* Both halves must wrap at the same width. The textarea scrolls and the
+     mirror cannot, so once a note overflowed, the textarea lost 10px to a
+     scrollbar that the mirror kept — and every wrapped line broke in a
+     different place. Reserving the gutter on both keeps the two content boxes
+     the same width whether or not the bar is there. */
+  scrollbar-gutter: stable;
 }
 
 .markup-editor .markup-mirror {

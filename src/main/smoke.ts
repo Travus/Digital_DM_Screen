@@ -400,6 +400,11 @@ const EXPECT_POLL_MS = 150
  * The whole spec has to pass in a *single* evaluation. Accumulating passes
  * across polls would let `found` and `missing` be satisfied at different
  * instants, which is a state the app may never actually have been in.
+ *
+ * `metrics` is the one check that is not about presence. A screenshot shows
+ * whether two boxes agree on where they put a glyph, and nothing else here can
+ * — so a mirror drifting out from under its caret photographed as a perfectly
+ * good note and passed every assertion available.
  */
 async function checkExpectations(window: BrowserWindow, spec: string): Promise<string[]> {
   const deadline = Date.now() + EXPECT_TIMEOUT_MS
@@ -422,6 +427,38 @@ async function checkExpectations(window: BrowserWindow, spec: string): Promise<s
         const text = document.body.innerText
         for (const needle of spec.text ?? []) {
           if (!text.includes(needle)) failed.push('text not present: ' + needle)
+        }
+        // Two elements that have to be laid out identically. Everything above
+        // asks whether something is on screen, which is blind to a box that is
+        // there and in the wrong place — and the Notes mirror is exactly that
+        // failure: it renders, it reads correctly, and the caret is a line off
+        // the glyph it is on. Computed values, so a line-height of 1.45 on a
+        // 14px note reads as 20.3px on both halves and compares equal.
+        const boxProps = ['clientWidth', 'clientHeight', 'scrollWidth', 'scrollHeight']
+        const read = (el, prop) =>
+          boxProps.includes(prop) ? String(el[prop]) : getComputedStyle(el).getPropertyValue(prop)
+        for (const pair of spec.metrics ?? []) {
+          const a = document.querySelector(pair.a)
+          const b = document.querySelector(pair.b)
+          if (!a || !b) {
+            failed.push('metrics: nothing matched ' + (a ? pair.b : pair.a))
+            continue
+          }
+          for (const prop of pair.props) {
+            const left = read(a, prop)
+            const right = read(b, prop)
+            // A misspelled property reads empty on both and would agree with
+            // itself forever, which is the false green this check exists to
+            // stop. getPropertyValue wants the CSS name, not the JS one.
+            if (left === '' && right === '') {
+              failed.push('metrics: ' + prop + ' names no CSS property or box measurement')
+            } else if (left !== right) {
+              failed.push(
+                'metrics: ' + prop + ' is ' + left + ' on ' + pair.a +
+                  ' but ' + right + ' on ' + pair.b
+              )
+            }
+          }
         }
         return failed
       })()`

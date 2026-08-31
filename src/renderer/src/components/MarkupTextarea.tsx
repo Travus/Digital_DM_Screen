@@ -12,10 +12,17 @@ import { useMarkupKeys } from './markupKeys'
  *
  * What that costs is strict agreement on metrics. Every property affecting where
  * a glyph lands must match between the two boxes: font, size, line height,
- * padding, border width, letter spacing, tab size and how lines wrap. `styles.css`
- * declares them once for `.markup-box` and both halves inherit it — do not style
- * only one of them, and do not give either a scrollbar of its own. Text that
- * disagrees by a single pixel puts the caret visibly off the character it is on.
+ * padding, border width, letter spacing, tab size and how lines wrap. Declare
+ * them on `.markup-box`, which both halves carry, and not on the caller's class:
+ * a textarea inherits no font, so anything the caller leaves unsaid comes to the
+ * mirror from the page and to the textarea from the UA sheet. That is how the
+ * two came to stack their lines at different pitches — a small error per line,
+ * and a caret a whole line off the glyph by the bottom of a long note.
+ *
+ * Neither may have a scrollbar the other lacks, for the same reason one rung
+ * out: the bar takes width from the content box, and the two then wrap in
+ * different places. The mirror is scrolled by hand, so the gutter is reserved on
+ * both rather than given to either.
  *
  * **The markers are shown only while the field is focused.** That constraint
  * binds exactly when there is a caret to keep in step, and no longer: unfocused,

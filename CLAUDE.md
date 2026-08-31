@@ -359,9 +359,22 @@ changes rather than its visibility.
 **The Notes editor is a mirror, and its metrics are load-bearing.** A styled
 `<div>` sits under a textarea whose own text is transparent. Every property
 deciding where a glyph lands has to match: font, size, line height, padding,
-border width, letter spacing, tab size, wrapping. Both halves take the caller's
-class (`.notes-area`) so those are declared once, and `styles.css` adds only the
-differences. The mirror has no scrollbar; it is dragged along by hand.
+border width, letter spacing, tab size, wrapping.
+
+**Those metrics are declared on `.markup-box`, which both halves carry — not on
+the caller's class.** A caller names what it thinks to name, and the half it is
+on is a textarea, which inherits no font: Chromium styles one with the `font`
+shorthand, so anything left unsaid reaches the mirror from the page and the
+textarea from the UA sheet. That is how `line-height` came to be 1.45 on one and
+`normal` on the other, which stacked their lines at different pitches and walked
+the caret a whole line off its glyph by the bottom of a long note. A table cell
+never showed it because `.cell-input` says `font: inherit`.
+
+**Neither half may have a scrollbar the other lacks.** The bar takes width from
+the content box, so the two then wrap in different places from the first
+overflowing line on. The mirror has none and is dragged along by hand, so
+`scrollbar-gutter: stable` reserves the space on both rather than giving it to
+either.
 
 **Those overrides are scoped under `.markup-editor` on purpose.** The caller's
 class is a plain one too, so a bare `.markup-input` ties with `.notes-area` on
@@ -803,7 +816,7 @@ paths distinct.
   also settable per step, to reach past the window being photographed
 - `settle` — extra dwell before capture
 - `expect` — **required**: a bare array of selectors that must be present, or the
-  long form taking `found`, `missing` and `text`
+  long form taking `found`, `missing`, `text` and `metrics`
 
 **The shorthand fields are sugar for `steps`, desugared in the driver.** There is
 one executor in `src/main/index.ts` and one list for it to read, so the two
@@ -855,6 +868,15 @@ before the spawn. The check runs in the renderer and is reported over stdout as
 `display: none` match is the same false green as photographing an absent feature —
 and a `display: contents` wrapper has no box either (`.bigdice-pair`), so assert
 through a child.
+
+**`metrics` asks whether two elements are laid out alike**, which the other three
+structurally cannot. Each entry is `{ a, b, props }`, and every property must
+read the same on both — a computed style by its CSS name, or `clientWidth`,
+`clientHeight`, `scrollWidth` or `scrollHeight` for the box itself. It is there
+for the Notes mirror, whose whole correctness is that it agrees with the textarea
+over it about where a glyph goes. A drifted mirror is present, visible and reads
+correctly, so `found` and `text` both pass while the caret sits a line off the
+character it is on.
 
 The capture still happens when an expectation fails. **The screenshot is the
 diagnostic, not the verdict.**
