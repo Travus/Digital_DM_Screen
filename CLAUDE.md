@@ -673,6 +673,28 @@ app-wide" and carries the reason as its value. Quit's item is built from the
 keymap like every other, so that the palette, the editor and the menu cannot
 disagree about its key.
 
+**A query made of digits and operators is the calculator, not a search.**
+`lib/dice.ts` is the one parser behind it and behind the Dice Roller, for the
+reason accelerators have one catalogue: two copies would mean the same
+expression answering differently depending on which box it was typed into. It is
+recursive descent, because precedence and brackets are what the flat list of
+signed terms it replaced could not express — `2 * 3` was not arithmetic that
+came out wrong, it was arithmetic that was refused.
+
+**`looksLikeExpression` decides which of the two the palette is doing, and it is
+deliberately looser than the parser.** `2d6+` has no answer yet and is plainly on
+its way to one, so a palette that fell back to command names there would flicker
+between two kinds of list on the way to every roll. `paletteEntries` returns
+nothing for such a query: the exact pass finds nothing, and the typo-tolerant
+pass then ranks the whole catalogue by how much of `4d6kh3` each label happens to
+contain.
+
+**Enter rerolls, and only when there are dice.** Arithmetic gives the same answer
+every time, so it carries no button and Enter promises nothing on it — which is
+what `RollResult.dice` is for, rather than leaving a caller to infer it from the
+breakdown. The answer is the Dice Roller's own `.roll` row, reused rather than
+restyled.
+
 **Quit is also the one place that rule does not hold, and the tests say so.**
 `CmdOrCtrl+Q` is on the reserved list, so `isValidBinding` rejects it and the
 menu item ends up bare — `role: 'quit'` then supplies the same key unprompted, so

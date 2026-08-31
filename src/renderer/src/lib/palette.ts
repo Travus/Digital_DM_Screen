@@ -25,6 +25,7 @@ import {
 } from '../../../shared/actions'
 import { findParent, findWindow, isPrimaryWindow, neighbourSides } from '../../../shared/layout'
 import type { LayoutDoc } from '../../../shared/types'
+import { looksLikeExpression } from './dice'
 import { searchFilter } from './search'
 
 export interface PaletteEntry {
@@ -88,6 +89,11 @@ const NO_NEIGHBOURS = { left: false, right: false, up: false, down: false }
  * A greyed row is matched by the same query as any other. Filtering it out
  * instead would put "Close panel" back to vanishing on a locked layout, one
  * search box further in.
+ *
+ * A query aimed at the calculator lists nothing. `4d6kh3` is not a command and
+ * cannot become one, so the exact pass finds nothing and the typo-tolerant one
+ * then ranks the whole catalogue by how much of `4d6kh3` each label happens to
+ * contain — a screenful of unrelated rows under an answer the user came for.
  */
 export function paletteEntries(
   keymap: ResolvedKeymap,
@@ -95,6 +101,8 @@ export function paletteEntries(
   query: string,
   platform: string
 ): PaletteEntry[] {
+  if (looksLikeExpression(query)) return []
+
   const all = ACTIONS
     // The palette does not offer the command that opens the palette. It is the
     // one row that could never do anything from in here — and unlike a locked

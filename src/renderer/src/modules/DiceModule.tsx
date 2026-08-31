@@ -1,5 +1,5 @@
 import { uid } from '../../../shared/layout'
-import { rollExpression, type RollResult } from '../lib/dice'
+import { formatTotal, rollExpression, type RollResult } from '../lib/dice'
 import { defineModule, type ModuleProps } from './types'
 
 interface HistoryEntry extends RollResult {
@@ -45,7 +45,7 @@ function Dice({ state, setState, settings }: ModuleProps<State, Settings>): JSX.
       <div className="toolbar">
         <input
           className={`input grow ${state.invalid ? 'invalid' : ''}`}
-          placeholder="2d6+3, 4d6kh3, d20…"
+          placeholder="2d6+3, 4d6kh3, (1d8+2)*2…"
           value={state.expression}
           onChange={(event) => setState({ expression: event.target.value, invalid: false })}
           onKeyDown={(event) => {
@@ -59,7 +59,8 @@ function Dice({ state, setState, settings }: ModuleProps<State, Settings>): JSX.
 
       {state.invalid && (
         <p className="note warn">
-          Couldn’t read that. Try <code>2d6+3</code>, <code>4d6dl1</code>, or <code>250d20</code>.
+          Couldn’t read that. Try <code>2d6+3</code>, <code>4d6dl1</code>, or{' '}
+          <code>(2d8 + 4) * 2</code>.
         </p>
       )}
 
@@ -80,7 +81,9 @@ function Dice({ state, setState, settings }: ModuleProps<State, Settings>): JSX.
       <div className="stack tight">
         {state.history.map((entry, index) => (
           <div key={entry.id} className={`roll ${index === 0 ? 'latest' : ''}`}>
-            <span className="roll-total">{entry.total}</span>
+            {/* Formatted rather than printed: division is the one thing here
+                that can produce a fraction, and it produces the whole of one. */}
+            <span className="roll-total">{formatTotal(entry.total)}</span>
             <div className="roll-body">
               <span className="roll-expr">
                 {entry.expression}
@@ -135,7 +138,8 @@ function DiceSettings({ settings, setSettings }: ModuleProps<State, Settings>): 
         Supports <code>NdM</code> and flat modifiers, combined freely — <code>2d6 + 1d4 - 1</code>.
         Also <code>kh</code>/<code>kl</code> to keep the highest or lowest dice and <code>dh</code>/
         <code>dl</code> to drop them: <code>4d6dl1</code> and <code>4d6kh3</code> are the same roll.
-        Up to 1000 dice at a time.
+        Arithmetic works around all of it — <code>+</code>, <code>-</code>, <code>*</code>,{' '}
+        <code>/</code> and brackets, as in <code>(1d8 + 2) * 2</code>. Up to 1000 dice at a time.
       </p>
     </div>
   )

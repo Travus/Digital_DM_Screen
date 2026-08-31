@@ -210,6 +210,22 @@ describe('filtering the palette', () => {
   it('returns nothing rather than everything for a query that matches nothing', () => {
     expect(list({}, 'zzzzzz')).toEqual([])
   })
+
+  it('lists no commands at all for a query aimed at the calculator', () => {
+    // `4d6kh3` is not a command and cannot become one, so the exact pass finds
+    // nothing and the typo-tolerant one then ranks the whole catalogue by how
+    // much of it each label happens to contain — a screenful of unrelated rows
+    // under the answer the user came for.
+    for (const query of ['4d6kh3', '12 * 8', '(120 + 30) / 4', '2d6+']) {
+      expect([query, list({}, query)]).toEqual([query, []])
+    }
+  })
+
+  it('leaves a search that merely contains a number to the commands', () => {
+    // "panel 2" is not spelt out of the grammar, so it searches as it always
+    // did rather than being taken for a half-typed sum.
+    expect(list({}, 'panel 2').length).toBeGreaterThan(0)
+  })
 })
 
 describe('reading the context off a document', () => {

@@ -8,7 +8,7 @@
  * something other than what was typed.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { randomOf, rollDie, rollExpression } from './dice'
+import { formatTotal, looksLikeExpression, randomOf, rollDie, rollExpression } from './dice'
 
 /**
  * Faces in the given order, cycling, for dice of `sides`.
@@ -153,6 +153,132 @@ describe('expressions it refuses', () => {
     // The limits themselves are allowed.
     expect(rollExpression('1000d6')).not.toBeNull()
     expect(rollExpression('1d10000')).not.toBeNull()
+  })
+})
+
+describe('arithmetic around the dice', () => {
+  it('multiplies and divides', () => {
+    expect(rollExpression('6 * 7')).toMatchObject({ total: 42, breakdown: '6 * 7' })
+    expect(rollExpression('9 / 3')).toMatchObject({ total: 3 })
+  })
+
+  it('gives multiplication precedence over addition', () => {
+    // The whole reason this is a parser and not a list of signed terms.
+    expect(rollExpression('2 + 3 * 4')?.total).toBe(14)
+    expect(rollExpression('2 * 3 + 4')?.total).toBe(10)
+  })
+
+  it('lets brackets override that', () => {
+    expect(rollExpression('(2 + 3) * 4')?.total).toBe(20)
+    expect(rollExpression('((1 + 2) * (3 + 4))')?.total).toBe(21)
+  })
+
+  it('works left to right within one precedence', () => {
+    // Right to left would make both of these something else entirely.
+    expect(rollExpression('10 - 3 - 2')?.total).toBe(5)
+    expect(rollExpression('12 / 3 / 2')?.total).toBe(2)
+  })
+
+  it('keeps a fraction rather than rounding one away', () => {
+    expect(rollExpression('7 / 2')?.total).toBe(3.5)
+    expect(rollExpression('1.5 * 4')?.total).toBe(6)
+  })
+
+  it('negates a bracket as one thing', () => {
+    expect(rollExpression('-(2 + 3)')).toMatchObject({ total: -5, breakdown: '-(2 + 3)' })
+  })
+
+  it('rolls dice inside the arithmetic, and shows them where they were', () => {
+    everyFace(4, 6)
+    expect(rollExpression('(2d6 + 2) * 2')).toMatchObject({
+      total: 20,
+      breakdown: '(2d6 [4, 4] + 2) * 2'
+    })
+  })
+
+  it('refuses a division with no answer', () => {
+    // Infinity is not a number to read out at a table, and NaN is worse.
+    expect(rollExpression('1 / 0')).toBeNull()
+    expect(rollExpression('0 / 0')).toBeNull()
+  })
+
+  it('refuses an unbalanced bracket in either direction', () => {
+    for (const input of ['(1 + 2', '1 + 2)', '()', '(']) {
+      expect([input, rollExpression(input)]).toEqual([input, null])
+    }
+  })
+
+  it('refuses an operator with nothing on the other side of it', () => {
+    for (const input of ['2 +', '2 *', '* 2', '2d6 +', '/ 3']) {
+      expect([input, rollExpression(input)]).toEqual([input, null])
+    }
+  })
+
+  it('refuses a die whose count or size is not a whole number', () => {
+    expect(rollExpression('1.5d6')).toBeNull()
+    expect(rollExpression('2d6.5')).toBeNull()
+  })
+
+  it('keeps a count against its own d', () => {
+    // `2 d6` is two things written next to each other, not one roll.
+    expect(rollExpression('2 d6')).toBeNull()
+  })
+
+  it('refuses brackets nested deeper than anyone types', () => {
+    // The parser recurses, so the alternative to a limit is a stack overflow —
+    // a crash, where every other unreadable input is a null. The palette parses
+    // on every keystroke, so a pasted line of them has to land somewhere safe.
+    expect(rollExpression('('.repeat(200) + '1' + ')'.repeat(200))).toBeNull()
+  })
+})
+
+describe('whether anything was actually rolled', () => {
+  it('says so when there are dice', () => {
+    everyFace(3, 6)
+    expect(rollExpression('2d6 + 1')?.dice).toBe(true)
+  })
+
+  it('says arithmetic rolled nothing', () => {
+    // A caller offering "roll again" needs this: rerolling `(12 + 3) * 2` is a
+    // button that redraws the same number, which reads as a button that failed.
+    expect(rollExpression('(12 + 3) * 2')?.dice).toBe(false)
+  })
+})
+
+describe('writing a total down', () => {
+  it('leaves a whole number as it is', () => {
+    expect(formatTotal(17)).toBe('17')
+    expect(formatTotal(-3)).toBe('-3')
+  })
+
+  it('trims the noise binary floating point adds to a division', () => {
+    expect(formatTotal(10 / 3)).toBe('3.3333')
+    expect(formatTotal(0.1 + 0.2)).toBe('0.3')
+  })
+})
+
+describe('telling an expression from a search', () => {
+  it('takes anything spelt out of the grammar, finished or not', () => {
+    // `2d6+` is half-typed rather than wrong, and a caller that fell back to
+    // searching there would flicker between two answers on the way to a roll.
+    for (const input of ['20', 'd20', '4d6kh3', '(12 + 3) * 2', '2d6+']) {
+      expect([input, looksLikeExpression(input)]).toEqual([input, true])
+    }
+  })
+
+  it('leaves ordinary words alone, with or without a number in them', () => {
+    for (const input of ['', '  ', 'data', 'close panel', 'panel 2', 'dl', 'save']) {
+      expect([input, looksLikeExpression(input)]).toEqual([input, false])
+    }
+  })
+
+  it('never turns away something the parser would have answered', () => {
+    // Two tests over one language, so the harmful direction is what gets pinned:
+    // an expression sent to the command list is an answer nobody gets.
+    for (const input of ['5', 'd20', '2d6+3', '4d6dl1', '(1 + 2) * 3', '7 / 2', '-1d4']) {
+      const readable = rollExpression(input) === null || looksLikeExpression(input)
+      expect([input, readable]).toEqual([input, true])
+    }
   })
 })
 
