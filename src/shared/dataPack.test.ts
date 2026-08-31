@@ -4,6 +4,8 @@
  * downstream — `resolve()`, the reference lists, the cross-reference popover —
  * assumes the shape this function guarantees.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseDataPack } from './dataPack'
 import { DATAPACK_FORMAT_VERSION } from './types'
@@ -145,6 +147,70 @@ describe('refusing a pack', () => {
       parseDataPack(pack({ abilityGroups: [{ id: 'metamagic', entries: [{ id: 'x' }] }] }))
     ).toBeNull()
   })
+
+  it('rejects a name pool with a bad id, kind or syllable list', () => {
+    expect(parseDataPack(pack({ nameStyles: [{ id: 'Dwarf' }] }))).toBeNull()
+    expect(parseDataPack(pack({ nameStyles: [{ id: 'dwarf', kind: 'creature' }] }))).toBeNull()
+    expect(parseDataPack(pack({ nameStyles: [{ id: 'dwarf', prefix: 'Thor' }] }))).toBeNull()
+    expect(parseDataPack(pack({ nameStyles: [{ id: 'dwarf', middle: [4] }] }))).toBeNull()
+    expect(parseDataPack(pack({ nameStyles: [{ id: 'dwarf', middleChance: 'often' }] }))).toBeNull()
+  })
+
+  it('rejects a flesh-out pool that is not a list of strings', () => {
+    expect(parseDataPack(pack({ traits: 'nervous' }))).toBeNull()
+    expect(parseDataPack(pack({ wants: ['a debt forgiven', 7] }))).toBeNull()
+    expect(parseDataPack(pack({ placeDetails: {} }))).toBeNull()
+    expect(parseDataPack(pack({ placeHooks: [null] }))).toBeNull()
+  })
+})
+
+describe('name pools', () => {
+  it('takes a pool that states nothing but an id and syllables', () => {
+    // What a pack extending a bundled pool looks like: the label and the kind
+    // belong to whoever declared the pool, and restating them only invites the
+    // two copies to disagree.
+    const parsed = parseDataPack(pack({ nameStyles: [{ id: 'dwarf', suffix: ['grim'] }] }))
+    expect(parsed?.pack.nameStyles?.[0]).toEqual({
+      id: 'dwarf',
+      label: undefined,
+      kind: undefined,
+      prefix: undefined,
+      middle: undefined,
+      suffix: ['grim'],
+      middleChance: undefined
+    })
+  })
+
+  it('treats a blank label as absent, so the pool it extends keeps its own', () => {
+    const parsed = parseDataPack(pack({ nameStyles: [{ id: 'dwarf', label: '   ' }] }))
+    expect(parsed?.pack.nameStyles?.[0].label).toBeUndefined()
+  })
+
+  it('clamps a middleChance outside 0–1 rather than failing the file', () => {
+    // A wrong number, not a wrong shape. Refusing here would take the pack's
+    // other four sections down with a message that cannot say which one broke.
+    expect(
+      parseDataPack(pack({ nameStyles: [{ id: 'a', middleChance: 35 }] }))?.pack.nameStyles
+    ).toEqual([expect.objectContaining({ middleChance: 1 })])
+    expect(
+      parseDataPack(pack({ nameStyles: [{ id: 'a', middleChance: -2 }] }))?.pack.nameStyles
+    ).toEqual([expect.objectContaining({ middleChance: 0 })])
+  })
+
+  it('keeps a middleChance of zero, which is not the same as absent', () => {
+    const parsed = parseDataPack(pack({ nameStyles: [{ id: 'a', middleChance: 0 }] }))
+    expect(parsed?.pack.nameStyles?.[0].middleChance).toBe(0)
+  })
+
+  it('carries the flesh-out pools through unchanged', () => {
+    const parsed = parseDataPack(
+      pack({ traits: ['counts coins'], wants: [], placeDetails: ['too clean'] })
+    )
+    expect(parsed?.pack.traits).toEqual(['counts coins'])
+    expect(parsed?.pack.wants).toEqual([])
+    expect(parsed?.pack.placeDetails).toEqual(['too clean'])
+    expect(parsed?.pack.placeHooks).toBeUndefined()
+  })
 })
 
 describe('sections this build does not know', () => {
@@ -163,5 +229,24 @@ describe('sections this build does not know', () => {
     )
     expect(parsed?.unknownSections).toEqual([])
     expect(parsed?.pack.description).toBe('Homebrew.')
+  })
+})
+
+describe('the packs kept in this repo', () => {
+  // Both are read by people rather than by the app: the example is what the
+  // documentation points at, and the fixture is what the smoke shots load. A
+  // typo in either shows up as "not a valid data pack" long after the commit
+  // that caused it, so parse them here where the failure names the file.
+  const root = join(__dirname, '..', '..')
+
+  it.each([
+    ['examples/example.dmpack.json', 'salt-marches'],
+    ['scripts/fixtures/pack.dmpack.json', 'smoke-fixture']
+  ])('parses %s', (path, id) => {
+    const parsed = parseDataPack(JSON.parse(readFileSync(join(root, path), 'utf-8')))
+    expect(parsed?.pack.id).toBe(id)
+    // An unknown section here is a misspelt one — nothing in this repo is
+    // written for a version of the format this build cannot read.
+    expect(parsed?.unknownSections).toEqual([])
   })
 })

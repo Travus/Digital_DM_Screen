@@ -5,11 +5,14 @@
  *
  * - Packs **add**. Nothing a pack contains replaces a whole source; the
  *   bundled-content switches are how you drop duplicates.
- * - **Containers extend, entries don't.** An ability group or rule section whose
- *   id matches one already loaded merges its contents in, so a pack can add a
- *   single option without restating the rest. Scalars on a container (title,
- *   blurb, note) are first-wins — a pack may fill in what's absent, never
- *   overwrite what is there.
+ * - **Containers extend, entries don't.** An ability group, rule section or name
+ *   pool whose id matches one already loaded merges its contents in, so a pack
+ *   can add a single option without restating the rest. Scalars on a container
+ *   (title, blurb, note, a pool's label and kind) are first-wins — a pack may
+ *   fill in what's absent, never overwrite what is there.
+ * - **The bundled switches gate the bundled content only.** Turning the name
+ *   pools off leaves a pack's pools standing, which is what makes replacing them
+ *   wholesale possible rather than merely turning the module off.
  * - **Condition names must be unique across every enabled source.** Names are
  *   the key the cross-reference popovers scan for, so two sources defining
  *   "Blinded" is ambiguous regardless of their ids.
@@ -24,13 +27,15 @@ import type {
   DataPack,
   DataSnapshot,
   Dataset,
+  NameStyle,
+  PackNameStyle,
   ReferenceEntry,
   RuleSection
 } from '../../../shared/types'
 import { ABILITY_GROUPS } from './abilities'
 import { CONDITIONS } from './conditions'
 import { DISEASES } from './diseases'
-import { NAME_STYLES, type NameStyle } from './names'
+import { NAME_STYLES, PLACE_DETAILS, PLACE_HOOKS, TRAITS, WANTS } from './names'
 import { RULE_SECTIONS } from './rules'
 
 export const BUNDLED_SOURCE_ID = 'bundled'
@@ -65,6 +70,15 @@ export interface GameData {
   abilityGroups: AbilityGroup[]
   diseases: ReferenceEntry[]
   nameStyles: NameStyle[]
+  /**
+   * The flesh-out lines, which belong to no one pool. Resolved here rather than
+   * imported by the module, so the bundled switch and a pack reach them by the
+   * same route everything else in this file takes.
+   */
+  traits: string[]
+  wants: string[]
+  placeDetails: string[]
+  placeHooks: string[]
   conditionIndex: ConditionIndex
   /** Derived once — the initiative tracker renders this per combatant row. */
   conditionNames: string[]
@@ -202,6 +216,105 @@ function collectRuleSections(
   return sections
 }
 
+/**
+ * A pool creating itself without one gets no `middleChance` from anywhere, and
+ * middles it can never insert are worse than no middles at all. The bundled
+ * pools all state their own; this is only ever a pack's default.
+ */
+const DEFAULT_MIDDLE_CHANCE = 0.35
+
+/**
+ * Trimmed, blanks dropped, repeats collapsed, in the order the sources arrived.
+ *
+ * A pool is drawn from uniformly, so a pack that restates what it is extending
+ * would quietly double the odds of every syllable it copied — which shows up in
+ * the output as nothing at all, and cannot be debugged from it.
+ */
+function pooled(...chunks: (string[] | undefined)[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const chunk of chunks) {
+    for (const value of chunk ?? []) {
+      const trimmed = value.trim()
+      if (trimmed === '' || seen.has(trimmed)) continue
+      seen.add(trimmed)
+      out.push(trimmed)
+    }
+  }
+  return out
+}
+
+/**
+ * Name pools merge the way ability groups do: the first source to use an id
+ * creates the pool and settles what it is called and how it is built, and every
+ * later source adds syllables to it. That is what lets a pack add six dwarven
+ * endings without restating the pool, and it is why pool ids are not namespaced.
+ *
+ * The one contradiction worth reporting is `kind`. A pack meaning to declare a
+ * place and landing on a person pool gets quirks and motives where it wanted
+ * details and hooks, which reads as the flesh-out button being broken.
+ */
+function collectNameStyles(
+  chunks: { sourceId: string; styles: PackNameStyle[] }[],
+  warnings: string[]
+): NameStyle[] {
+  const byId = new Map<string, NameStyle>()
+  const order: string[] = []
+
+  for (const { sourceId, styles } of chunks) {
+    for (const style of styles) {
+      const existing = byId.get(style.id)
+      if (!existing) {
+        byId.set(style.id, {
+          id: style.id,
+          label: style.label ?? '',
+          kind: style.kind ?? 'person',
+          prefix: pooled(style.prefix),
+          middle: pooled(style.middle),
+          suffix: pooled(style.suffix),
+          middleChance: style.middleChance ?? DEFAULT_MIDDLE_CHANCE
+        })
+        order.push(style.id)
+        continue
+      }
+
+      if (style.kind && style.kind !== existing.kind) {
+        warnings.push(`${sourceId}: name pool "${style.id}" is already a ${existing.kind} pool`)
+      }
+
+      // Extend: first source to name the pool keeps its label and its shape.
+      existing.label ||= style.label ?? ''
+      existing.prefix = pooled(existing.prefix, style.prefix)
+      existing.middle = pooled(existing.middle, style.middle)
+      existing.suffix = pooled(existing.suffix, style.suffix)
+    }
+  }
+
+  const usable: NameStyle[] = []
+  for (const id of order) {
+    const pool = byId.get(id) as NameStyle
+
+    // Nothing to build a name out of. Every draw would come back empty, so the
+    // panel would offer the pool and then fill with blank chips — dropped rather
+    // than shown broken, which is the one thing the module cannot report itself.
+    if (pool.prefix.length === 0 && pool.suffix.length === 0) {
+      warnings.push(`name pool "${pool.id}" has no prefix or suffix syllables`)
+      continue
+    }
+
+    // An ability group with no title is still a tab you can see and click. An
+    // unlabelled pool is a `<select>` row with nothing in it, so it falls back
+    // to the id — which is at least something the pack's author wrote.
+    if (!pool.label) {
+      warnings.push(`name pool "${pool.id}" has no label`)
+      pool.label = pool.id
+    }
+    usable.push(pool)
+  }
+  return usable
+}
+
 /** Names are the popover key, so a clash matters even across different ids. */
 function warnOnDuplicateNames(conditions: ReferenceEntry[], warnings: string[]): void {
   const seen = new Set<string>()
@@ -262,13 +375,29 @@ export function resolve(snapshot: DataSnapshot): GameData {
     warnings
   )
 
+  const nameStyles = collectNameStyles(
+    [
+      { sourceId: BUNDLED_SOURCE_ID, styles: bundledFor(enabled, 'names', NAME_STYLES) },
+      ...packs.map((pack) => ({ sourceId: source(pack), styles: pack.nameStyles ?? [] }))
+    ],
+    warnings
+  )
+
+  // The switch gates the bundled lists and nothing else, so turning it off makes
+  // room for a pack's pools rather than emptying the module.
+  const lines = (bundled: string[], from: (pack: DataPack) => string[] | undefined): string[] =>
+    pooled(bundledFor(enabled, 'names', bundled), ...packs.map(from))
+
   return {
     conditions,
     rules,
     abilityGroups,
     diseases,
-    // Packs cannot carry name pools yet; the switch still gates the built-in ones.
-    nameStyles: bundledFor(enabled, 'names', NAME_STYLES),
+    nameStyles,
+    traits: lines(TRAITS, (pack) => pack.traits),
+    wants: lines(WANTS, (pack) => pack.wants),
+    placeDetails: lines(PLACE_DETAILS, (pack) => pack.placeDetails),
+    placeHooks: lines(PLACE_HOOKS, (pack) => pack.placeHooks),
     conditionIndex: buildConditionIndex(conditions),
     conditionNames: conditions.map((condition) => condition.name),
     warnings

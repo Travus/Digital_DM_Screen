@@ -1,7 +1,7 @@
 import { uid } from '../../../shared/layout'
+import type { NameStyle } from '../../../shared/types'
 import { randomOf } from '../lib/dice'
-import { PLACE_DETAILS, PLACE_HOOKS, TRAITS, WANTS, type NameStyle } from '../data/names'
-import { useDataStore } from '../state/dataStore'
+import { NO_NAMES_HINT, useDataStore } from '../state/dataStore'
 import { defineModule, type ModuleProps } from './types'
 
 /** A kept entry: a bare name has no lines, a fleshed-out one has two. */
@@ -50,14 +50,24 @@ function generate(styleId: string, count: number): string[] {
   return [...names]
 }
 
-/** People get a quirk and a motive; places get a detail and a hook. */
+/**
+ * People get a quirk and a motive; places get a detail and a hook.
+ *
+ * Filtered, because either pool can now be empty: a pack may carry syllables and
+ * no flesh-out lines, and `randomOf` on an empty list has nothing to hand back.
+ * A card with a name and no lines under it is honest; two blank rows are not.
+ */
 function detailsFor(styleId: string): string[] {
   const style = styleFor(styleId)
   if (!style) return []
 
-  return style.kind === 'place'
-    ? [randomOf(PLACE_DETAILS), randomOf(PLACE_HOOKS)]
-    : [randomOf(TRAITS), randomOf(WANTS)]
+  const { traits, wants, placeDetails, placeHooks } = useDataStore.getState()
+  const picks =
+    style.kind === 'place'
+      ? [randomOf(placeDetails), randomOf(placeHooks)]
+      : [randomOf(traits), randomOf(wants)]
+
+  return picks.filter((line): line is string => Boolean(line))
 }
 
 function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX.Element {
@@ -65,11 +75,7 @@ function Names({ state, setState, settings }: ModuleProps<State, Settings>): JSX
   const style = nameStyles.find((entry) => entry.id === state.styleId) ?? nameStyles[0]
 
   if (!style) {
-    return (
-      <p className="empty">
-        No name pools are loaded. Switch Bundled Name Pools back on in the Data menu.
-      </p>
-    )
+    return <p className="empty">No name pools are loaded. {NO_NAMES_HINT}</p>
   }
 
   const isPlace = style.kind === 'place'

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "id": "salt-marches",
   "name": "The Salt Marches",
-  "description": "An example data pack. Every entry is invented for this file, and shows one of the four kinds of content a pack can carry.",
+  "description": "An example data pack. Every entry is invented for this file, and shows one of the kinds of content a pack can carry.",
   "conditions": [
     {
       "id": "waterlogged",
@@ -73,6 +73,29 @@
       ]
     }
   ],
+  "nameStyles": [
+    {
+      "id": "marshfolk",
+      "label": "Marshfolk",
+      "kind": "person",
+      "middleChance": 0.4,
+      "prefix": ["Bry", "Cass", "Del", "Fen", "Har", "Loe", "Mer", "Sel", "Tarr", "Vess"],
+      "middle": ["an", "el", "ow", "ir", "ust"],
+      "suffix": ["by", "mere", "reed", "silt", "tide", "wick", "marsh", "fen"]
+    },
+    {
+      "id": "human",
+      "prefix": ["Ash", "Brack", "Quill"],
+      "suffix": ["stow", "hythe"]
+    }
+  ],
+  "traits": [
+    "salt-stained to the elbow, whatever the weather",
+    "counts the tide before answering anything"
+  ],
+  "wants": ["wants a berth on the next boat out"],
+  "placeDetails": ["the floor is a foot above the waterline, and it shows"],
+  "placeHooks": ["the harbourmaster drinks here and never pays"],
   "rules": [
     {
       "id": "sailing",

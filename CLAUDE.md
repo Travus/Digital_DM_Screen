@@ -701,10 +701,10 @@ Shipped reference data is **SRD only** — that is what makes the repo licensabl
   collects problems into `warnings` and never throws. The only UI for removing a
   bad pack is the native menu, so a renderer that died on load would leave no way
   out.
-- **Containers extend, entries don't.** An `AbilityGroup` or `RuleSection` whose
-  id matches one already loaded merges its contents in — that is how a pack adds
-  one manoeuvre without restating twenty-two. So **container ids are never
-  namespaced**, and `defaultState()` names them by literal.
+- **Containers extend, entries don't.** An `AbilityGroup`, `RuleSection` or
+  `NameStyle` whose id matches one already loaded merges its contents in — that
+  is how a pack adds one manoeuvre without restating twenty-two. So **container
+  ids are never namespaced**, and `defaultState()` names them by literal.
 - **Entry ids are namespaced `source:id`.** Two sources defining `mm-careful`
   would otherwise share a favourites key and a React key. `migrateIds()` reads
   pre-namespace state as `bundled:`.
@@ -712,6 +712,11 @@ Shipped reference data is **SRD only** — that is what makes the repo licensabl
   popover scans prose for and what the initiative tracker persists.
 - **The snapshot crosses to the renderer synchronously**, via the one `sendSync`
   channel in an otherwise all-`handle` bridge.
+- **A bundled switch gates the bundled content and nothing else.** Turning the
+  name pools off used to empty the Name Generator, because packs could not carry
+  pools and `bundledFor` was the whole of the answer. Now it leaves a pack's
+  pools standing, which is what makes replacing the shipped ones possible rather
+  than only turning the module off.
 - **Data lives in `dataStore`, not `useAppStore`** — everything in the latter
   funnels through `mutate()`, which sets `dirty`. Loading a pack must not mark a
   layout unsaved.
@@ -726,6 +731,22 @@ at 60 s, not fail quietly.
 **Distinguish "hidden" from "not loaded".** Both leave a reference module empty,
 but "re-enable it in this panel's settings" is wrong when the cause is a switch in
 the Data menu. Every reference module checks the unfiltered set first.
+
+**A name pool is a container whose contents have no ids.** Syllables are bare
+strings, so there is nothing to namespace and no other way a second source could
+add to a pool — which is what settles `NameStyle` as a container rather than an
+entry. `label`, `kind` and `middleChance` belong to whichever source declared the
+pool; a later one stating a different `kind` is warned about rather than ignored,
+because getting quirks where you wrote hooks reads as the flesh-out button being
+broken. Syllables and flesh-out lines are deduplicated across sources: a pool is
+drawn from uniformly, so a pack restating what it extends would double the odds of
+everything it copied, which shows up in the output as nothing at all.
+
+**A pool with no prefix and no suffix is dropped, not shown.** Every draw from it
+comes back empty, and the module cannot tell a blank chip from a pool that rolled
+badly. An unlabelled pool falls back to its id instead — an untitled ability tab
+is still a tab you can click, but an `<option>` with no text is a row you cannot
+see. Both warn.
 
 ## Rules data
 
