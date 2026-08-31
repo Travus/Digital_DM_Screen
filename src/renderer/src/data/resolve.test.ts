@@ -8,7 +8,13 @@
  * the bundled data say so.
  */
 import { describe, expect, it } from 'vitest'
-import type { AbilityGroup, DataPack, DataSnapshot, ReferenceEntry } from '../../../shared/types'
+import type {
+  AbilityGroup,
+  DataPack,
+  DataSnapshot,
+  PackNameStyle,
+  ReferenceEntry
+} from '../../../shared/types'
 import { BUNDLED_SOURCE_ID, buildPattern, migrateIds, resolve } from './resolve'
 
 const ALL_OFF = {
@@ -54,6 +60,15 @@ const group = (id: string, over: Partial<AbilityGroup> = {}): AbilityGroup => ({
   title: id,
   blurb: '',
   entries: [],
+  ...over
+})
+
+/** Enough of a pool to survive the usability check: one syllable to build from. */
+const pool = (id: string, over: Partial<PackNameStyle> = {}): PackNameStyle => ({
+  id,
+  label: id,
+  kind: 'person',
+  prefix: ['Aa'],
   ...over
 })
 
@@ -199,6 +214,137 @@ describe('extending containers', () => {
   })
 })
 
+describe('extending name pools', () => {
+  it('adds a pack’s syllables to a pool it already has, rather than declaring a rival', () => {
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', { nameStyles: [pool('dwarf', { label: 'Dwarf', suffix: ['grim'] })] }),
+          pack('beta', { nameStyles: [{ id: 'dwarf', prefix: ['Bal'], suffix: ['in'] }] })
+        ]
+      })
+    )
+
+    expect(data.nameStyles).toHaveLength(1)
+    expect(data.nameStyles[0]).toMatchObject({
+      id: 'dwarf',
+      label: 'Dwarf',
+      prefix: ['Aa', 'Bal'],
+      suffix: ['grim', 'in']
+    })
+  })
+
+  it('keeps the label, kind and middleChance of whichever source declared the pool', () => {
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', {
+            nameStyles: [pool('tavern', { label: 'Tavern', kind: 'place', middleChance: 0.1 })]
+          }),
+          pack('beta', {
+            nameStyles: [{ id: 'tavern', label: 'Inn', kind: 'place', middleChance: 0.9 }]
+          })
+        ]
+      })
+    )
+    expect(data.nameStyles[0]).toMatchObject({ label: 'Tavern', kind: 'place', middleChance: 0.1 })
+  })
+
+  it('fills in a label the declaring source left out', () => {
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', { nameStyles: [{ id: 'dwarf', prefix: ['Bal'] }] }),
+          pack('beta', { nameStyles: [{ id: 'dwarf', label: 'Dwarf' }] })
+        ]
+      })
+    )
+    // First-wins means the first source to *say* something, not the first to
+    // exist — a pack may fill in what is absent, never overwrite what is there.
+    expect(data.nameStyles[0].label).toBe('Dwarf')
+    expect(data.warnings).toEqual([])
+  })
+
+  it('reports a pack extending a pool of the other kind', () => {
+    // Silently ignored, the pack gets quirks and motives where it wrote details
+    // and hooks, which reads as the flesh-out button being broken.
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', { nameStyles: [pool('shop', { kind: 'place' })] }),
+          pack('beta', { nameStyles: [{ id: 'shop', kind: 'person', prefix: ['Bo'] }] })
+        ]
+      })
+    )
+    expect(data.nameStyles[0].kind).toBe('place')
+    expect(data.warnings).toEqual(['beta: name pool "shop" is already a place pool'])
+  })
+
+  it('collapses a syllable two sources both list', () => {
+    // A pool is drawn from uniformly, so a pack restating what it extends would
+    // double the odds of every syllable it copied — invisible in the output.
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', { nameStyles: [pool('elf', { prefix: ['Ael', 'Cael'] })] }),
+          pack('beta', { nameStyles: [{ id: 'elf', prefix: ['Cael', 'Myr'] }] })
+        ]
+      })
+    )
+    expect(data.nameStyles[0].prefix).toEqual(['Ael', 'Cael', 'Myr'])
+  })
+
+  it('drops a pool nothing can be built from, and says so', () => {
+    const data = resolve(
+      snapshot({ packs: [pack('alpha', { nameStyles: [{ id: 'empty', middle: ['an'] }] })] })
+    )
+    // Offering it would fill the panel with blank chips, which the module has no
+    // way to tell from a pool that simply rolled badly.
+    expect(data.nameStyles).toEqual([])
+    expect(data.warnings).toEqual(['name pool "empty" has no prefix or suffix syllables'])
+  })
+
+  it('falls back to the id for a pool nobody labelled', () => {
+    const data = resolve(
+      snapshot({ packs: [pack('alpha', { nameStyles: [{ id: 'dwarf', prefix: ['Bal'] }] })] })
+    )
+    // An unlabelled tab is still a tab you can click; an unlabelled `<option>`
+    // is a row with nothing in it.
+    expect(data.nameStyles[0].label).toBe('dwarf')
+    expect(data.warnings).toEqual(['name pool "dwarf" has no label'])
+  })
+})
+
+describe('the flesh-out pools', () => {
+  it('appends every source’s lines, blanks dropped and repeats collapsed', () => {
+    const data = resolve(
+      snapshot({
+        packs: [
+          pack('alpha', { traits: ['hums while thinking', '  ', 'never sits down'] }),
+          pack('beta', { traits: ['never sits down', 'writes everything down'] })
+        ]
+      })
+    )
+    expect(data.traits).toEqual([
+      'hums while thinking',
+      'never sits down',
+      'writes everything down'
+    ])
+  })
+
+  it('keeps the four pools apart', () => {
+    const data = resolve(
+      snapshot({
+        packs: [pack('alpha', { wants: ['passage out'], placeHooks: ['the cellar is not stock'] })]
+      })
+    )
+    expect(data.wants).toEqual(['passage out'])
+    expect(data.placeHooks).toEqual(['the cellar is not stock'])
+    expect(data.traits).toEqual([])
+    expect(data.placeDetails).toEqual([])
+  })
+})
+
 describe('conditions colliding on name', () => {
   it('warns when two sources define the same name under different ids', () => {
     // The name is what the popover scans prose for and what the initiative
@@ -233,6 +379,21 @@ describe('the bundled content switches', () => {
     expect(on.conditions.length).toBeGreaterThan(1)
     expect(off.nameStyles).toEqual([])
     expect(on.nameStyles.length).toBeGreaterThan(0)
+  })
+
+  it('leaves a pack’s name pools standing when the bundled ones go', () => {
+    // The point of the switch: a pack can replace the shipped pools rather than
+    // only ever adding to them, which before this meant emptying the module.
+    const packed = pack('alpha', {
+      nameStyles: [pool('orc', { label: 'Orc', suffix: ['rok'] })],
+      traits: ['sharpens something the whole conversation']
+    })
+    const off = resolve(snapshot({ packs: [packed], enabled: ALL_OFF }))
+
+    expect(off.nameStyles.map((style) => style.id)).toEqual(['orc'])
+    expect(off.traits).toEqual(['sharpens something the whole conversation'])
+    // Nothing supplied these, and an empty list is the honest answer.
+    expect(off.placeHooks).toEqual([])
   })
 })
 

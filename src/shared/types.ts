@@ -259,6 +259,46 @@ export type Dataset = 'conditions' | 'rules' | 'abilities' | 'diseases' | 'names
 export const DATASETS: Dataset[] = ['conditions', 'rules', 'abilities', 'diseases', 'names']
 
 /**
+ * A syllable pool the name generator draws from, as `resolve` settles it: every
+ * field decided, so the module never has to guess.
+ *
+ * A pool is a **container**, like an ability group. Its contents are bare
+ * strings with no ids of their own, so there is nothing to namespace and no
+ * other way a second source could add to one — an id already loaded therefore
+ * extends that pool rather than declaring a rival.
+ */
+export interface NameStyle {
+  id: string
+  label: string
+  /**
+   * People get a personality and a motive when fleshed out; places get a detail
+   * and a hook. Mixing the two produced shops that "speak in questions".
+   */
+  kind: 'person' | 'place'
+  /** Combined as prefix + optional middle + suffix. */
+  prefix: string[]
+  middle: string[]
+  suffix: string[]
+  /** Chance of inserting a middle syllable. */
+  middleChance: number
+}
+
+/**
+ * A pool as a pack writes it. Only the id is required: a pack extending a pool
+ * already loaded has no reason to restate what it is called or how it is built,
+ * and stating it would only invite the two copies to disagree.
+ */
+export interface PackNameStyle {
+  id: string
+  label?: string
+  kind?: 'person' | 'place'
+  prefix?: string[]
+  middle?: string[]
+  suffix?: string[]
+  middleChance?: number
+}
+
+/**
  * A pack adds content on top of whatever is already loaded; it never replaces a
  * source wholesale. Every section is optional.
  *
@@ -275,6 +315,16 @@ export interface DataPack {
   rules?: RuleSection[]
   abilityGroups?: AbilityGroup[]
   diseases?: ReferenceEntry[]
+  nameStyles?: PackNameStyle[]
+  /**
+   * The flesh-out lines, which belong to no one pool: a person gets a trait and
+   * a want, a place a detail and a hook. Flat lists with no ids, so they only
+   * ever append.
+   */
+  traits?: string[]
+  wants?: string[]
+  placeDetails?: string[]
+  placeHooks?: string[]
 }
 
 /** A pack as recorded in the index: where it lives, and what it turned out to be. */

@@ -1291,6 +1291,33 @@ const shots = [
     // present is as load-bearing as the new tab.
     expect: { found: ['.tabs .tab', '.card'], text: ['Fixture Tricks', 'Metamagic'] }
   },
+  // A pack's name pools, with the bundled ones switched off. Before this the
+  // switch was an off switch for the whole module — the panel said it had
+  // nothing to draw from whatever else was loaded.
+  //
+  // The fixture pool is one prefix and one suffix with no middle, so the chip
+  // reads `Fixturefolk` every run and the flesh-out lines are the pack's only
+  // ones. Nothing here is random, which is what lets `text` assert on it.
+  {
+    name: 'pack-names',
+    layout: null,
+    data: {
+      refs: [{ id: 'smoke-fixture', name: 'Smoke Fixture', path: fixturePack }],
+      enabled: { names: false }
+    },
+    click: [
+      '.picker-card[data-module-id="names"]',
+      '.toolbar .btn.primary',
+      '.chip-pair .chip.flesh'
+    ].join('\n'),
+    expect: {
+      found: ['.chip.action', '.npc-card', '.npc-line'],
+      // The empty state is the regression: a pool loaded from a pack has to
+      // reach the panel, not merely survive the merge.
+      missing: ['.empty'],
+      text: ['Fixturefolk', 'invented for the smoke check', 'wants this shot to pass']
+    }
+  },
   // A pack whose file has moved. The app must still render, and say so.
   {
     name: 'pack-broken',

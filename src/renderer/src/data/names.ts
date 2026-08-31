@@ -1,20 +1,13 @@
-/** Syllable pools for the improv name generator. */
+/**
+ * Syllable pools for the improv name generator, and the lines it fleshes an
+ * entry out with. The bundled half of what `resolve` hands the module — a data
+ * pack supplies pools in the same shape, and extends these by id.
+ *
+ * `NameStyle` lives in `shared/types.ts` with the other things a pack can carry,
+ * because the pack parser has to know it too.
+ */
 
-export interface NameStyle {
-  id: string
-  label: string
-  /**
-   * People get a personality and a motive when fleshed out; places get a
-   * detail and a hook. Mixing the two produced shops that "speak in questions".
-   */
-  kind: 'person' | 'place'
-  /** Combined as prefix + optional middle + suffix. */
-  prefix: string[]
-  middle: string[]
-  suffix: string[]
-  /** Chance of inserting a middle syllable. */
-  middleChance: number
-}
+import type { NameStyle } from '../../../shared/types'
 
 export const NAME_STYLES: NameStyle[] = [
   {

@@ -38,6 +38,14 @@ function fromSnapshot(snapshot: DataSnapshot): Omit<DataState, 'apply'> {
 export const NO_DATA_HINT =
   'Switch Bundled SRD Content back on in the Data menu, or import a data pack.'
 
+/**
+ * The same message for the name generator, which answers to its own switch.
+ * Naming both causes in one line is what keeps it right either way: the pools
+ * can be off, or nothing loaded may carry any.
+ */
+export const NO_NAMES_HINT =
+  'Switch Bundled Name Pools back on in the Data menu, or import a data pack that carries some.'
+
 export const useDataStore = create<DataState>((set) => ({
   ...fromSnapshot(window.dmscreen.initialData),
   apply: (snapshot) => set(fromSnapshot(snapshot))

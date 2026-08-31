@@ -3,22 +3,36 @@
  * about the shape, permissive about extras, and returning null rather than
  * throwing so the caller decides what a bad file means.
  *
- * Unknown top-level sections are *kept* rather than rejected. That is what lets
- * a later version add `nameStyles` without a format bump — an older app warns
- * and ignores it instead of refusing the file.
+ * Unknown top-level sections are *kept* rather than rejected. That is how a
+ * later version adds a section without a format bump — an older app warns and
+ * ignores it rather than refusing the file, which is the route `nameStyles` and
+ * the flesh-out lines took in.
  */
 
 import {
   DATAPACK_FORMAT_VERSION,
   type AbilityGroup,
   type DataPack,
+  type PackNameStyle,
   type ReferenceEntry,
   type RuleItem,
   type RuleSection,
   type RuleTable
 } from './types'
 
-const KNOWN_SECTIONS = ['conditions', 'rules', 'abilityGroups', 'diseases']
+/** The four flat pools the name generator fleshes an entry out from. */
+export const FLESH_OUT_SECTIONS = ['traits', 'wants', 'placeDetails', 'placeHooks'] as const
+
+export type FleshOutSection = (typeof FLESH_OUT_SECTIONS)[number]
+
+const KNOWN_SECTIONS: string[] = [
+  'conditions',
+  'rules',
+  'abilityGroups',
+  'diseases',
+  'nameStyles',
+  ...FLESH_OUT_SECTIONS
+]
 
 /** Ids are namespaced per pack, so this only has to be a sane identifier. */
 const ID = /^[a-z0-9][a-z0-9-]*$/
@@ -68,6 +82,38 @@ function parseAbilityGroup(value: unknown): AbilityGroup | null {
     title: typeof value.title === 'string' ? value.title : '',
     blurb: typeof value.blurb === 'string' ? value.blurb : '',
     entries
+  }
+}
+
+/**
+ * Only the id is required. Every other field belongs to whichever source
+ * declares the pool first, so a pack extending one states nothing but syllables
+ * — and one creating a pool is checked at merge time, where we know whether
+ * anything else supplied what it left out.
+ */
+function parseNameStyle(value: unknown): PackNameStyle | null {
+  if (!isRecord(value)) return null
+  if (typeof value.id !== 'string' || !ID.test(value.id)) return null
+  if (value.kind !== undefined && value.kind !== 'person' && value.kind !== 'place') return null
+  if (value.prefix !== undefined && !isStringArray(value.prefix)) return null
+  if (value.middle !== undefined && !isStringArray(value.middle)) return null
+  if (value.suffix !== undefined && !isStringArray(value.suffix)) return null
+  if (value.middleChance !== undefined && !Number.isFinite(value.middleChance)) return null
+
+  return {
+    id: value.id,
+    label: typeof value.label === 'string' && value.label.trim() !== '' ? value.label : undefined,
+    kind: value.kind,
+    prefix: value.prefix,
+    middle: value.middle,
+    suffix: value.suffix,
+    // Clamped rather than refused. A chance outside 0–1 is a wrong number, not a
+    // wrong shape, and failing the whole file over it would take four working
+    // sections down with a message that could not say which one was at fault.
+    middleChance:
+      value.middleChance === undefined
+        ? undefined
+        : Math.min(1, Math.max(0, value.middleChance as number))
   }
 }
 
@@ -158,8 +204,30 @@ export function parseDataPack(value: unknown): ParsedPack | null {
   const diseases = parseList(value.diseases, parseEntry)
   const abilityGroups = parseList(value.abilityGroups, parseAbilityGroup)
   const rules = parseList(value.rules, parseRuleSection)
-  if (conditions === null || diseases === null || abilityGroups === null || rules === null) {
+  const nameStyles = parseList(value.nameStyles, parseNameStyle)
+  if (
+    conditions === null ||
+    diseases === null ||
+    abilityGroups === null ||
+    rules === null ||
+    nameStyles === null
+  ) {
     return null
+  }
+
+  // The flesh-out lines are bare strings, so there is nothing to parse past the
+  // shape of the list itself.
+  const lines: Record<FleshOutSection, string[] | undefined> = {
+    traits: undefined,
+    wants: undefined,
+    placeDetails: undefined,
+    placeHooks: undefined
+  }
+  for (const section of FLESH_OUT_SECTIONS) {
+    const raw = value[section]
+    if (raw === undefined) continue
+    if (!isStringArray(raw)) return null
+    lines[section] = raw
   }
 
   const unknownSections = Object.keys(value).filter(
@@ -177,7 +245,9 @@ export function parseDataPack(value: unknown): ParsedPack | null {
       conditions,
       rules,
       abilityGroups,
-      diseases
+      diseases,
+      nameStyles,
+      ...lines
     },
     unknownSections
   }

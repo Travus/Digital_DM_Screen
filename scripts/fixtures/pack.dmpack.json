@@ -3,6 +3,18 @@
   "id": "smoke-fixture",
   "name": "Smoke Fixture",
   "description": "Invented content used by the headless render check. Exercises both pack behaviours: extending a group the app already ships, and creating one it does not.",
+  "nameStyles": [
+    {
+      "id": "fixture-folk",
+      "label": "Fixture Folk",
+      "kind": "person",
+      "prefix": ["Fixture"],
+      "suffix": ["folk"],
+      "middleChance": 0
+    }
+  ],
+  "traits": ["invented for the smoke check"],
+  "wants": ["wants this shot to pass"],
   "conditions": [
     {
       "id": "becalmed",

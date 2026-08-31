@@ -54,7 +54,7 @@ Some ready-made layouts live in [`examples/`](examples/), but you are encouraged
 
 ## Data packs
 
-The reference modules ship SRD content only, so Player Abilities has Metamagic and Channel Divinity and nothing else out of the box. A data pack is a JSON file that adds your own conditions, diseases, ability tabs and rules sections on top, loaded from **Data → Import Data Pack…** (`Cmd/Ctrl+Shift+D`). The same menu turns the bundled SRD content off, so a pack can replace it entirely rather than sit beside it.
+The reference modules ship SRD content only, so Player Abilities has Metamagic and Channel Divinity and nothing else out of the box. A data pack is a JSON file that adds your own conditions, diseases, ability tabs, rules sections and name generator pools on top, loaded from **Data → Import Data Pack…** (`Cmd/Ctrl+Shift+D`). The same menu turns the bundled content off — SRD and name pools on separate switches — so a pack can replace either entirely rather than sit beside it.
 
 See [docs/data-packs.md](docs/data-packs.md) for the file format and a worked example.
 
