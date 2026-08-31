@@ -58,6 +58,29 @@ const fixtureMap = join(root, 'scripts', 'fixtures', 'map.png')
 /** Named like an image, and not one. The half a path check cannot see. */
 const fixtureBrokenMap = join(root, 'scripts', 'fixtures', 'broken.png')
 
+/**
+ * A note long enough for the Notes mirror to drift out from under its caret.
+ *
+ * The bug it pins was a per-line error of a couple of pixels, so a one-line note
+ * showed nothing and every notes shot here was one. Numbered lines are what make
+ * a screenshot of it readable — the selection is the textarea's and the text is
+ * the mirror's, so a drift shows up as a highlight sitting on the wrong number.
+ * The long lines are there to make each highlight wide enough to see.
+ */
+const driftingNote = Array.from({ length: 16 }, (_, index) => {
+  const line = `Line ${index + 1}`
+  return index % 5 === 4 ? `${line} — long, so the highlight on it is easy to see.` : line
+}).join('\n')
+
+/**
+ * One paragraph, no newlines, wider and taller than the panel.
+ *
+ * The other half of the same disagreement: with no gutter reserved, the textarea
+ * scrolls and loses 10px to the bar while the mirror keeps them, and the two
+ * wrap in different places from the first overflowing line on.
+ */
+const wrappingNote = 'A long unbroken sentence that has to wrap inside the panel. '.repeat(24)
+
 const shots = [
   {
     name: 'starter',
@@ -1291,6 +1314,76 @@ const shots = [
       text: ['duke', 'lying']
     }
   },
+  /*
+   * The mirror and the textarea over it, measured against each other.
+   *
+   * This is the one thing the other assertions structurally cannot see. A mirror
+   * that has drifted is present, visible and reads perfectly, so `found` and
+   * `text` pass while the caret sits a line away from the glyph it is on — which
+   * is exactly how a textarea taking `line-height: normal` from the UA sheet,
+   * under a mirror inheriting 1.45 from `body`, went unnoticed.
+   *
+   * Fullscreen so the whole note is on screen, and selected so the screenshot
+   * carries the evidence too: the highlights are the textarea's idea of where
+   * the lines are and the numbers are the mirror's, so any drift is a bar on the
+   * wrong row. `props` is every property that decides where a glyph lands.
+   */
+  {
+    name: 'notes-mirror-metrics',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'notes'
+      doc.panels.panel_ref.state = { text: driftingNote }
+    },
+    steps: [
+      { click: '.panel:has(.notes-area) .icon-btn[title^="Fullscreen"]' },
+      { select: { selector: '.markup-input', start: 0, end: driftingNote.length } }
+    ],
+    // Past the fullscreen hint's own timer, so it is not sitting over the note.
+    settle: 5000,
+    expect: {
+      found: ['.app.has-maximized', '.markup-mirror', '.markup-input'],
+      text: ['Line 16'],
+      metrics: [
+        {
+          a: '.markup-mirror',
+          b: '.markup-input',
+          props: [
+            'font-size',
+            'line-height',
+            'font-family',
+            'font-weight',
+            'letter-spacing',
+            'tab-size',
+            'white-space',
+            'overflow-wrap',
+            'padding-top',
+            'padding-left',
+            'border-top-width',
+            'border-left-width'
+          ]
+        }
+      ]
+    }
+  },
+  // The same agreement, at the width rather than the pitch. A note that overflows
+  // puts a scrollbar on the textarea and none on the mirror, which is 10px off
+  // the content box of one of them and a different wrap point on every line that
+  // follows. `clientWidth` is the whole assertion — the two boxes wrap the same
+  // text, so equal widths is equal wrapping.
+  {
+    name: 'notes-mirror-wrapping',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'notes'
+      doc.panels.panel_ref.state = { text: wrappingNote }
+    },
+    click: '.markup-input',
+    expect: {
+      found: ['.markup-mirror', '.markup-input'],
+      metrics: [{ a: '.markup-mirror', b: '.markup-input', props: ['clientWidth', 'line-height'] }]
+    }
+  },
   // Tab out of the last cell of the last row. The table has to grow — a key that
   // does nothing at the one place a table is always extended from reads as
   // broken — and the caret has to land in the row that did not exist when the
@@ -1527,16 +1620,35 @@ async function seedSession(shot) {
 
 /**
  * A shot's `expect` is either a bare list of selectors — the common case, "these
- * must be on screen" — or an object with `found`, `missing` and `text`.
+ * must be on screen" — or an object with `found`, `missing`, `text` and
+ * `metrics`.
  *
  * Every shot must declare one. A shot with nothing to assert is a shot that
  * cannot fail, and this harness spent a long time full of those: an absent
  * feature photographs exactly as cleanly as a present one.
+ *
+ * `metrics` is the odd one out, and asks the question the other three cannot:
+ * whether two elements are laid out alike. Each entry is `{ a, b, props }`, and
+ * every property must read the same on both — a computed style by its CSS name,
+ * or one of `clientWidth`, `clientHeight`, `scrollWidth`, `scrollHeight` for the
+ * box itself. It exists for the Notes mirror, whose whole correctness is that it
+ * agrees with the textarea over it about where a glyph goes: a mirror that has
+ * drifted is present, visible, and reads correctly, so `found` and `text` both
+ * pass while the caret sits a line away from the character it is on.
  */
 function normaliseExpect(expect, name) {
   if (!expect) throw new Error(`shot "${name}" declares no expect`)
   const spec = Array.isArray(expect) ? { found: expect } : expect
-  const total = (spec.found?.length ?? 0) + (spec.missing?.length ?? 0) + (spec.text?.length ?? 0)
+  for (const pair of spec.metrics ?? []) {
+    if (!pair.a || !pair.b || !pair.props?.length) {
+      throw new Error(`shot "${name}" has a metrics entry without a, b and props`)
+    }
+  }
+  const total =
+    (spec.found?.length ?? 0) +
+    (spec.missing?.length ?? 0) +
+    (spec.text?.length ?? 0) +
+    (spec.metrics?.length ?? 0)
   if (!total) throw new Error(`shot "${name}" declares an empty expect`)
   return spec
 }

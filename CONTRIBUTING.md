@@ -55,6 +55,15 @@ The long form takes `found`, `missing` and `text`:
 expect: { found: ['.card'], missing: ['.empty'], text: ['Paralyzed'] }
 ```
 
+It also takes `metrics`, which asks whether two elements are laid out alike rather than whether something is on screen. Every property listed must read the same on both — a computed style by its CSS name, or `clientWidth`, `clientHeight`, `scrollWidth` or `scrollHeight` for the box itself. Reach for it when a thing can be present, visible, correct-looking and still wrong, which is what the Notes mirror is when it slides out from under the caret it sits below:
+
+```js
+expect: {
+  found: ['.markup-mirror'],
+  metrics: [{ a: '.markup-mirror', b: '.markup-input', props: ['line-height', 'clientWidth'] }]
+}
+```
+
 A shot drives the UI with `menu`, `click`, `press`, `type`, `select`, `wheel` and `hover`, which run in that fixed order. When the behaviour under test *is* a transition, two inputs deep or two of one kind, write them out as `steps` instead: an ordered list of the same actions plus `wait`:
 
 ```js
