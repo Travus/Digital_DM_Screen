@@ -424,6 +424,12 @@ const shots = [
    * lands in the same state as a fuse that burned down while you watched, and
    * costs the suite no dwell at all.
    *
+   * That works because the shot declares no `savedAt`. The restore only stops a
+   * running timer when the session says when the app was last alive, and without
+   * one it leaves the clocks alone — which is the whole reason this shot still
+   * reaches the finished state at all. Seeding a stamp here, or stamping one for
+   * every shot, would quietly turn both of these into something else.
+   *
    * The button is the whole point. Pause on a clock that has stopped moving does
    * nothing you can see, and it used to strand the timer: finished and paused
    * disabled Start, so the only way back was the arrow in the header. `text`
@@ -480,6 +486,46 @@ const shots = [
       found: ['.timer-readout.editable', '.timer .meter-fill.ok[style*="width: 100%"]'],
       text: ['Start'],
       missing: ['.timer.finished']
+    }
+  },
+  /*
+   * A timer that was running when the app closed.
+   *
+   * `startedAt` and `savedAt` are both fixed, thirty seconds apart, against a
+   * one-minute countdown — so the restore has exactly half the clock left to bank
+   * and the meter lands on exactly 50%. A stamp taken at seed time would drift
+   * with however long the build takes and could only be asserted loosely, which
+   * is the difference between pinning the arithmetic and watching it run.
+   *
+   * The clock reads 00:30 in the shot, and none of the three text checks can see
+   * that: a stopped readout is an `<input>`, and `innerText` does not include a
+   * form control's value. So the meter is the assertion. `.timer.finished` means
+   * exactly "a countdown reading 0", which is what this used to come back as
+   * after a night with the app shut, so its absence is the bug itself.
+   */
+  {
+    name: 'timer-paused-on-restore',
+    layout: starter,
+    savedAt: 1_030_000,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'timers'
+      doc.panels.panel_ref.state = {
+        timers: [
+          {
+            id: 'tm_fuse',
+            label: 'Burning fuse',
+            mode: 'down',
+            durationMs: 60_000,
+            accumulatedMs: 0,
+            startedAt: 1_000_000
+          }
+        ]
+      }
+    },
+    expect: {
+      found: ['.timer-readout.editable', '.timer .meter-fill.ok[style*="width: 50%"]'],
+      text: ['Start', 'Counts down'],
+      missing: ['.timer.finished', '.timer-readout.running']
     }
   },
   // The panel menu unlocked, where the rows that have a shortcut show it.
@@ -1637,7 +1683,7 @@ const shots = [
 ]
 
 async function seedSession(shot) {
-  const { name, layout: layoutPath, mutate, data, keys, writable } = shot
+  const { name, layout: layoutPath, mutate, data, keys, writable, savedAt } = shot
   const userData = userDataFor(name)
   await rm(userData, { recursive: true, force: true })
   await mkdir(userData, { recursive: true })
@@ -1668,9 +1714,15 @@ async function seedSession(shot) {
   const filePath = writable ? join(userData, 'layout.dmscreen') : layoutPath
   if (writable) await writeFile(filePath, JSON.stringify(doc, null, 2))
 
+  // `savedAt` is when the app was last alive, which is what the restore banks a
+  // running timer up to. Declared by the shot rather than stamped here, because
+  // the whole point is a gap between it and launch, and a shot pinning an exact
+  // remaining time needs an exact stamp rather than one that moves per run.
+  // Omitted otherwise, which is the state an older session.json is in and the
+  // one where the clocks are left alone.
   await writeFile(
     join(userData, 'session.json'),
-    JSON.stringify({ doc, filePath, dirty: false }, null, 2)
+    JSON.stringify({ doc, filePath, dirty: false, ...(savedAt ? { savedAt } : {}) }, null, 2)
   )
   await writeFile(
     join(userData, 'recents.json'),

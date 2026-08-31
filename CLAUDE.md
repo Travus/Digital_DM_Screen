@@ -95,6 +95,23 @@ fight, because only a save clears it. Adopting a document from main goes through
 `set`, never `mutate`: catching up is not an edit, and publishing it back would
 echo.
 
+**A running timer is stopped on the way back in.** A timer stores the wall-clock
+instant it started and derives the rest, so the arithmetic cannot tell time the
+app was running from time it was shut — quit with one going and a session timer
+reads nineteen hours the next morning, while a five-minute countdown has long
+expired. `session.json` therefore carries `savedAt`, the last moment the app is
+known to have been alive, and `pauseRunningTimers` in `src/main/timers.ts` banks
+every running clock up to it and stops it. Opening a `.dmscreen` takes the same
+correction from the `updatedAt` the file already carries. With no usable stamp
+the clocks are left alone: every guess available discards time the timer really
+did count.
+
+It runs in **main**, which makes it the one piece of module-specific knowledge
+outside `modules/`. A renderer fixing its own copy would leave main's
+uncorrected, and main's copy is what a save reads — so Ctrl+S after launch would
+write back the state just corrected. Here it also happens once, before the first
+window exists, rather than once per window showing the panel.
+
 **Every path that ends in the app going away flushes the session.** On "Save and
 quit" the process exits within milliseconds, so a pending debounce never fires
 and `session.json` keeps the pre-save snapshot — including `dirty: true`. The
@@ -804,6 +821,7 @@ paths distinct.
 - `writable` — copy that layout into the shot's own userData first, so the shot
   can save
 - `data` / `keys` — seed `datapacks.json` / `keybindings.json` in userData
+- `savedAt` — the session's "last alive" stamp, for a shot about a running timer
 - `menu` — fire a `MenuAction` before anything is clicked
 - `press` — one synthetic `keydown`, e.g. `{ code: 'KeyB', ctrlKey: true }`
 - `click` — newline-separated CSS selectors, clicked *and* focused in sequence

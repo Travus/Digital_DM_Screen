@@ -54,6 +54,7 @@ import { addPack, currentSnapshot, loadPacks, removePack, setDatasetEnabled } fr
 import { IMAGE_EXTENSIONS, imageId, mimeFor, registerImage, servedPath } from './imageStore'
 import { buildMenu, type DataActions } from './menu'
 import { installSmokeHook } from './smoke'
+import { pauseRunningTimers } from './timers'
 
 const LAYOUT_FILTERS = [
   { name: 'DM Screen Layout', extensions: ['dmscreen', 'json'] },
@@ -86,7 +87,14 @@ async function readLayoutFile(path: string): Promise<LayoutDoc> {
   }
   const doc = parseLayoutDoc(parsed)
   if (!doc) throw new Error(`${basename(path)} is not a valid DM Screen layout.`)
-  return doc
+
+  // The same correction the session restore makes, from a stamp the file already
+  // carries: a layout saved with a timer running should open reading what it read
+  // when it was saved, not that plus however long the file sat on the disk.
+  // `Date.parse` gives NaN for a missing or malformed `updatedAt`, which
+  // `pauseRunningTimers` treats as "no idea when", and leaves the clocks alone.
+  const updatedAt = (parsed as { updatedAt?: unknown }).updatedAt
+  return pauseRunningTimers(doc, typeof updatedAt === 'string' ? Date.parse(updatedAt) : undefined)
 }
 
 async function writeLayoutFile(path: string, doc: LayoutDoc): Promise<void> {

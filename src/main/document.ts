@@ -13,7 +13,14 @@
  * here, from one copy, whatever is on screen.
  */
 import { createEmptyDoc, parseLayoutDoc } from '../shared/layout'
-import type { DocumentSnapshot, DocumentStatus, LayoutDoc, WindowPlacement } from '../shared/types'
+import type {
+  DocumentSnapshot,
+  DocumentStatus,
+  LayoutDoc,
+  SessionSnapshot,
+  WindowPlacement
+} from '../shared/types'
+import { pauseRunningTimers } from './timers'
 import { readSession, writeSession } from './userStore'
 import { isUsableBounds } from './windowBounds'
 
@@ -80,11 +87,23 @@ export function rememberBounds(windowId: string, next: WindowPlacement): void {
   scheduleSession()
 }
 
+/**
+ * The session as it goes to disk.
+ *
+ * `savedAt` is what makes a running timer recoverable: it is the last instant
+ * the app is known to have been alive, and `pauseRunningTimers` banks up to it
+ * on the way back in. Stamped here rather than by the caller so every write
+ * carries one, including the flush on the way out.
+ */
+function sessionPayload(): SessionSnapshot {
+  return { ...snapshot(), bounds, savedAt: Date.now() }
+}
+
 function scheduleSession(): void {
   if (sessionTimer) clearTimeout(sessionTimer)
   sessionTimer = setTimeout(() => {
     sessionTimer = null
-    void writeSession({ ...snapshot(), bounds })
+    void writeSession(sessionPayload())
   }, SESSION_DEBOUNCE_MS)
 }
 
@@ -102,7 +121,7 @@ export async function flushSession(): Promise<void> {
     clearTimeout(sessionTimer)
     sessionTimer = null
   }
-  await writeSession({ ...snapshot(), bounds })
+  await writeSession(sessionPayload())
 }
 
 /**
@@ -158,7 +177,10 @@ export async function restore(): Promise<void> {
     console.warn('session.json does not hold a valid layout; starting empty.')
     return
   }
-  doc = parsed
+  // Timers stopped where the last session left them, rather than having counted
+  // the whole time the app was shut. Done before the document is published
+  // anywhere, so main's copy — the one a save reads — is the corrected one.
+  doc = pauseRunningTimers(parsed, session.savedAt)
   filePath = session.filePath ?? null
   dirty = session.dirty === true
 

@@ -308,8 +308,8 @@ function TimerSettings({ settings, setSettings }: ModuleProps<State, Settings>):
         Always show hours
       </label>
       <p className="note">
-        Running timers keep counting in real time, so one left running across a save and reload will
-        have advanced by however long the app was closed.
+        A timer left running when the app closes comes back paused, reading the time it had. Press
+        Start to carry on. Time the app spent shut is not counted.
       </p>
     </div>
   )
