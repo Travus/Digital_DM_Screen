@@ -418,6 +418,70 @@ const shots = [
     ].join('\n'),
     expect: ['.tracker-grid .timer:nth-of-type(2)', '.timer-readout.editable']
   },
+  /*
+   * A countdown that has run out. Seeded rather than waited for: a `startedAt` of
+   * 1 is the epoch, so an enormous elapsed time against a one-minute duration
+   * lands in the same state as a fuse that burned down while you watched, and
+   * costs the suite no dwell at all.
+   *
+   * The button is the whole point. Pause on a clock that has stopped moving does
+   * nothing you can see, and it used to strand the timer: finished and paused
+   * disabled Start, so the only way back was the arrow in the header. `text`
+   * pins Reset, and `missing` pins the loose "Time." that used to sit beside it.
+   */
+  {
+    name: 'timer-finished',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'timers'
+      doc.panels.panel_ref.state = {
+        timers: [
+          {
+            id: 'tm_fuse',
+            label: 'Burning fuse',
+            mode: 'down',
+            durationMs: 60_000,
+            accumulatedMs: 0,
+            startedAt: 1
+          }
+        ]
+      }
+    },
+    expect: {
+      found: ['.timer.finished', '.timer .meter-fill.low'],
+      text: ['Reset', 'Counts down'],
+      missing: ['.note.warn']
+    }
+  },
+  // The other half, and the one that says Reset means what it is called. Pressing
+  // it has to put the full minute back rather than zero the clock, so the meter
+  // returning to a full `ok` bar is the assertion. `.timer.finished` is exactly
+  // "a countdown reading 0", which makes its absence the same claim again.
+  {
+    name: 'timer-finished-reset',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'timers'
+      doc.panels.panel_ref.state = {
+        timers: [
+          {
+            id: 'tm_fuse',
+            label: 'Burning fuse',
+            mode: 'down',
+            durationMs: 60_000,
+            accumulatedMs: 0,
+            startedAt: 1
+          }
+        ]
+      }
+    },
+    click: '.timer .btn',
+    expect: {
+      found: ['.timer-readout.editable', '.timer .meter-fill.ok[style*="width: 100%"]'],
+      text: ['Start'],
+      missing: ['.timer.finished']
+    }
+  },
   // The panel menu unlocked, where the rows that have a shortcut show it.
   {
     name: 'panel-menu',
