@@ -2514,6 +2514,23 @@ code {
   color: var(--text-faint);
 }
 
+/*
+  The calculator's answer, which is the Dice Roller's own `.roll` row reused
+  rather than restyled: it is the same total with the same faces under it, and a
+  second treatment would make whichever a DM met second look like another
+  feature. Only the spacing is the palette's — the body takes the room between
+  the total and the button instead of leaving both hugging the left edge.
+*/
+.palette-result .roll-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.palette-reroll {
+  flex: none;
+  white-space: nowrap;
+}
+
 .preset {
   padding: 4px 12px;
   font: inherit;

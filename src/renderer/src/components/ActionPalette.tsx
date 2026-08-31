@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { ActionId } from '../../../shared/actions'
+import { formatTotal, looksLikeExpression, rollExpression, type RollResult } from '../lib/dice'
 import { actionContext, paletteEntries, type PaletteEntry } from '../lib/palette'
 import { useKeymapStore } from '../state/keymapStore'
 import { resolveTargetNodeId, useAppStore } from '../state/store'
@@ -32,6 +33,12 @@ let lastQuery = ''
  * there appears here with no further wiring, and the key shown beside it is the
  * live one rather than a caption that has to be kept in step.
  *
+ * It is also the calculator. A query made of digits and operators is not a
+ * command and cannot become one, so typing `4d6kh3` or `(12 + 3) * 2` answers it
+ * instead of listing anything — in the same roll row the Dice Roller draws, in
+ * the box a DM already has one keystroke away. Crossing the screen to a panel to
+ * work out a number is the interruption; this is the version that costs nothing.
+ *
  * A command the current layout cannot run is greyed and sunk to the bottom —
  * where those rows are name-ordered — rather than dropped, and activating one
  * says why. The list is the app's own
@@ -63,6 +70,16 @@ export function ActionPalette({
    * stale on the label it was written from.
    */
   const [blocked, setBlocked] = useState<ActionId | null>(null)
+  /**
+   * The calculator's answer, held as state rather than derived from `query`.
+   *
+   * Rolling is a random draw, so a re-render must not quietly produce a
+   * different number, and the reroll button has to be able to ask for one
+   * without the query changing. `query` moves in exactly one place, so setting
+   * the two together there is not a second source of truth — it is one
+   * assignment that happens to be written twice.
+   */
+  const [result, setResult] = useState<RollResult | null>(() => rollExpression(lastQuery))
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -80,6 +97,13 @@ export function ActionPalette({
   )
 
   const active = Math.min(cursor, Math.max(entries.length - 1, 0))
+
+  /* Whether the box is being used as a calculator, which is a question about the
+     *query* and not about whether it parsed. `2d6+` has no answer yet and is
+     plainly on its way to one, so switching back to command names there would
+     flicker between two kinds of list on the way to a roll. */
+  const calculating = looksLikeExpression(query)
+  const reroll = (): void => setResult(rollExpression(query))
 
   /* Looked up rather than stored: a message kept as text would outlive the row
      it came from, and survive a query that has since filtered that row away. */
@@ -142,11 +166,20 @@ export function ActionPalette({
     }
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault()
+      if (!entries.length) return
       setCursor(event.key === 'Home' ? 0 : entries.length - 1)
       return
     }
     if (event.key === 'Enter') {
       event.preventDefault()
+      // In the calculator there is one thing left to ask for once the answer is
+      // on screen, and only dice can give it. Arithmetic offers no button and
+      // makes no promise, so Enter on `12 * 3` is not a key that did nothing —
+      // it is a key with nothing under it to do.
+      if (calculating) {
+        if (result?.dice) reroll()
+        return
+      }
       const entry = entries[active]
       if (entry) activate(entry)
     }
@@ -168,11 +201,12 @@ export function ActionPalette({
           className="input palette-input"
           type="text"
           autoFocus
-          placeholder="Type a command…"
+          placeholder="Type a command, or 2d6+3…"
           value={query}
           onChange={(event) => {
             lastQuery = event.target.value
             setQuery(event.target.value)
+            setResult(rollExpression(event.target.value))
             setCursor(0)
             // The message belongs to a row the user pointed at; retyping is a
             // new question, and the list under it is a new list.
@@ -181,32 +215,38 @@ export function ActionPalette({
           onKeyDown={onKeyDown}
         />
 
-        <div className="palette-list" ref={listRef}>
-          {entries.map((entry, index) => (
-            <button
-              key={entry.id}
-              className={`palette-item ${index === active ? 'active' : ''} ${
-                entry.unavailable ? 'disabled' : ''
-              }`}
-              data-action-id={entry.id}
-              /* `aria-disabled`, not `disabled`: the row still takes the
-                 cursor and still answers a click, it just answers with the
-                 reason instead of the command. */
-              aria-disabled={entry.unavailable ? true : undefined}
-              // Pointer, not hover: a list that re-sorts under a stationary
-              // mouse would otherwise move the highlight on its own.
-              onPointerMove={() => setCursor(index)}
-              onClick={() => activate(entry)}
-            >
-              <span className="palette-label">{entry.label}</span>
-              <span className="palette-category">{entry.category}</span>
-              <span className="spacer" />
-              {entry.binding && <span className="shortcut">{entry.binding}</span>}
-            </button>
-          ))}
-        </div>
+        {calculating ? (
+          <Answer result={result} query={query} onReroll={reroll} />
+        ) : (
+          <>
+            <div className="palette-list" ref={listRef}>
+              {entries.map((entry, index) => (
+                <button
+                  key={entry.id}
+                  className={`palette-item ${index === active ? 'active' : ''} ${
+                    entry.unavailable ? 'disabled' : ''
+                  }`}
+                  data-action-id={entry.id}
+                  /* `aria-disabled`, not `disabled`: the row still takes the
+                     cursor and still answers a click, it just answers with the
+                     reason instead of the command. */
+                  aria-disabled={entry.unavailable ? true : undefined}
+                  // Pointer, not hover: a list that re-sorts under a stationary
+                  // mouse would otherwise move the highlight on its own.
+                  onPointerMove={() => setCursor(index)}
+                  onClick={() => activate(entry)}
+                >
+                  <span className="palette-label">{entry.label}</span>
+                  <span className="palette-category">{entry.category}</span>
+                  <span className="spacer" />
+                  {entry.binding && <span className="shortcut">{entry.binding}</span>}
+                </button>
+              ))}
+            </div>
 
-        {entries.length === 0 && <p className="empty">Nothing matches “{query}”.</p>}
+            {entries.length === 0 && <p className="empty">Nothing matches “{query}”.</p>}
+          </>
+        )}
 
         {/* Only ever in answer to an activation. Standing text saying rows may
             be greyed would be there on every open, explaining a thing that is
@@ -217,6 +257,52 @@ export function ActionPalette({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The calculator's answer, wearing the Dice Roller's own roll row.
+ *
+ * The same total in the same place with the same faces under it, because it is
+ * the same thing. Two treatments of one idea would make whichever a DM met
+ * second look like a different feature.
+ *
+ * The breakdown is there only when dice were thrown: for `(12 + 3) * 2` it is
+ * the expression again, which is already on the line above it.
+ */
+function Answer({
+  result,
+  query,
+  onReroll
+}: {
+  result: RollResult | null
+  query: string
+  onReroll: () => void
+}): JSX.Element {
+  if (!result) {
+    return <p className="empty">“{query.trim()}” does not work out to a number.</p>
+  }
+
+  return (
+    <div className="roll latest palette-result">
+      <span className="roll-total">{formatTotal(result.total)}</span>
+      <div className="roll-body">
+        <span className="roll-expr">{result.expression}</span>
+        {result.dice && <span className="roll-detail">{result.breakdown}</span>}
+      </div>
+      {result.dice && (
+        <button
+          className="btn palette-reroll"
+          /* The caret stays in the box, so the keystroke after a click edits the
+             expression rather than landing on a button nobody aimed at. Enter
+             does the same thing from where the caret already is. */
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onReroll}
+        >
+          Roll again
+        </button>
+      )}
     </div>
   )
 }

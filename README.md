@@ -66,6 +66,8 @@ See [docs/data-packs.md](docs/data-packs.md) for the file format and a worked ex
 
 It is how you reach the commands that ship with no key of their own, which is most of them. Each row shows its shortcut if it has one, so the palette is also how you learn them. The list is context aware, so locking the layout greys out splitting, closing, renaming and rearranging.
 
+It is also a calculator. Type digits instead of a command — `12 * 8`, `(120 + 30) / 4`, `2d6+3`, `4d6kh3` — and it works the sum out on the spot rather than listing anything. Enter rolls again when there are dice in it. The syntax is the Dice Roller module's, so anything that module takes works here too; the module is still where you go for a running log of what you rolled.
+
 ### Shortcuts
 
 These are the defaults. **Help → Keyboard Shortcuts…** rebinds any of them.

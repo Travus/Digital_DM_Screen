@@ -1159,6 +1159,92 @@ const shots = [
     // the theme flipped and the palette closed behind it.
     expect: { found: ['html[data-theme="light"]'], missing: ['.palette'] }
   },
+  // The calculator. An empty layout on purpose: the answer wears the Dice
+  // Roller's own `.roll` row, so a starter layout with a dice panel behind the
+  // backdrop would satisfy every one of these selectors without the palette
+  // having drawn anything.
+  //
+  // The list going away is half the assertion. `(12 + 3) * 7` matches no command
+  // exactly, so without the gate the typo-tolerant pass would rank the whole
+  // catalogue against it and bury the answer under a screenful of rows.
+  {
+    name: 'action-palette-math',
+    layout: null,
+    menu: 'app:palette',
+    type: { selector: '.palette-input', text: '(12 + 3) * 7' },
+    expect: {
+      found: ['.palette-result', '.roll-total'],
+      // No breakdown and no reroll: arithmetic gives the same answer every
+      // time, and its breakdown is the expression already on the line above.
+      missing: ['.palette-list', '.palette-reroll', '.roll-detail'],
+      text: ['(12 + 3) * 7', '105']
+    }
+  },
+  // Dice, which is the other half of the same box: a breakdown of what landed,
+  // and a button to throw them again.
+  {
+    name: 'action-palette-dice',
+    layout: null,
+    menu: 'app:palette',
+    type: { selector: '.palette-input', text: '4d6kh3' },
+    expect: {
+      found: ['.palette-result', '.roll-total', '.roll-detail', '.palette-reroll'],
+      missing: ['.palette-list'],
+      text: ['4d6kh3']
+    }
+  },
+  // Rerolling. The number is random, so what this pins is the rest of it: the
+  // button throws without closing the palette or losing the expression under it.
+  {
+    name: 'action-palette-reroll',
+    layout: null,
+    steps: [
+      { menu: 'app:palette' },
+      { type: { selector: '.palette-input', text: '10d10' } },
+      { click: '.palette-reroll' }
+    ],
+    expect: { found: ['.palette', '.palette-result', '.roll-detail'], text: ['10d10'] }
+  },
+  // Half-typed. `2d6 +` is on its way to an expression and is not one yet, so it
+  // says so rather than falling back to the command list — which is the state
+  // every roll passes through on the way to being typed.
+  {
+    name: 'action-palette-half-typed',
+    layout: null,
+    menu: 'app:palette',
+    type: { selector: '.palette-input', text: '2d6 +' },
+    expect: {
+      found: ['.palette .empty'],
+      missing: ['.palette-list', '.palette-result'],
+      text: ['does not work out to a number']
+    }
+  },
+
+  /* --------------------------------------------------------------- dice roller */
+
+  // The module the palette borrows its answer row from, rolling an expression
+  // with brackets and a multiplication in it — which the flat list of signed
+  // terms this parser replaced could not read at all.
+  //
+  // Enter rather than the Roll button, because the input has to be clicked to be
+  // focused anyway and `press` fires at whatever holds the focus.
+  {
+    name: 'dice-roller',
+    layout: null,
+    steps: [
+      { click: '.picker-card[data-module-id="dice"]' },
+      { click: '.toolbar .input.grow' },
+      { type: { selector: '.toolbar .input.grow', text: '(2d6 + 2) * 2' } },
+      { press: { key: 'Enter' } }
+    ],
+    // No warning is half of it: the module shows the input as invalid on a
+    // parse it could not finish, so a green frame here would still be red.
+    expect: {
+      found: ['.roll.latest', '.roll-total', '.roll-detail'],
+      missing: ['.note.warn'],
+      text: ['(2d6 + 2) * 2']
+    }
+  },
 
   /* ----------------------------------------------------------------- big dice */
 
