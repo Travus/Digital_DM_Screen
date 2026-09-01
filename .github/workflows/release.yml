@@ -86,7 +86,7 @@ jobs:
       # runs in a container any more, so the runner owns everything it writes
       # and the old EACCES-on-a-root-owned-release trap cannot recur.
       - name: Download every installer
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: installers-*
           merge-multiple: true
