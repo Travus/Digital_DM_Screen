@@ -1248,16 +1248,45 @@ const shots = [
 
   /* ----------------------------------------------------------------- big dice */
 
-  // Fresh from the picker: a d20, unthrown, prompting to be clicked.
+  // Fresh from the picker: a d20 as a solid, unthrown, prompting to be clicked.
+  // The one shot of the solid standing still, so it is also the one that would
+  // catch the twenty faces failing to assemble into a die.
   {
     name: 'bigdice',
     layout: null,
     click: '.picker-card[data-module-id="bigdice"]',
     // `.bigdice-readout` is the container and is always present; the prompt and
-    // the total are the two things that swap inside it.
+    // the total are the two things that swap inside it. `.bigdice-face` is one
+    // of twenty and proves the solid built at all — whether it reads as a die
+    // rather than a heap of triangles is eyes only.
     expect: {
-      found: ['.bigdice', '.bigdice-stage', '.bigdice-prompt'],
+      found: [
+        '.bigdice',
+        '.bigdice-stage.solid',
+        '.bigdice-scene',
+        '.bigdice-face',
+        '.bigdice-prompt'
+      ],
       missing: ['.bigdice-total']
+    }
+  },
+  // The same panel with the solid turned off, which is the whole of what that
+  // setting does. Two renderers live in this module and only one of them is
+  // reachable by clicking, so the other needs seeding.
+  {
+    name: 'bigdice-flat',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.settings = { solid: false }
+      doc.panels.panel_ref.state = { sides: 20, value: 17, history: [] }
+    },
+    // The flat top-down die is back, and the solid is gone rather than merely
+    // hidden behind it.
+    expect: {
+      found: ['.die.d20', '.die-face', '.bigdice-total'],
+      missing: ['.bigdice-face', '.bigdice-scene'],
+      text: ['17']
     }
   },
   // A real click on the die, dwelt past the tumble so the shot catches a settled
@@ -1273,7 +1302,11 @@ const shots = [
     expect: { found: ['.bigdice-readout'], missing: ['.bigdice-prompt'] }
   },
   // Seeded rather than rolled, because a natural 20 cannot be arranged by
-  // clicking. Shows the flourish and the history strip together.
+  // clicking. Shows the flourish, the beams and the history strip together.
+  //
+  // No `text` check on the number any more. All twenty faces carry their number
+  // in the DOM at once, so `text: ['20']` passes whatever the die is showing —
+  // it would have gone green against a die resting on a 3.
   {
     name: 'bigdice-nat20',
     layout: starter,
@@ -1289,7 +1322,38 @@ const shots = [
         ]
       }
     },
-    expect: { found: ['.bigdice-flourish', '.bigdice-history', '.bigdice-past'], text: ['20'] }
+    // `missing` is the load-bearing half: this panel was restored, not thrown
+    // in, so the beams have to be standing there already rather than sweeping
+    // in as though the 20 had just happened.
+    expect: {
+      found: [
+        '.bigdice-stage.nat20',
+        '.bigdice-beams',
+        '.bigdice-wash',
+        '.bigdice-flourish',
+        '.bigdice-history',
+        '.bigdice-past'
+      ],
+      // The number goes on a critical: the die is showing it, and the call-out
+      // is what the readout is for.
+      missing: ['.bigdice-beams.sweep', '.bigdice-wash.sweep', '.bigdice-total'],
+      text: ['CRITICAL SUCCESS']
+    }
+  },
+  // The other half of the flourish, which is a different colour down a
+  // different set of rules. Seeded for the same reason as the 20.
+  {
+    name: 'bigdice-nat1',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = { sides: 20, value: 1, history: [] }
+    },
+    expect: {
+      found: ['.bigdice-stage.nat1', '.bigdice-beams', '.bigdice-flourish'],
+      missing: ['.bigdice-stage.nat20', '.bigdice-total'],
+      text: ['CRITICAL FAILURE']
+    }
   },
   // Percentile renders as the two ten-sided dice it physically is, so this is
   // the shot that would catch it collapsing back to one. Seeded at 100 — the one

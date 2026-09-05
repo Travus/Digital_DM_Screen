@@ -52,6 +52,8 @@ on screen; whether it *looks right* is still eyes only.
   list behind Conditions, Player Abilities and Diseases.
 - `src/renderer/src/components/MarkupText.tsx`, `MarkupTextarea.tsx` and
   `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
+- `src/renderer/src/lib/dieSolid.ts` — the d20 as geometry rather than as a
+  picture: its twenty faces, where each one sits, and how lit it is.
 - `src/main/imageStore.ts` — the files the Image module is allowed to display,
   and the ids the `dmscreen-image://` handler serves them under.
 - `src/main/document.ts` — the layout document, and the one copy of it that
@@ -342,7 +344,70 @@ fullscreen hint is parked over the bottom of the panel it belongs to — the dic
 history is under it — so it fades and then unmounts. Fading alone is half a fix:
 an element at `opacity: 0` still takes every click aimed at what is behind it.
 The timers in `App.tsx` and the transition in `styles.css` are two halves of one
-duration and have to agree.
+duration and have to agree. Big Dice's wash and beams follow the same rule for
+the same reason, and their stage *is* the button that throws the die.
+
+## The big die
+
+The d20 in Big Dice is a real solid, built from twenty SVG faces on
+`transform-style: preserve-3d`. Every other die, and the d20 with `solid` turned
+off, is the flat top-down face the module has always drawn. Both renderers stay.
+
+**The geometry lives in `lib/dieSolid.ts` and the module owns none of it.** The
+face table, the resting orientation for each number, the throw and the shading
+are pure functions with unit tests. WebGL would have bought real lighting and
+cost a library, a physics engine, a GPU context per panel in every window, and
+the whole of that testability — a canvas asserts nothing, so every smoke shot
+here would collapse into a check that an element exists.
+
+**The throw writes to the DOM, never through `setState`.** It runs a frame at a
+time, and every write to panel state marks the layout unsaved, sends the whole
+document to main and restarts the autosave debounce. Only the settled result is
+stored — the same bargain the flat die's tumble already made, one rung stricter.
+
+**The die comes to rest on the face it rolled, exactly.** The spin is composed
+*onto* the resting orientation as a whole number of turns decaying to zero, so
+`t = 1` is that orientation and not merely near it. Interpolating towards the
+rest instead leaves the die a degree or two off the number the readout claims.
+
+**Shading is one dot product per face, and it is also the depth sort.** A face
+turned away is not drawn at all, which is what lets a convex solid skip sorting
+entirely — and is why none of this leans on `backface-visibility` reaching an
+SVG element. Faces are drawn slightly oversized so neighbours overlap: cut to
+their exact edges, the hairline seams let you see through the solid.
+
+**A critical is lit, not replayed.** The beams and the wash are derived from the
+settled value, so a panel restored with a 20 in it comes back already lit; only
+a throw made in this session wears the sweep that brings them in. That is also
+what makes the flourish photographable — a burst that had already finished would
+leave a smoke shot nothing to assert.
+
+**`container-type` and `perspective` both make a containing block for anything
+fixed inside them**, exactly like the `transform`, `filter` and `contain` trap
+above. Both stay inside the module, where nothing fixed lives. Neither may be
+lifted onto `.panel-body` or higher, because `.panel.maximized` is
+`position: fixed`. The container is what lets the die scale to its panel with no
+measuring in JS: `translateZ` takes a length, and container units are the only
+way to give it one that follows the panel.
+
+**The separate `rotate` property is applied *after* `transform`.** A centring
+`translate(-50%, -50%)` inside `transform` therefore gets swung around the
+origin once per turn, and the element orbits instead of turning in place. The
+beams are centred with margins, and `transform` is left carrying nothing but
+scale.
+
+**The die's own numbers are no longer worth asserting on.** All twenty sit in
+the DOM at once, so a smoke `text: ['20']` passes whatever face is up. Assert on
+`.bigdice-total` and on the classes the flourish puts on the stage — and note
+that a critical replaces the total with its call-out rather than sitting beside
+it, so `.bigdice-total` is absent on a 20 and a 1.
+
+**The wash and the beams are measured against `--die-size`, never the panel.**
+Sized as a percentage of the stage they come apart the moment a panel is not
+roughly square: the mask's inner hole grows with the panel, so a wide short one
+puts the rays half a screen from a die that never moved. The same size is what
+the die itself is drawn at, so there is one number and the flourish cannot drift
+away from what it is lighting.
 
 ## Rich text
 

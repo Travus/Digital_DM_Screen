@@ -32,6 +32,10 @@
   --danger: #e0605e;
   --good: #5cb573;
   --warn: #d9a441;
+  /* A critical is gold, and the die already wears the accent. Painting the
+     flourish in `--accent` is a flourish you cannot see, so it gets a lifted
+     gold of its own. */
+  --gold: #f5c96b;
   --shadow: 0 8px 28px rgb(0 0 0 / 45%);
 }
 
@@ -50,6 +54,7 @@
   --danger: #b8322f;
   --good: #337a45;
   --warn: #8a6410;
+  --gold: #b07a08;
   --shadow: 0 8px 24px rgb(0 0 0 / 14%);
 }
 
@@ -2579,7 +2584,25 @@ code {
   lets it shrink inside the panel rather than overflowing it — without it the
   SVG's intrinsic size wins and the readout below is pushed out of sight.
 */
+/*
+  `--die-size` is the die's width on screen, and the wash and the beams are both
+  measured against it rather than against the panel. Sized off the panel they
+  scatter: in a wide short panel the rays begin half a screen away from a die
+  that never moved, because a percentage of the panel has nothing to do with how
+  big the die ended up.
+
+  `container-type: size` is what makes it available without measuring in JS, and
+  it brings `contain: layout`, which makes a containing block for anything fixed
+  inside it — the trap the Rendering notes describe. Safe here because nothing
+  fixed lives in a module body. Do not lift this, or the scene's perspective,
+  onto `.panel-body` or higher: `.panel.maximized` is `position: fixed`.
+*/
 .bigdice-stage {
+  --die-size: min(86cqw, 86cqh, 400px);
+  container-type: size;
+  position: relative;
+  /* Under the chip row and the history, both of which the beams overhang. */
+  z-index: 0;
   flex: 1;
   display: flex;
   align-items: center;
@@ -2597,10 +2620,100 @@ code {
   display: contents;
 }
 
+.bigdice.roomy .die {
+  max-height: min(100%, 520px);
+}
+
+/* The fullscreen cap, matching the flat die's above. */
+.bigdice.roomy .bigdice-stage {
+  --die-size: min(86cqw, 86cqh, 520px);
+}
+
+/*
+  Above the flourish, which overhangs the stage in both directions. Scoped to
+  this module on purpose: `.chip-row` belongs to several.
+*/
+.bigdice > .chip-row,
+.bigdice > .bigdice-readout,
+.bigdice > .bigdice-history {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+  The solid d20, built from twenty faces in `lib/dieSolid.ts`.
+
+  One world unit, in pixels. The numbers it is built from reach CSS from the
+  geometry as custom properties rather than being written out again here, since
+  a second copy of a number is a second copy to get wrong.
+*/
+.bigdice-scene {
+  --unit: calc(var(--die-size) / var(--span));
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 0;
+  height: 0;
+  perspective: 900px;
+}
+
+/* Three nested transforms, each with one job: the scene holds the perspective,
+   the hop carries the arc, the solid carries the rotation. Collapsing them
+   means one string for the throw to rebuild every frame. */
+.bigdice-hop {
+  display: block;
+  /* Measured against the die, and kept modest. Any higher and the die leaves
+     the top of the panel, which reads as thrown away rather than thrown. */
+  transform: translateY(calc(var(--die-size) * var(--lift, 0) * -0.22));
+  transform-style: preserve-3d;
+}
+
+.bigdice-solid {
+  position: relative;
+  display: block;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+
+/*
+  A face is placed by its own rotation and then pushed out along its normal,
+  which is what `rotate3d()` before `translateZ()` says. One `matrix3d` would
+  say the same thing, but its translation would have to be baked in pixels, and
+  the whole point of `--unit` is that the distance follows the panel.
+*/
+.bigdice-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--unit) * var(--face-box));
+  height: calc(var(--unit) * var(--face-box));
+  margin-top: calc(var(--unit) * var(--face-box) / -2);
+  margin-left: calc(var(--unit) * var(--face-box) / -2);
+  overflow: visible;
+  fill: var(--bg-4);
+  stroke: color-mix(in srgb, var(--accent) 62%, transparent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  transform-origin: 50% 50%;
+}
+
+.bigdice-face text {
+  fill: var(--text);
+  stroke: none;
+  font-family: var(--font);
+  font-size: 30px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
 /*
   Capped rather than simply filling the panel. The die is meant to be read from
   across a table, not to become a 700px wall — and in a fullscreened panel it
-  would, pushing the result underneath it out of sight.
+  would, pushing the result underneath it out of sight. `.roomy` lifts the cap
+  for exactly that case: a fullscreened panel is the one turned towards the
+  room, and it has the height to spend without burying the readout.
 */
 .die {
   height: 100%;
@@ -2639,6 +2752,12 @@ code {
 
 .bigdice-stage:hover .die {
   filter: brightness(1.12);
+}
+
+/* Above the wash and the beams, which are laid over the whole stage. */
+.bigdice-stage .die {
+  position: relative;
+  z-index: 1;
 }
 
 /*
@@ -2727,32 +2846,59 @@ code {
   color: var(--text-faint);
 }
 
+/* Sized to be read from across a table, which is the whole point of it. */
 .bigdice-flourish {
-  font-size: 13px;
-  letter-spacing: 0.08em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--good);
+  color: var(--gold);
 }
 
 .bigdice-flourish.grim {
   color: var(--danger);
 }
 
+/* The tint the wash and the beams are drawn in, inherited by both. */
+.bigdice-stage.nat20 {
+  --tint: var(--gold);
+}
+
+.bigdice-stage.nat1 {
+  --tint: var(--danger);
+}
+
 /* `.facet` carries its own stroke, so it has to be recoloured by name — left out,
-   a natural 20 turns green everywhere except the one edge in the middle. */
+   a natural 20 turns gold everywhere except the one edge in the middle. */
 .bigdice-stage.nat20 .die,
 .bigdice-stage.nat20 .die .facet,
 .bigdice-total.nat20 {
-  stroke: var(--good);
-  color: var(--good);
+  stroke: var(--gold);
+  color: var(--gold);
 }
 
 .bigdice-stage.nat20 .die .facet {
-  fill: color-mix(in srgb, var(--good) 12%, transparent);
+  fill: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .bigdice-stage.nat20 .die .die-face {
-  fill: var(--good);
+  fill: var(--gold);
+}
+
+.bigdice-stage.nat20 .bigdice-face {
+  stroke: var(--gold);
+}
+
+.bigdice-stage.nat20 .bigdice-face text {
+  fill: var(--gold);
+}
+
+.bigdice-stage.nat1 .bigdice-face {
+  stroke: var(--danger);
+}
+
+.bigdice-stage.nat1 .bigdice-face text {
+  fill: var(--danger);
 }
 
 .bigdice-stage.nat1 .die,
@@ -2768,6 +2914,122 @@ code {
 
 .bigdice-stage.nat1 .die .die-face {
   fill: var(--danger);
+}
+
+/*
+  The flourish for a natural 20 and a natural 1.
+
+  Both are flat gradients animated on `transform`, `opacity` and `rotate` only,
+  so the whole thing stays on the compositor. Nothing pulses a `filter` or a
+  `box-shadow`: this ships to a television, and those repaint every frame.
+
+  Neither element fades out and stays. They leave the DOM when the result stops
+  being a critical, because the stage under them is the button that throws the
+  die, and a layer at `opacity: 0` still takes the click.
+*/
+/*
+  A circle centred on the die, not a rectangle filling the stage. `inset: 0` cut
+  the glow off square against the chip row and the history, which read as a
+  lighting bug rather than as a glow.
+*/
+.bigdice-wash {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--die-size) * 3.6);
+  height: calc(var(--die-size) * 3.6);
+  margin-top: calc(var(--die-size) * -1.8);
+  margin-left: calc(var(--die-size) * -1.8);
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--tint) 40%, transparent),
+    transparent 72%
+  );
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+/*
+  The beams hold at a low burn until the next throw, rather than sweeping out
+  and going. A critical is the one result the table should still be able to see
+  a minute later.
+
+  Sized against the die, so the mask's inner hole always lands just inside the
+  silhouette and the rays emerge from the die's own edge. Sized against the
+  panel, that hole grows with the panel and the rays start somewhere out in the
+  middle distance, or off the screen entirely.
+
+  Centred with margins, never with a `translate()` inside `transform`. The
+  separate `rotate` property is applied *after* `transform`, so a centring
+  translate there gets swung around the origin once per turn and the beams orbit
+  the die instead of lighting it.
+*/
+.bigdice-beams {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--die-size) * 4);
+  height: calc(var(--die-size) * 4);
+  margin-top: calc(var(--die-size) * -2);
+  margin-left: calc(var(--die-size) * -2);
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--tint) 78%, transparent) 0deg 2.2deg,
+    transparent 2.2deg 15deg
+  );
+  -webkit-mask-image: radial-gradient(closest-side, transparent 26%, #000 42%, transparent 76%);
+  mask-image: radial-gradient(closest-side, transparent 26%, #000 42%, transparent 76%);
+  opacity: 0.5;
+  /* Slow enough to read as lit rather than as a spinner. */
+  animation: bigdice-drift 26s linear infinite;
+  pointer-events: none;
+}
+
+.bigdice-wash.sweep {
+  animation: bigdice-wash-in 780ms ease-out both;
+}
+
+.bigdice-beams.sweep {
+  animation:
+    bigdice-beams-in 1000ms cubic-bezier(0.16, 0.7, 0.3, 1) both,
+    bigdice-drift 26s linear infinite;
+}
+
+@keyframes bigdice-wash-in {
+  0% {
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0.34;
+  }
+}
+
+@keyframes bigdice-beams-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  30% {
+    opacity: 0.95;
+    transform: scale(0.82);
+  }
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+}
+
+/* The one animation on `rotate` rather than `transform`, so the sweep above can
+   drive the scale at the same time without the two overwriting each other. */
+@keyframes bigdice-drift {
+  to {
+    rotate: 360deg;
+  }
 }
 
 .bigdice-history {
@@ -2792,6 +3054,15 @@ code {
 /* Nothing about a die needs to move for it to be readable. */
 @media (prefers-reduced-motion: reduce) {
   .bigdice-stage.tumbling .die {
+    animation: none;
+  }
+
+  /* The beams stay lit. Only the turning stops: the flourish is information
+     about the throw, and taking it away would be answering a motion preference
+     with a missing result. */
+  .bigdice-beams,
+  .bigdice-beams.sweep,
+  .bigdice-wash.sweep {
     animation: none;
   }
 }

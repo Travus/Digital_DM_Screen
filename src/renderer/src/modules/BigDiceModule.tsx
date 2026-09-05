@@ -1,6 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties
+} from 'react'
 import { uid } from '../../../shared/layout'
 import { rollDie } from '../lib/dice'
+import {
+  D20_FACES,
+  D20_FACE_BOX,
+  D20_INRADIUS,
+  D20_SPAN,
+  faceLighting,
+  randomSpin,
+  RESTING_VALUE,
+  restRotation,
+  THROW_MS,
+  throwLift,
+  throwRotation,
+  toMatrix3d,
+  toRotate3d
+} from '../lib/dieSolid'
 import { defineModule, type ModuleProps } from './types'
 
 /**
@@ -10,12 +32,16 @@ import { defineModule, type ModuleProps } from './types'
  * running log, read by the DM. This one is for the table to look at — a single
  * die, large enough to read from across the room, for the rolls everyone wants
  * to see land.
+ *
+ * The d20 is a real solid, built from twenty faces in `lib/dieSolid.ts`. Every
+ * other die is the flat top-down face below, which is also what the d20 falls
+ * back to when a DM turns the solid off.
  */
 
 const DICE = [4, 6, 8, 10, 12, 20, 100] as const
 type Sides = (typeof DICE)[number]
 
-/** How long the tumble runs, and how often the face changes while it does. */
+/** How long the flat die's tumble runs, and how often the face changes while it does. */
 const TUMBLE_MS = 700
 const TICK_MS = 70
 
@@ -38,6 +64,8 @@ interface Settings {
   /** Mark a natural 20 and a natural 1 on the d20. */
   critFlourish: boolean
   animate: boolean
+  /** Throw the d20 as a solid rather than as the flat top-down face. */
+  solid: boolean
   /**
    * Whether a percentile throw of `00` and `0` is 100 or 0 — which is to say,
    * whether the die reads 1–100 or 0–99. Tables disagree, and the faces are
@@ -83,56 +111,110 @@ function BigDice({
    * The tumbling face is local, never persisted. Every `setState` here rides
    * into the document, sets `dirty` and schedules a session write — ten of them
    * a second would thrash the autosave and leave the layout permanently unsaved
-   * over an animation nobody wants to keep. Only the settled result is stored.
+   * over an animation nobody wants to keep. The solid is stricter still: its
+   * throw runs a frame at a time and writes straight to the DOM, so nothing
+   * reaches the store until the die has landed.
    */
   const [tumbling, setTumbling] = useState(false)
   const [face, setFace] = useState<number | null>(null)
+  /** Whether the result on screen was thrown here, rather than restored with the layout. */
+  const [thrown, setThrown] = useState(false)
   const timers = useRef<number[]>([])
+  const frame = useRef(0)
+  const solidRef = useRef<HTMLSpanElement>(null)
+  const hopRef = useRef<HTMLSpanElement>(null)
+  const faceRefs = useRef<(SVGSVGElement | null)[]>([])
 
-  const clearTimers = (): void => {
+  const solidDie = settings.solid && state.sides === 20
+
+  const clearTimers = useCallback((): void => {
     for (const timer of timers.current) window.clearInterval(timer)
     timers.current = []
-  }
+    if (frame.current) window.cancelAnimationFrame(frame.current)
+    frame.current = 0
+  }, [])
 
-  useEffect(() => clearTimers, [])
+  useEffect(() => clearTimers, [clearTimers])
 
   /* A die left mid-tumble by a module switch or a reload would spin forever. */
   useEffect(() => {
     clearTimers()
     setTumbling(false)
     setFace(null)
-  }, [state.sides])
+  }, [state.sides, clearTimers])
+
+  /** Writes one frame of the solid straight to the DOM. Nothing here re-renders. */
+  const paint = useCallback((rotation: readonly number[], lift: number): void => {
+    if (!solidRef.current) return
+    solidRef.current.style.transform = toMatrix3d(rotation)
+    hopRef.current?.style.setProperty('--lift', lift.toFixed(4))
+    faceLighting(rotation).forEach((shade, index) => {
+      const element = faceRefs.current[index]
+      if (!element) return
+      element.style.visibility = shade.visible ? 'visible' : 'hidden'
+      element.style.filter = `brightness(${shade.brightness.toFixed(3)})`
+    })
+  }, [])
+
+  /*
+    Where the die sits when nothing is moving. Derived from the settled value
+    rather than left wherever the last throw put it, so a panel restored with a
+    20 in it comes back showing that 20.
+  */
+  useLayoutEffect(() => {
+    if (!solidDie || tumbling) return
+    paint(restRotation(state.value ?? RESTING_VALUE), 0)
+  }, [solidDie, tumbling, state.value, paint])
 
   const throwDie = (): number =>
     state.sides === 100 ? rollPercentile(settings.zeroIsHundred) : rollDie(state.sides)
+
+  const settle = (result: number): void => {
+    clearTimers()
+    setTumbling(false)
+    setFace(null)
+    setThrown(true)
+    setState((prev) => ({
+      value: result,
+      history: [{ id: uid('throw'), sides: state.sides, value: result }, ...prev.history].slice(
+        0,
+        settings.historyLimit
+      )
+    }))
+  }
 
   const roll = (): void => {
     if (tumbling) return
     const result = throwDie()
 
-    const settle = (): void => {
-      clearTimers()
-      setTumbling(false)
-      setFace(null)
-      setState((prev) => ({
-        value: result,
-        history: [{ id: uid('throw'), sides: state.sides, value: result }, ...prev.history].slice(
-          0,
-          settings.historyLimit
-        )
-      }))
-    }
-
     // Someone who has asked the OS for less motion gets the result outright.
     const still = !settings.animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (still) {
-      settle()
+      settle(result)
       return
     }
 
     setTumbling(true)
+
+    if (solidDie) {
+      const rest = restRotation(result)
+      const spin = randomSpin()
+      const start = performance.now()
+      const step = (now: number): void => {
+        const t = Math.min(1, (now - start) / THROW_MS)
+        paint(throwRotation(rest, spin, t), throwLift(t))
+        if (t < 1) {
+          frame.current = window.requestAnimationFrame(step)
+          return
+        }
+        settle(result)
+      }
+      frame.current = window.requestAnimationFrame(step)
+      return
+    }
+
     timers.current.push(window.setInterval(() => setFace(throwDie()), TICK_MS))
-    timers.current.push(window.setInterval(settle, TUMBLE_MS))
+    timers.current.push(window.setInterval(() => settle(result), TUMBLE_MS))
   }
 
   const shown = face ?? state.value
@@ -144,6 +226,10 @@ function BigDice({
           ? 'nat1'
           : ''
       : ''
+
+  const stageClasses = ['bigdice-stage', solidDie && 'solid', tumbling && 'tumbling', critical]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className={`bigdice ${maximized ? 'roomy' : ''}`}>
@@ -161,12 +247,55 @@ function BigDice({
         ))}
       </div>
 
-      <button
-        className={`bigdice-stage ${tumbling ? 'tumbling' : ''} ${critical}`}
-        onClick={roll}
-        title={`Throw ${label(state.sides)}`}
-      >
-        {state.sides === 100 ? (
+      <button className={stageClasses} onClick={roll} title={`Throw ${label(state.sides)}`}>
+        {/*
+          The flourish leaves the DOM rather than fading, for the same reason
+          the fullscreen hint does: the stage is the button that throws the die,
+          and an invisible layer over it still takes the click.
+        */}
+        {critical !== '' && (
+          <>
+            <span className={`bigdice-wash ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
+            <span className={`bigdice-beams ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
+          </>
+        )}
+
+        {solidDie ? (
+          <span
+            className="bigdice-scene"
+            style={
+              {
+                '--span': D20_SPAN,
+                '--face-box': D20_FACE_BOX,
+                '--inradius': D20_INRADIUS
+              } as CSSProperties
+            }
+          >
+            <span className="bigdice-hop" ref={hopRef}>
+              <span className="bigdice-solid" ref={solidRef}>
+                {D20_FACES.map((solidFace, index) => (
+                  <svg
+                    key={solidFace.value}
+                    className="bigdice-face"
+                    viewBox="0 0 100 100"
+                    aria-hidden="true"
+                    ref={(element) => {
+                      faceRefs.current[index] = element
+                    }}
+                    style={{
+                      transform: `${toRotate3d(solidFace)} translateZ(calc(var(--unit) * var(--inradius)))`
+                    }}
+                  >
+                    <polygon points={solidFace.points} />
+                    <text x="50" y="56">
+                      {solidFace.value}
+                    </text>
+                  </svg>
+                ))}
+              </span>
+            </span>
+          </span>
+        ) : state.sides === 100 ? (
           <span className="bigdice-pair">
             <Die sides={10} face={shown === null ? '' : percentileFaces(shown)[0]} />
             <Die sides={10} face={shown === null ? '' : percentileFaces(shown)[1]} />
@@ -176,15 +305,21 @@ function BigDice({
         )}
       </button>
 
+      {/*
+        A critical says what it is and drops the number. The die is showing the
+        20, so printing it again beside the word only makes the readout longer
+        and the call-out quieter — and "Critical Success" is the thing the table
+        needs to read from across the room.
+      */}
       <div className="bigdice-readout">
         {state.value === null ? (
           <span className="bigdice-prompt">Click the die to throw it</span>
+        ) : critical === 'nat20' ? (
+          <span className="bigdice-flourish">Critical Success</span>
+        ) : critical === 'nat1' ? (
+          <span className="bigdice-flourish grim">Critical Failure</span>
         ) : (
-          <>
-            <span className={`bigdice-total ${critical}`}>{state.value}</span>
-            {critical === 'nat20' && <span className="bigdice-flourish">critical!</span>}
-            {critical === 'nat1' && <span className="bigdice-flourish grim">fumble</span>}
-          </>
+          <span className="bigdice-total">{state.value}</span>
         )}
       </div>
 
@@ -267,6 +402,14 @@ function BigDiceSettings({ settings, setSettings }: ModuleProps<State, Settings>
       <label className="check">
         <input
           type="checkbox"
+          checked={settings.solid}
+          onChange={(event) => setSettings({ solid: event.target.checked })}
+        />
+        Throw the d20 as a solid die
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
           checked={settings.animate}
           onChange={(event) => setSettings({ animate: event.target.checked })}
         />
@@ -328,6 +471,7 @@ export const bigDiceModule = defineModule<State, Settings>({
     historyLimit: 10,
     critFlourish: true,
     animate: true,
+    solid: true,
     zeroIsHundred: true
   }),
   Component: BigDice,
