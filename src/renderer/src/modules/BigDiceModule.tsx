@@ -305,15 +305,21 @@ function BigDice({
         )}
       </button>
 
+      {/*
+        A critical says what it is and drops the number. The die is showing the
+        20, so printing it again beside the word only makes the readout longer
+        and the call-out quieter — and "Critical Success" is the thing the table
+        needs to read from across the room.
+      */}
       <div className="bigdice-readout">
         {state.value === null ? (
           <span className="bigdice-prompt">Click the die to throw it</span>
+        ) : critical === 'nat20' ? (
+          <span className="bigdice-flourish">Critical Success</span>
+        ) : critical === 'nat1' ? (
+          <span className="bigdice-flourish grim">Critical Failure</span>
         ) : (
-          <>
-            <span className={`bigdice-total ${critical}`}>{state.value}</span>
-            {critical === 'nat20' && <span className="bigdice-flourish">critical!</span>}
-            {critical === 'nat1' && <span className="bigdice-flourish grim">fumble</span>}
-          </>
+          <span className="bigdice-total">{state.value}</span>
         )}
       </div>
 

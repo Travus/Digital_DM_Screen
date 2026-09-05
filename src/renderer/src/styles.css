@@ -2584,8 +2584,25 @@ code {
   lets it shrink inside the panel rather than overflowing it — without it the
   SVG's intrinsic size wins and the readout below is pushed out of sight.
 */
+/*
+  `--die-size` is the die's width on screen, and the wash and the beams are both
+  measured against it rather than against the panel. Sized off the panel they
+  scatter: in a wide short panel the rays begin half a screen away from a die
+  that never moved, because a percentage of the panel has nothing to do with how
+  big the die ended up.
+
+  `container-type: size` is what makes it available without measuring in JS, and
+  it brings `contain: layout`, which makes a containing block for anything fixed
+  inside it — the trap the Rendering notes describe. Safe here because nothing
+  fixed lives in a module body. Do not lift this, or the scene's perspective,
+  onto `.panel-body` or higher: `.panel.maximized` is `position: fixed`.
+*/
 .bigdice-stage {
+  --die-size: min(86cqw, 86cqh, 400px);
+  container-type: size;
   position: relative;
+  /* Under the chip row and the history, both of which the beams overhang. */
+  z-index: 0;
   flex: 1;
   display: flex;
   align-items: center;
@@ -2603,32 +2620,35 @@ code {
   display: contents;
 }
 
-/*
-  The solid d20, built from twenty faces in `lib/dieSolid.ts`.
-
-  `container-type: size` is what lets the die scale to the panel with no
-  measuring in JS: `matrix3d` and `translateZ` take lengths, and only container
-  units can give them one that follows the panel. It also brings `contain:
-  layout`, which makes a containing block for anything fixed inside it — that is
-  the trap the Rendering notes describe, and it is safe *here* because nothing
-  fixed lives inside a module body. Do not lift this, or the perspective below,
-  onto `.panel-body` or higher: `.panel.maximized` is `position: fixed`.
-*/
-.bigdice-stage.solid {
-  container-type: size;
-}
-
-/*
-  One world unit, in pixels. The three numbers it is built from come from the
-  geometry as custom properties rather than being written out again here, since
-  a second copy of a number is a second copy to get wrong.
-*/
 .bigdice.roomy .die {
   max-height: min(100%, 520px);
 }
 
+/* The fullscreen cap, matching the flat die's above. */
+.bigdice.roomy .bigdice-stage {
+  --die-size: min(86cqw, 86cqh, 520px);
+}
+
+/*
+  Above the flourish, which overhangs the stage in both directions. Scoped to
+  this module on purpose: `.chip-row` belongs to several.
+*/
+.bigdice > .chip-row,
+.bigdice > .bigdice-readout,
+.bigdice > .bigdice-history {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+  The solid d20, built from twenty faces in `lib/dieSolid.ts`.
+
+  One world unit, in pixels. The numbers it is built from reach CSS from the
+  geometry as custom properties rather than being written out again here, since
+  a second copy of a number is a second copy to get wrong.
+*/
 .bigdice-scene {
-  --unit: calc(min(86cqw, 86cqh, 400px) / var(--span));
+  --unit: calc(var(--die-size) / var(--span));
   position: relative;
   z-index: 1;
   display: block;
@@ -2640,14 +2660,11 @@ code {
 /* Three nested transforms, each with one job: the scene holds the perspective,
    the hop carries the arc, the solid carries the rotation. Collapsing them
    means one string for the throw to rebuild every frame. */
-/* The fullscreen cap, matching the flat die's above. */
-.bigdice.roomy .bigdice-scene {
-  --unit: calc(min(86cqw, 86cqh, 520px) / var(--span));
-}
-
 .bigdice-hop {
   display: block;
-  transform: translateY(calc(var(--unit) * var(--lift, 0) * -1.55));
+  /* Measured against the die, and kept modest. Any higher and the die leaves
+     the top of the panel, which reads as thrown away rather than thrown. */
+  transform: translateY(calc(var(--die-size) * var(--lift, 0) * -0.22));
   transform-style: preserve-3d;
 }
 
@@ -2910,14 +2927,24 @@ code {
   being a critical, because the stage under them is the button that throws the
   die, and a layer at `opacity: 0` still takes the click.
 */
+/*
+  A circle centred on the die, not a rectangle filling the stage. `inset: 0` cut
+  the glow off square against the chip row and the history, which read as a
+  lighting bug rather than as a glow.
+*/
 .bigdice-wash {
   position: absolute;
-  inset: 0;
   z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--die-size) * 3.6);
+  height: calc(var(--die-size) * 3.6);
+  margin-top: calc(var(--die-size) * -1.8);
+  margin-left: calc(var(--die-size) * -1.8);
   background: radial-gradient(
-    circle at 50% 47%,
+    circle closest-side,
     color-mix(in srgb, var(--tint) 40%, transparent),
-    transparent 68%
+    transparent 72%
   );
   opacity: 0.34;
   pointer-events: none;
@@ -2928,21 +2955,25 @@ code {
   and going. A critical is the one result the table should still be able to see
   a minute later.
 
-  They are centred with margins, never with a `translate()` inside `transform`.
-  The separate `rotate` property is applied *after* `transform`, so a centring
+  Sized against the die, so the mask's inner hole always lands just inside the
+  silhouette and the rays emerge from the die's own edge. Sized against the
+  panel, that hole grows with the panel and the rays start somewhere out in the
+  middle distance, or off the screen entirely.
+
+  Centred with margins, never with a `translate()` inside `transform`. The
+  separate `rotate` property is applied *after* `transform`, so a centring
   translate there gets swung around the origin once per turn and the beams orbit
-  the die instead of lighting it. Both percentage margins resolve against the
-  container's width, which is also what sets this element's height.
+  the die instead of lighting it.
 */
 .bigdice-beams {
   position: absolute;
   z-index: 0;
-  top: 47%;
+  top: 50%;
   left: 50%;
-  width: 190%;
-  margin-top: -95%;
-  margin-left: -95%;
-  aspect-ratio: 1;
+  width: calc(var(--die-size) * 4);
+  height: calc(var(--die-size) * 4);
+  margin-top: calc(var(--die-size) * -2);
+  margin-left: calc(var(--die-size) * -2);
   background: repeating-conic-gradient(
     from 0deg,
     color-mix(in srgb, var(--tint) 78%, transparent) 0deg 2.2deg,
@@ -2956,12 +2987,6 @@ code {
   pointer-events: none;
 }
 
-/*
-  The sweep in is only worn by a result thrown here. A panel restored with a 20
-  in it comes back already lit, because that is what it looked like when it was
-  put down, and a burst replayed on every launch reads as the app announcing
-  last week's roll.
-*/
 .bigdice-wash.sweep {
   animation: bigdice-wash-in 780ms ease-out both;
 }

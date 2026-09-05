@@ -46,7 +46,7 @@ export interface FaceLight {
 }
 
 /** How long a throw runs. */
-export const THROW_MS = 1240
+export const THROW_MS = 1400
 
 /** The face the die rests on before anything has been thrown. */
 export const RESTING_VALUE = 14
@@ -343,9 +343,18 @@ export function restRotation(value: number): Mat3 {
   return REST_BY_VALUE.get(value) ?? REST_BY_VALUE.get(RESTING_VALUE) ?? D20_FACES[0].basis
 }
 
-/** Fast, then slowing hard. */
+/**
+ * Fast, then slowing evenly.
+ *
+ * The square is doing real work here. A fourth power spends 94% of the turning
+ * inside the first half of the throw and then crawls, which reads as a die that
+ * barely moved: what the eye follows is the slow tail, and there is almost
+ * nothing left in it. Squared leaves the angular speed falling off linearly,
+ * which is roughly what a die on a table does anyway, and keeps a quarter of the
+ * spin for the second half where it can be seen.
+ */
 function eased(t: number): number {
-  return 1 - (1 - t) ** 4
+  return 1 - (1 - t) ** 2
 }
 
 /**
@@ -369,9 +378,22 @@ export function throwLift(t: number): number {
   return Math.sin(Math.PI * Math.max(0, Math.min(1, t)) ** 0.85)
 }
 
+/**
+ * Always a whole number of turns, and never few enough to be missed.
+ *
+ * Whole turns are what let the throw land on its face exactly. The floor of four
+ * is what stops a throw from reading as a nudge: the die opens the animation
+ * already at its resting orientation, so anything less leaves the first frame
+ * looking like the answer simply appearing.
+ */
 export function randomSpin(random: () => number = Math.random): Spin {
   const axis = (): Vec3 => [random() - 0.5, random() - 0.5, random() - 0.5]
-  return { axis: axis(), otherAxis: axis(), turns: 3 + Math.floor(random() * 2), otherTurns: 2 }
+  return {
+    axis: axis(),
+    otherAxis: axis(),
+    turns: 4 + Math.floor(random() * 3),
+    otherTurns: 2 + Math.floor(random() * 2)
+  }
 }
 
 /* --------------------------------------------------------------- lighting */

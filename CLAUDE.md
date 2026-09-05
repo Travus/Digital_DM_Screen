@@ -398,7 +398,16 @@ scale.
 
 **The die's own numbers are no longer worth asserting on.** All twenty sit in
 the DOM at once, so a smoke `text: ['20']` passes whatever face is up. Assert on
-`.bigdice-total` and on the classes the flourish puts on the stage.
+`.bigdice-total` and on the classes the flourish puts on the stage — and note
+that a critical replaces the total with its call-out rather than sitting beside
+it, so `.bigdice-total` is absent on a 20 and a 1.
+
+**The wash and the beams are measured against `--die-size`, never the panel.**
+Sized as a percentage of the stage they come apart the moment a panel is not
+roughly square: the mask's inner hole grows with the panel, so a wide short one
+puts the rays half a screen from a die that never moved. The same size is what
+the die itself is drawn at, so there is one number and the flourish cannot drift
+away from what it is lighting.
 
 ## Rich text
 

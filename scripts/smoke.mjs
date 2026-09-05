@@ -1331,11 +1331,13 @@ const shots = [
         '.bigdice-beams',
         '.bigdice-wash',
         '.bigdice-flourish',
-        '.bigdice-total.nat20',
         '.bigdice-history',
         '.bigdice-past'
       ],
-      missing: ['.bigdice-beams.sweep', '.bigdice-wash.sweep']
+      // The number goes on a critical: the die is showing it, and the call-out
+      // is what the readout is for.
+      missing: ['.bigdice-beams.sweep', '.bigdice-wash.sweep', '.bigdice-total'],
+      text: ['CRITICAL SUCCESS']
     }
   },
   // The other half of the flourish, which is a different colour down a
@@ -1348,9 +1350,9 @@ const shots = [
       doc.panels.panel_ref.state = { sides: 20, value: 1, history: [] }
     },
     expect: {
-      found: ['.bigdice-stage.nat1', '.bigdice-beams', '.bigdice-total.nat1', '.bigdice-flourish'],
-      missing: ['.bigdice-stage.nat20'],
-      text: ['FUMBLE']
+      found: ['.bigdice-stage.nat1', '.bigdice-beams', '.bigdice-flourish'],
+      missing: ['.bigdice-stage.nat20', '.bigdice-total'],
+      text: ['CRITICAL FAILURE']
     }
   },
   // Percentile renders as the two ten-sided dice it physically is, so this is
