@@ -3328,6 +3328,22 @@ code {
   transform: translate(calc(var(--die-size) * 0.05), calc(var(--die-size) * 0.1)) rotate(6deg);
 }
 
+/*
+  The flat renderer's version of the same idea, in the terms it has. A turn
+  each way is all it needs — two flat glyphs side by side are less obviously one
+  stamp than two solids are, and there is no third dimension to stagger them in.
+
+  The `rotate` property rather than a `transform`, which the tumble animation
+  owns. They never overlap: the tumble is over before a pair is matched.
+*/
+.bigdice-stage.matched .bigdice-pair .die:first-child {
+  rotate: -5deg;
+}
+
+.bigdice-stage.matched .bigdice-pair .die:last-child {
+  rotate: 5deg;
+}
+
 /* The twin scatters the same way and stands a little taller, so the flourish is
    in how the pair is lit rather than in where it sits. */
 .bigdice-stage.matched.twin .bigdice-scene[data-side='left'] {
@@ -3404,82 +3420,136 @@ code {
 }
 
 /*
-  Sparks, thrown out along the rings.
+  The shine on a twin die: points on it that catch the light, over and over for
+  as long as the result is up.
 
-  Each one is a point in a ring, and `--i` — its place in that ring — is the
-  only thing the markup says. Everything else is derived here: the angle it
-  flies at, when it goes, and how far.
+  A burst of sparks thrown outward was tried first and is the wrong idea — it
+  happens *near* the dice and then it is over, where this happens *to* them and
+  keeps happening. It also lives inside the scene rather than over the stage, so
+  each glint rides its own die: a matched pair is scattered and turned, and its
+  glints scatter and turn with it.
 
-  The angle is the `rotate` property, not a rotation inside `transform`, and
-  that is the whole trick. The individual transform properties are applied
-  *before* `transform`, so a spark's outward `translateY` happens in its own
-  turned frame and carries it along its own heading — the same composition the
-  beams' comment warns about, used deliberately rather than tripped over.
+  The positions are the silhouette's corners and a couple of interior edges,
+  which is where a real die catches a light. Art direction, so the stylesheet
+  holds it; the markup says only how many.
 */
-.bigdice-sparks {
+.bigdice-glints {
   position: absolute;
-  /* Over the dice: a spark passes in front of what it was thrown off. Harmless
-     above the stage because nothing here takes a click. */
+  /* Over the faces. The scene is a point, so this is a point too and every
+     glint is placed from it. */
   z-index: 2;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
+  top: 0;
+  left: 0;
   pointer-events: none;
 }
 
-.bigdice-sparks i {
-  --reach: 1.15;
+.bigdice-glints i {
+  --size: 0.13;
   position: absolute;
-  width: calc(var(--die-size) * 0.15);
-  height: calc(var(--die-size) * 0.15);
-  margin: calc(var(--die-size) * -0.075);
-  /* White at the core, the tint at the points: a spark that reads as burning
-     rather than as a gold chip. Painted once and then only moved, which is what
-     keeps it on the compositor. */
+  top: calc(var(--die-size) * var(--gy));
+  left: calc(var(--die-size) * var(--gx));
+  width: calc(var(--die-size) * var(--size));
+  height: calc(var(--die-size) * var(--size));
+  margin: calc(var(--die-size) * var(--size) / -2);
+  /* White at the core and the tint at the points, so it reads as a catch of
+     light rather than as a gold sticker. Painted once and only ever scaled. */
   background: radial-gradient(circle closest-side, #fff 0%, var(--tint) 45%, var(--tint) 100%);
   /* A four-point star, sharper than a plus. Cheaper than an SVG, and it scales
      with the die because everything here is measured in `--die-size`. */
   clip-path: polygon(50% 0%, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0% 50%, 43% 43%);
   opacity: 0;
-  rotate: calc(var(--i) * 15deg);
-  animation: bigdice-spark 1150ms cubic-bezier(0.1, 0.72, 0.3, 1) calc(var(--i) * 18ms) both;
+  animation: bigdice-glint 2600ms ease-in-out infinite;
 }
 
-/* Off the true angle and short of the full distance, so two dozen sparks read
-   as a scatter rather than as the spokes of a wheel. */
-.bigdice-sparks i:nth-child(3n) {
-  --reach: 0.78;
-  rotate: calc(var(--i) * 15deg + 9deg);
+/*
+  The six corners of the d20's outline, then two inside it. The durations are
+  deliberately unequal and share no common factor worth speaking of, so the
+  eight never fall back into step — with one duration they would blink together
+  like a string of fairy lights, which is the one thing a glint must not do.
+*/
+.bigdice-glints i:nth-child(1) {
+  --gx: 0;
+  --gy: -0.45;
+  animation-duration: 2600ms;
 }
 
-.bigdice-sparks i:nth-child(4n) {
-  --reach: 1.42;
-  rotate: calc(var(--i) * 15deg - 7deg);
+.bigdice-glints i:nth-child(2) {
+  --gx: 0.39;
+  --gy: -0.23;
+  --size: 0.1;
+  animation-duration: 3100ms;
+  animation-delay: 420ms;
 }
 
-/* Half of them ride the second wave of rings rather than the first. */
-.bigdice-sparks i:nth-child(even) {
-  animation-delay: calc(820ms + var(--i) * 16ms);
+.bigdice-glints i:nth-child(3) {
+  --gx: 0.39;
+  --gy: 0.23;
+  animation-duration: 2900ms;
+  animation-delay: 1250ms;
 }
 
-/* The spin is the spark's own, on top of the heading `rotate` gave it — a
-   tumbling ember rather than a decal sliding outwards. */
-@keyframes bigdice-spark {
-  0% {
-    opacity: 0;
-    transform: translateY(calc(var(--die-size) * -0.2)) scale(0.2) rotate(0deg);
-  }
-  14% {
-    opacity: 1;
-    transform: translateY(calc(var(--die-size) * -0.45 * var(--reach))) scale(1.1) rotate(20deg);
-  }
-  70% {
-    opacity: 0.85;
-  }
+.bigdice-glints i:nth-child(4) {
+  --gx: 0;
+  --gy: 0.45;
+  --size: 0.11;
+  animation-duration: 3400ms;
+  animation-delay: 700ms;
+}
+
+.bigdice-glints i:nth-child(5) {
+  --gx: -0.39;
+  --gy: 0.23;
+  animation-duration: 2700ms;
+  animation-delay: 1900ms;
+}
+
+.bigdice-glints i:nth-child(6) {
+  --gx: -0.39;
+  --gy: -0.23;
+  --size: 0.1;
+  animation-duration: 3300ms;
+  animation-delay: 250ms;
+}
+
+.bigdice-glints i:nth-child(7) {
+  --gx: 0.14;
+  --gy: -0.07;
+  --size: 0.09;
+  animation-duration: 3700ms;
+  animation-delay: 1550ms;
+}
+
+.bigdice-glints i:nth-child(8) {
+  --gx: -0.17;
+  --gy: 0.11;
+  --size: 0.09;
+  animation-duration: 3900ms;
+  animation-delay: 900ms;
+}
+
+/*
+  Most of the cycle is dark. A glint is the moment light catches an edge, so it
+  arrives fast, holds for almost nothing, and is gone.
+
+  A quarter of the cycle lit is the balance worth keeping: with eight points and
+  an eighth each, a die twinkled about once at a time and read as broken rather
+  than as bright. A quarter leaves two or three alight at any moment — enough to
+  say the die is catching light, short of the steady glow that would just be a
+  brighter die.
+*/
+@keyframes bigdice-glint {
+  0%,
   100% {
     opacity: 0;
-    transform: translateY(calc(var(--die-size) * -1.3 * var(--reach))) scale(0.3) rotate(80deg);
+    transform: scale(0.2) rotate(0deg);
+  }
+  9% {
+    opacity: 1;
+    transform: scale(1) rotate(25deg);
+  }
+  26% {
+    opacity: 0;
+    transform: scale(0.25) rotate(55deg);
   }
 }
 
@@ -3566,11 +3636,11 @@ code {
     animation: none;
   }
 
-  /* The rings and the sparks are motion and nothing else — there is no still
-     frame of either worth keeping, so they do not run at all. The result is
-     still lit, still gold, and still says what it is. */
+  /* The rings and the shine are motion and nothing else — there is no still
+     frame of either worth keeping, and a glint that never blinks is a sticker.
+     The result is still lit, still gold, and still says what it is. */
   .bigdice-shock,
-  .bigdice-sparks {
+  .bigdice-glints {
     display: none;
   }
 

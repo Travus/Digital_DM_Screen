@@ -58,15 +58,19 @@ const TUMBLE_MS = 700
 const TICK_MS = 70
 
 /**
- * The twin's burst: how many rings go out, and how many sparks ride them.
- *
- * Four rings because two waves of two is a burst that repeats, where one wave
- * is a pulse. Two dozen sparks is where the ring stops looking like a wheel of
- * spokes and starts looking scattered — the stylesheet nudges every third one
- * off the true angle for the same reason.
+ * Four rings, because two waves of two is a burst that repeats where one wave
+ * is only a pulse.
  */
 const SHOCK_RINGS = 4
-const SPARKS = 24
+
+/**
+ * How many points on a twin die catch the light.
+ *
+ * They are placed on the silhouette's corners and a couple of interior edges,
+ * which is where a real die glints — the stylesheet holds the positions,
+ * because that is art direction and not geometry the module could derive.
+ */
+const GLINTS = 8
 
 interface HistoryEntry {
   id: string
@@ -364,29 +368,20 @@ function BigDice({
             <span className={`bigdice-wash ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
             <span className={`bigdice-beams ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
             {/*
-              The twin, on a throw that happened here: two waves of rings out of
-              the middle and a scatter of sparks riding them. One throw in four
-              hundred, so it gets an effect nothing else in the app uses.
+              The twin's arrival: two waves of rings out of the middle, on a
+              throw that happened here. One in four hundred, so it gets an
+              effect nothing else in the app uses.
 
-              Both are empty elements the stylesheet animates — the count is the
-              only thing worth saying here, and it lives beside the CSS that
-              staggers them.
+              The dice go on glinting afterwards — that lives on the die, in
+              `SolidDie`, because it is a property of the result rather than of
+              the moment it landed.
             */}
             {twin !== '' && thrown && (
-              <>
-                <span className="bigdice-shock" aria-hidden="true">
-                  {Array.from({ length: SHOCK_RINGS }, (_, index) => (
-                    <i key={index} />
-                  ))}
-                </span>
-                <span className="bigdice-sparks" aria-hidden="true">
-                  {Array.from({ length: SPARKS }, (_, index) => (
-                    // Its place in the ring, which is all the stylesheet needs
-                    // to give each one an angle, a delay and a distance.
-                    <i key={index} style={{ '--i': index } as CSSProperties} />
-                  ))}
-                </span>
-              </>
+              <span className="bigdice-shock" aria-hidden="true">
+                {Array.from({ length: SHOCK_RINGS }, (_, index) => (
+                  <i key={index} />
+                ))}
+              </span>
             )}
           </>
         )}
@@ -402,6 +397,11 @@ function BigDice({
                  started on — the wash and the beams are siblings, so
                  `:first-child` counts them. */
               side={resting.length > 1 ? (index === 0 ? 'left' : 'right') : 'only'}
+              /* Not gated on `thrown`, unlike the rings. The burst is the
+                 moment the twin landed; the shine is what a twin *is*, so a
+                 restored panel comes back still glinting — the same rule the
+                 beams follow one rung up. */
+              glinting={twin !== ''}
               ref={(handle) => {
                 dice.current[index] = handle
               }}
@@ -498,8 +498,13 @@ interface SolidHandle {
  */
 const SolidDie = forwardRef<
   SolidHandle,
-  { solid: DieSolid; discarded: boolean; side: 'left' | 'right' | 'only' }
->(function SolidDie({ solid, discarded, side }, ref): JSX.Element {
+  {
+    solid: DieSolid
+    discarded: boolean
+    side: 'left' | 'right' | 'only'
+    glinting: boolean
+  }
+>(function SolidDie({ solid, discarded, side, glinting }, ref): JSX.Element {
   const hopRef = useRef<HTMLSpanElement>(null)
   const solidRef = useRef<HTMLSpanElement>(null)
   const faceRefs = useRef<(SVGSVGElement | null)[]>([])
@@ -568,6 +573,19 @@ const SolidDie = forwardRef<
           ))}
         </span>
       </span>
+      {/*
+        Points on the die that catch the light, twinkling for as long as the
+        result is up. Inside the scene rather than over the stage, so they ride
+        the die's own place on it: a matched pair is scattered and turned, and
+        its glints turn with it.
+      */}
+      {glinting && (
+        <span className="bigdice-glints" aria-hidden="true">
+          {Array.from({ length: GLINTS }, (_, index) => (
+            <i key={index} />
+          ))}
+        </span>
+      )}
     </span>
   )
 })

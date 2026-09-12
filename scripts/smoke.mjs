@@ -1453,11 +1453,16 @@ const shots = [
   // neither is struck or dimmed: they lean together instead, and the shockwave
   // and the bigger call-out are what say this is not an ordinary critical.
   //
-  // The rings themselves are not in this shot and cannot be in any shot. Like
-  // the beams' `.sweep`, they are gated on a throw made in *this* session, so a
-  // restored panel shows the twin already arrived rather than replaying it on
-  // every launch — and a pair of 20s cannot be rolled to order, so no click can
-  // reach the state either. Whether the shockwave reads is eyes only.
+  // The rings are not in this shot and cannot be in any shot. Like the beams'
+  // `.sweep`, they are gated on a throw made in *this* session, so a restored
+  // panel shows the twin already arrived rather than replaying it on every
+  // launch — and a pair of 20s cannot be rolled to order, so no click can reach
+  // the state either. Whether the shockwave reads is eyes only.
+  //
+  // The shine is not gated that way and so is assertable: it is what a twin
+  // *is*, not what its landing looked like. Which of the eight glints happens
+  // to be mid-flash when the shutter opens is luck, but that they are on the
+  // die at all is not.
   {
     name: 'bigdice-twin-nat20',
     layout: starter,
@@ -1481,8 +1486,8 @@ const shots = [
         '.bigdice-stage.twin.matched.nat20',
         '.bigdice-flourish.twin',
         '.bigdice-beams',
-        '.bigdice-scene[data-side="left"]',
-        '.bigdice-scene[data-side="right"]'
+        '.bigdice-scene[data-side="left"] .bigdice-glints i',
+        '.bigdice-scene[data-side="right"] .bigdice-glints i'
       ],
       missing: ['.bigdice-scene.discarded', '.bigdice-stage.solo', '.bigdice-dropped'],
       text: ['DOUBLE CRITICAL']
@@ -1513,7 +1518,10 @@ const shots = [
         '.bigdice-stage.twin',
         '.bigdice-scene.discarded',
         '.bigdice-flourish',
-        '.bigdice-dropped'
+        '.bigdice-dropped',
+        // An ordinary tie is scattered, but it does not shine: the twin has to
+        // keep something of its own or it stops being one throw in four hundred.
+        '.bigdice-glints'
       ],
       text: ['13']
     }

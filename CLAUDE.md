@@ -596,25 +596,35 @@ gets it, not only the twin: nothing is discarded on a tie either.
 The in-plane rotation goes on the scene, which holds the perspective, so it
 turns the finished picture and leaves the thrown face square to the camera.
 
-**Two natural 20s, or two natural 1s, get their own burst.** About one throw in
-four hundred, so it is the one effect in the app that is allowed to be loud:
-four rings in two waves, two dozen sparks riding them, and a wash that flares
-twice. Rings rather than a flash — a flash is one frame the eye can miss and a
-television smears — and a second wave rather than a longer first one, because
-arriving twice is what makes it read as an event rather than a transition.
+**Two natural 20s, or two natural 1s, get their own flourish.** About one throw
+in four hundred, so it is the one thing in the app allowed to be loud. It is two
+effects, and the split is the point:
 
-**A spark's heading is the `rotate` property and its flight is `transform`.**
-The individual transform properties apply *before* `transform`, so the outward
-`translateY` happens in the spark's own turned frame and carries it along its
-own bearing. That is the same composition the beams' comment warns about, used
-on purpose rather than tripped over: the markup says only which spark it is, and
-the stylesheet derives the angle, the delay and the distance from that.
+**The burst is what landing looked like** — four rings out of the middle in two
+waves, under a wash that flares twice. Rings rather than a flash, because a
+flash is one frame the eye can miss and a television smears; and a second wave
+rather than a longer first one, because arriving twice is what makes it read as
+an event rather than as a transition. Gated on a throw made in *this* session,
+like the beams' `.sweep`.
 
-Like the beams' `.sweep`, all of it is gated on a throw made in *this* session,
-so a restored panel shows the twin already arrived rather than replaying it on
-every launch. That also means **no smoke shot can carry it** — a pair of 20s
-cannot be rolled to order. It was checked by driving a forced-twin build under
-the harness and photographing the waves; that is the way to look at it again.
+**The shine is what a twin *is*** — eight points on each die catching the light,
+over and over for as long as the result is up. A burst of sparks thrown outward
+was tried first and is the wrong idea: it happens *near* the dice and is then
+over, where this happens *to* them and keeps happening. It lives inside the
+scene rather than over the stage, so each glint rides its own die — a matched
+pair is scattered and turned, and its glints go with it. Not gated on `thrown`,
+because a restored panel is still showing a double.
+
+The positions are art direction, so the stylesheet holds them and the markup
+says only how many. The durations are deliberately unequal: with one duration
+the eight blink together like fairy lights. A quarter of each cycle is lit,
+which leaves two or three alight at once — an eighth read as broken, and more
+would be a steady glow, which is just a brighter die.
+
+**The shine is assertable and the burst is not.** A pair of 20s cannot be rolled
+to order, so nothing reaches the rings; the twin shots assert the glints
+instead. The rings were checked by driving a forced-twin build under the harness
+and photographing the waves, which is the way to look at them again.
 
 **The wash and the beams are measured against `--die-size`, never the panel.**
 Sized as a percentage of the stage they come apart the moment a panel is not
