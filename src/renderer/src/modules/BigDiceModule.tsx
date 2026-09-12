@@ -1,27 +1,42 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties
 } from 'react'
 import { uid } from '../../../shared/layout'
-import { rollDie } from '../lib/dice'
 import {
-  D20_FACES,
-  D20_FACE_BOX,
-  D20_INRADIUS,
-  D20_SPAN,
+  criticalOf,
+  DICE,
+  dieLabel,
+  historyTitle,
+  keptIndex,
+  modeApplies,
+  MODES,
+  percentileText,
+  slots,
+  throwDice,
+  throwsAPair,
+  twinCriticalOf,
+  type Mode,
+  type Pair,
+  type Sides
+} from '../lib/bigDice'
+import {
   faceLighting,
   randomSpin,
-  RESTING_VALUE,
   restRotation,
   THROW_MS,
   throwLift,
   throwRotation,
   toMatrix3d,
-  toRotate3d
+  toRotate3d,
+  type DieSolid,
+  type Mat3
 } from '../lib/dieSolid'
 import { defineModule, type ModuleProps } from './types'
 
@@ -33,28 +48,47 @@ import { defineModule, type ModuleProps } from './types'
  * die, large enough to read from across the room, for the rolls everyone wants
  * to see land.
  *
- * The d20 is a real solid, built from twenty faces in `lib/dieSolid.ts`. Every
- * other die is the flat top-down face below, which is also what the d20 falls
- * back to when a DM turns the solid off.
+ * Every die is a real solid, built in `lib/dieSolid.ts`. The flat top-down face
+ * further down is what the module started as and what it falls back to when a DM
+ * turns the solids off.
  */
-
-const DICE = [4, 6, 8, 10, 12, 20, 100] as const
-type Sides = (typeof DICE)[number]
 
 /** How long the flat die's tumble runs, and how often the face changes while it does. */
 const TUMBLE_MS = 700
 const TICK_MS = 70
 
+/**
+ * Four rings, because two waves of two is a burst that repeats where one wave
+ * is only a pulse.
+ */
+const SHOCK_RINGS = 4
+
+/**
+ * How many points on a twin die catch the light.
+ *
+ * They are placed on the silhouette's corners and a couple of interior edges,
+ * which is where a real die glints — the stylesheet holds the positions,
+ * because that is art direction and not geometry the module could derive.
+ */
+const GLINTS = 8
+
 interface HistoryEntry {
   id: string
   sides: number
   value: number
+  /** Both d20s, when the throw was made with advantage or disadvantage. */
+  pair?: Pair
+  mode?: Mode
 }
 
 interface State {
   sides: Sides
+  /** A current choice like `sides`, so a restored panel comes back in it. */
+  mode: Mode
   /** Last settled result, or null before the first throw. */
   value: number | null
+  /** Both d20s of the last throw, when one of them was discarded. */
+  pair: Pair | null
   history: HistoryEntry[]
 }
 
@@ -64,7 +98,7 @@ interface Settings {
   /** Mark a natural 20 and a natural 1 on the d20. */
   critFlourish: boolean
   animate: boolean
-  /** Throw the d20 as a solid rather than as the flat top-down face. */
+  /** Throw the dice as solids rather than as flat top-down faces. */
   solid: boolean
   /**
    * Whether a percentile throw of `00` and `0` is 100 or 0 — which is to say,
@@ -74,31 +108,10 @@ interface Settings {
   zeroIsHundred: boolean
 }
 
-function label(sides: number): string {
-  return sides === 100 ? 'd%' : `d${sides}`
-}
-
-/**
- * Rolled as the two dice it physically is, rather than as `rollDie(100)`.
- *
- * That matters for the 0–99 convention, which has no equivalent single roll, and
- * it makes the one interesting result reachable honestly: `00` and `0` comes up
- * when both dice land on zero, once in a hundred throws either way.
- */
-function rollPercentile(zeroIsHundred: boolean): number {
-  const tens = rollDie(10) - 1
-  const units = rollDie(10) - 1
-  const raw = tens * 10 + units
-  return raw === 0 && zeroIsHundred ? 100 : raw
-}
-
-/**
- * The two faces for a percentile total. 100 and 0 are the same throw — both
- * dice showing zero — so both render as `00` and `0`.
- */
-function percentileFaces(value: number): [string, string] {
-  const raw = value === 100 ? 0 : value
-  return [String(Math.floor(raw / 10) * 10).padStart(2, '0'), String(raw % 10)]
+const MODE_LABEL: Record<Mode, string> = {
+  advantage: 'Advantage',
+  normal: 'Normal',
+  disadvantage: 'Disadvantage'
 }
 
 function BigDice({
@@ -111,21 +124,34 @@ function BigDice({
    * The tumbling face is local, never persisted. Every `setState` here rides
    * into the document, sets `dirty` and schedules a session write — ten of them
    * a second would thrash the autosave and leave the layout permanently unsaved
-   * over an animation nobody wants to keep. The solid is stricter still: its
+   * over an animation nobody wants to keep. The solids are stricter still: a
    * throw runs a frame at a time and writes straight to the DOM, so nothing
-   * reaches the store until the die has landed.
+   * reaches the store until the dice have landed.
    */
   const [tumbling, setTumbling] = useState(false)
-  const [face, setFace] = useState<number | null>(null)
+  /**
+   * The flat renderer's tumbling faces. Always a pair, even for the dice that
+   * only ever show the first of them: an advantage tumble needs two numbers
+   * changing independently, and a second piece of state for the second die is
+   * two things that would have to stay in step.
+   */
+  const [faces, setFaces] = useState<Pair | null>(null)
+  /**
+   * The pair currently in the air, so the stage carries the right number of
+   * dice from the moment of the throw. Without it the first advantage roll
+   * tumbles one die and grows a second at the landing, which reads as the
+   * second die having appeared out of nothing.
+   */
+  const [flying, setFlying] = useState<Pair | null>(null)
   /** Whether the result on screen was thrown here, rather than restored with the layout. */
   const [thrown, setThrown] = useState(false)
   const timers = useRef<number[]>([])
   const frame = useRef(0)
-  const solidRef = useRef<HTMLSpanElement>(null)
-  const hopRef = useRef<HTMLSpanElement>(null)
-  const faceRefs = useRef<(SVGSVGElement | null)[]>([])
+  const dice = useRef<(SolidHandle | null)[]>([])
 
-  const solidDie = settings.solid && state.sides === 20
+  const showMode = modeApplies(state.sides)
+  const pair = flying ?? state.pair
+  const resting = slots(state.sides, state.mode, state.value, pair)
 
   const clearTimers = useCallback((): void => {
     for (const timer of timers.current) window.clearInterval(timer)
@@ -140,94 +166,149 @@ function BigDice({
   useEffect(() => {
     clearTimers()
     setTumbling(false)
-    setFace(null)
+    setFaces(null)
   }, [state.sides, clearTimers])
 
-  /** Writes one frame of the solid straight to the DOM. Nothing here re-renders. */
-  const paint = useCallback((rotation: readonly number[], lift: number): void => {
-    if (!solidRef.current) return
-    solidRef.current.style.transform = toMatrix3d(rotation)
-    hopRef.current?.style.setProperty('--lift', lift.toFixed(4))
-    faceLighting(rotation).forEach((shade, index) => {
-      const element = faceRefs.current[index]
-      if (!element) return
-      element.style.visibility = shade.visible ? 'visible' : 'hidden'
-      element.style.filter = `brightness(${shade.brightness.toFixed(3)})`
-    })
-  }, [])
-
   /*
-    Where the die sits when nothing is moving. Derived from the settled value
-    rather than left wherever the last throw put it, so a panel restored with a
-    20 in it comes back showing that 20.
+    Where the dice sit when nothing is moving. Derived from the settled values
+    rather than left wherever the last throw put them, so a panel restored with
+    a 20 in it comes back showing that 20.
   */
   useLayoutEffect(() => {
-    if (!solidDie || tumbling) return
-    paint(restRotation(state.value ?? RESTING_VALUE), 0)
-  }, [solidDie, tumbling, state.value, paint])
+    if (!settings.solid || tumbling) return
+    for (const [index, slot] of resting.entries()) {
+      dice.current[index]?.paint(restRotation(slot.solid, slot.value ?? slot.solid.restingValue), 0)
+    }
+  })
 
-  const throwDie = (): number =>
-    state.sides === 100 ? rollPercentile(settings.zeroIsHundred) : rollDie(state.sides)
-
-  const settle = (result: number): void => {
+  const settle = (result: number, landed: Pair | null): void => {
     clearTimers()
     setTumbling(false)
-    setFace(null)
+    setFaces(null)
+    setFlying(null)
     setThrown(true)
     setState((prev) => ({
       value: result,
-      history: [{ id: uid('throw'), sides: state.sides, value: result }, ...prev.history].slice(
-        0,
-        settings.historyLimit
-      )
+      pair: landed,
+      history: [
+        {
+          id: uid('throw'),
+          sides: state.sides,
+          value: result,
+          ...(landed ? { pair: landed, mode: state.mode } : {})
+        },
+        ...prev.history
+      ].slice(0, settings.historyLimit)
     }))
   }
 
   const roll = (): void => {
     if (tumbling) return
-    const result = throwDie()
+    const result = throwDice(state.sides, state.mode, settings.zeroIsHundred)
 
     // Someone who has asked the OS for less motion gets the result outright.
     const still = !settings.animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (still) {
-      settle(result)
+      settle(result.value, result.pair)
       return
     }
 
     setTumbling(true)
+    setFlying(result.pair)
 
-    if (solidDie) {
-      const rest = restRotation(result)
-      const spin = randomSpin()
+    if (settings.solid) {
+      /*
+        One clock and one frame loop for however many dice are on the stage, so
+        a pair lands together. Each die gets its own spin — two solids turning
+        in step read as one rigid object rather than two dice.
+      */
+      const landing = slots(state.sides, state.mode, result.value, result.pair).map((slot) => ({
+        rest: restRotation(slot.solid, slot.value ?? slot.solid.restingValue),
+        spin: randomSpin()
+      }))
       const start = performance.now()
       const step = (now: number): void => {
         const t = Math.min(1, (now - start) / THROW_MS)
-        paint(throwRotation(rest, spin, t), throwLift(t))
+        const lift = throwLift(t)
+        for (const [index, { rest, spin }] of landing.entries()) {
+          dice.current[index]?.paint(throwRotation(rest, spin, t), lift)
+        }
         if (t < 1) {
           frame.current = window.requestAnimationFrame(step)
           return
         }
-        settle(result)
+        settle(result.value, result.pair)
       }
       frame.current = window.requestAnimationFrame(step)
       return
     }
 
-    timers.current.push(window.setInterval(() => setFace(throwDie()), TICK_MS))
-    timers.current.push(window.setInterval(() => settle(result), TUMBLE_MS))
+    // Two independent values every tick, so an advantage pair tumbles as two
+    // dice. Single dice read the first and ignore the second.
+    const tick = (): number => throwDice(state.sides, 'normal', settings.zeroIsHundred).value
+    timers.current.push(window.setInterval(() => setFaces([tick(), tick()]), TICK_MS))
+    timers.current.push(window.setInterval(() => settle(result.value, result.pair), TUMBLE_MS))
   }
 
-  const shown = face ?? state.value
-  const critical =
-    settings.critFlourish && !tumbling && state.sides === 20 && state.value !== null
-      ? state.value === 20
-        ? 'nat20'
-        : state.value === 1
-          ? 'nat1'
-          : ''
-      : ''
+  /**
+   * The flat renderer's dice, left to right — the same three shapes `slots()`
+   * gives the solids, in the terms this one draws in. Built here rather than in
+   * the JSX because the pair branch has to hold during the tumble as well as
+   * after it, and a ternary that says so three times is a ternary nobody reads.
+   */
+  const flat = ((): { face: string; discarded: boolean }[] => {
+    const shown = faces?.[0] ?? state.value
+    if (state.sides === 100) {
+      const [tens, units] = shown === null ? ['', ''] : percentileText(shown)
+      return [
+        { face: tens, discarded: false },
+        { face: units, discarded: false }
+      ]
+    }
+    const showing = tumbling ? faces : pair
+    if (!throwsAPair(state.sides, state.mode) || showing === null) {
+      return [{ face: shown === null ? '' : String(shown), discarded: false }]
+    }
+    // Nothing is discarded until the dice have stopped: a strike through a
+    // number still changing claims a result that has not happened. Two equal
+    // dice discard nothing either, for the reason `slots()` gives.
+    const kept = tumbling || showing[0] === showing[1] ? -1 : keptIndex(showing, state.mode)
+    return showing.map((value, index) => ({
+      face: String(value),
+      discarded: kept >= 0 && kept !== index
+    }))
+  })()
 
-  const stageClasses = ['bigdice-stage', solidDie && 'solid', tumbling && 'tumbling', critical]
+  /*
+    Nothing is decided until the dice stop, so no flourish is drawn while they
+    are in the air — including the *previous* throw's, which would otherwise sit
+    there through the tumble and read as a verdict on a roll still happening.
+  */
+  const critical = settings.critFlourish && !tumbling ? criticalOf(state.sides, state.value) : ''
+  const twin = critical !== '' ? twinCriticalOf(pair) : ''
+  /* Two dice showing the same face are one sprite stamped twice unless they are
+     scattered. Any tie, not only the twin: `slots` discards neither, so both
+     are full size and identical. Off while they are still turning, when they
+     are not showing the same thing yet. */
+  const matched =
+    !tumbling && pair !== null && pair[0] === pair[1] && throwsAPair(state.sides, state.mode)
+  /* One die is out of the roll and the other is a critical: the loser goes
+     entirely and the winner takes the middle. Not when both are the critical —
+     that is the twin case, and neither of them lost. */
+  const solo = critical !== '' && twin === '' && resting.length > 1
+
+  const stageClasses = [
+    'bigdice-stage',
+    settings.solid && 'solid',
+    tumbling && 'tumbling',
+    /* Two dice share the room one had, so the stage has to know. Both renderers
+       answer it, because both can end up showing a pair. */
+    (settings.solid ? resting.length : flat.length) > 1 && 'paired',
+    critical,
+    solo && 'solo',
+    matched && 'matched',
+    twin !== '' && 'twin'
+  ]
     .filter(Boolean)
     .join(' ')
 
@@ -240,14 +321,43 @@ function BigDice({
             className={`chip action ${state.sides === sides ? 'on' : ''}`}
             /* Switching dice clears the result rather than leaving a 17 sitting
                on a d6, which reads as a bug even though it was a real throw. */
-            onClick={() => setState({ sides, value: null })}
+            onClick={() => setState({ sides, value: null, pair: null })}
           >
-            {label(sides)}
+            {dieLabel(sides)}
           </button>
         ))}
       </div>
 
-      <button className={stageClasses} onClick={roll} title={`Throw ${label(state.sides)}`}>
+      {/*
+        A control on the die rather than a setting in the drawer. Advantage is a
+        per-roll decision made several times a fight — a checkbox two clicks
+        away behind the ⋯ menu is the wrong place for something changed that
+        often, and the chips also say which mode the panel is in without being
+        opened. Hidden off the d20 because no other die has the rule.
+
+        `MODES` is in drawing order, so the plain throw sits between the two
+        that modify it and the row reads as a scale rather than as a default
+        with two options bolted on.
+      */}
+      {showMode && (
+        <div className="chip-row bigdice-modes">
+          {MODES.map((mode) => (
+            <button
+              key={mode}
+              className={`chip action ${state.mode === mode ? 'on' : ''}`}
+              data-mode={mode}
+              /* The pair goes with the mode: a disadvantage pair left on screen
+                 after switching to normal is two dice the next throw cannot
+                 explain. */
+              onClick={() => setState({ mode, pair: null })}
+            >
+              {MODE_LABEL[mode]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button className={stageClasses} onClick={roll} title={`Throw ${dieLabel(state.sides)}`}>
         {/*
           The flourish leaves the DOM rather than fading, for the same reason
           the fullscreen hint does: the stage is the button that throws the die,
@@ -257,51 +367,59 @@ function BigDice({
           <>
             <span className={`bigdice-wash ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
             <span className={`bigdice-beams ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
+            {/*
+              The twin's arrival: two waves of rings out of the middle, on a
+              throw that happened here. One in four hundred, so it gets an
+              effect nothing else in the app uses.
+
+              The dice go on glinting afterwards — that lives on the die, in
+              `SolidDie`, because it is a property of the result rather than of
+              the moment it landed.
+            */}
+            {twin !== '' && thrown && (
+              <span className="bigdice-shock" aria-hidden="true">
+                {Array.from({ length: SHOCK_RINGS }, (_, index) => (
+                  <i key={index} />
+                ))}
+              </span>
+            )}
           </>
         )}
 
-        {solidDie ? (
-          <span
-            className="bigdice-scene"
-            style={
-              {
-                '--span': D20_SPAN,
-                '--face-box': D20_FACE_BOX,
-                '--inradius': D20_INRADIUS
-              } as CSSProperties
-            }
-          >
-            <span className="bigdice-hop" ref={hopRef}>
-              <span className="bigdice-solid" ref={solidRef}>
-                {D20_FACES.map((solidFace, index) => (
-                  <svg
-                    key={solidFace.value}
-                    className="bigdice-face"
-                    viewBox="0 0 100 100"
-                    aria-hidden="true"
-                    ref={(element) => {
-                      faceRefs.current[index] = element
-                    }}
-                    style={{
-                      transform: `${toRotate3d(solidFace)} translateZ(calc(var(--unit) * var(--inradius)))`
-                    }}
-                  >
-                    <polygon points={solidFace.points} />
-                    <text x="50" y="56">
-                      {solidFace.value}
-                    </text>
-                  </svg>
-                ))}
-              </span>
-            </span>
-          </span>
-        ) : state.sides === 100 ? (
+        {settings.solid ? (
+          resting.map((slot, index) => (
+            <SolidDie
+              key={`${slot.solid.kind}-${index}`}
+              solid={slot.solid}
+              discarded={slot.discarded && !tumbling}
+              /* Which way in is which way out. The stylesheet moves a die
+                 towards the middle and cannot tell from the DOM which side it
+                 started on — the wash and the beams are siblings, so
+                 `:first-child` counts them. */
+              side={resting.length > 1 ? (index === 0 ? 'left' : 'right') : 'only'}
+              /* Not gated on `thrown`, unlike the rings. The burst is the
+                 moment the twin landed; the shine is what a twin *is*, so a
+                 restored panel comes back still glinting — the same rule the
+                 beams follow one rung up. */
+              glinting={twin !== ''}
+              ref={(handle) => {
+                dice.current[index] = handle
+              }}
+            />
+          ))
+        ) : flat.length > 1 ? (
           <span className="bigdice-pair">
-            <Die sides={10} face={shown === null ? '' : percentileFaces(shown)[0]} />
-            <Die sides={10} face={shown === null ? '' : percentileFaces(shown)[1]} />
+            {flat.map((die, index) => (
+              <Die
+                key={index}
+                sides={state.sides === 100 ? 10 : state.sides}
+                face={die.face}
+                discarded={die.discarded}
+              />
+            ))}
           </span>
         ) : (
-          <Die sides={state.sides} face={shown === null ? '' : String(shown)} />
+          <Die sides={state.sides} face={flat[0].face} discarded={flat[0].discarded} />
         )}
       </button>
 
@@ -310,10 +428,27 @@ function BigDice({
         20, so printing it again beside the word only makes the readout longer
         and the call-out quieter — and "Critical Success" is the thing the table
         needs to read from across the room.
+
+        It reads the *kept* die, because that is the roll. A 20 on a die
+        disadvantage threw away is not a critical, and the strike through it on
+        the stage is where the table sees what the rule cost them.
       */}
       <div className="bigdice-readout">
-        {state.value === null ? (
+        {tumbling ? (
+          /* Not the previous throw's number, which is what used to sit here
+             through a tumble — a stale answer under dice still deciding is the
+             one thing on this panel that could be misread as the result. */
+          <span className="bigdice-rolling" aria-label="Rolling">
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : state.value === null ? (
           <span className="bigdice-prompt">Click the die to throw it</span>
+        ) : twin === 'nat20' ? (
+          <span className="bigdice-flourish twin">Double Critical</span>
+        ) : twin === 'nat1' ? (
+          <span className="bigdice-flourish twin grim">Double Disaster</span>
         ) : critical === 'nat20' ? (
           <span className="bigdice-flourish">Critical Success</span>
         ) : critical === 'nat1' ? (
@@ -326,8 +461,20 @@ function BigDice({
       {settings.showHistory && state.history.length > 0 && (
         <div className="bigdice-history">
           {state.history.map((entry) => (
-            <span key={entry.id} className="bigdice-past" title={label(entry.sides)}>
+            <span
+              key={entry.id}
+              className="bigdice-past"
+              title={historyTitle(entry.sides, entry.mode)}
+            >
               {entry.value}
+              {/* The discarded number, so a pair stays one entry that can still
+                  be read as a pair. A tie discarded nothing, so it prints the
+                  one number the throw actually came to. */}
+              {entry.pair && entry.mode && entry.pair[0] !== entry.pair[1] && (
+                <span className="bigdice-dropped">
+                  {entry.pair[keptIndex(entry.pair, entry.mode) === 0 ? 1 : 0]}
+                </span>
+              )}
             </span>
           ))}
         </div>
@@ -335,6 +482,113 @@ function BigDice({
     </div>
   )
 }
+
+/** What the throw loop drives a die with: one frame, written straight to the DOM. */
+interface SolidHandle {
+  paint: (rotation: Mat3, lift: number) => void
+}
+
+/**
+ * One solid, as the faces it is made of.
+ *
+ * Imperative on purpose. A throw writes a transform and twenty filters per
+ * frame; doing that through state would re-render the module sixty times a
+ * second and put every one of those frames through the store. The parent owns
+ * the clock so a pair lands together, and reaches each die through this.
+ */
+const SolidDie = forwardRef<
+  SolidHandle,
+  {
+    solid: DieSolid
+    discarded: boolean
+    side: 'left' | 'right' | 'only'
+    glinting: boolean
+  }
+>(function SolidDie({ solid, discarded, side, glinting }, ref): JSX.Element {
+  const hopRef = useRef<HTMLSpanElement>(null)
+  const solidRef = useRef<HTMLSpanElement>(null)
+  const faceRefs = useRef<(SVGSVGElement | null)[]>([])
+
+  useImperativeHandle(ref, () => ({
+    paint: (rotation, lift) => {
+      if (!solidRef.current) return
+      solidRef.current.style.transform = toMatrix3d(rotation)
+      hopRef.current?.style.setProperty('--lift', lift.toFixed(4))
+      faceLighting(solid, rotation).forEach((shade, index) => {
+        const element = faceRefs.current[index]
+        if (!element) return
+        element.style.visibility = shade.visible ? 'visible' : 'hidden'
+        element.style.filter = `brightness(${shade.brightness.toFixed(3)})`
+        // A property on the face rather than a style on the text: one write per
+        // face per frame either way, and the stylesheet keeps the rule.
+        element.style.setProperty('--legible', shade.legible.toFixed(3))
+      })
+    }
+  }))
+
+  return (
+    <span
+      className={`bigdice-scene ${solid.kind} ${discarded ? 'discarded' : ''}`}
+      data-side={side}
+      style={
+        {
+          '--span': solid.span,
+          '--swing': solid.swing,
+          '--face-box': solid.faceBox,
+          '--inradius': solid.inradius
+        } as CSSProperties
+      }
+    >
+      <span className="bigdice-hop" ref={hopRef}>
+        <span className="bigdice-solid" ref={solidRef}>
+          {solid.faces.map((face, index) => (
+            <svg
+              key={face.value}
+              className="bigdice-face"
+              viewBox="0 0 100 100"
+              aria-hidden="true"
+              ref={(element) => {
+                faceRefs.current[index] = element
+              }}
+              style={{
+                transform: `${toRotate3d(face)} translateZ(calc(var(--unit) * var(--inradius)))`
+              }}
+            >
+              <polygon points={face.points} />
+              {face.labels.map((printed, at) => (
+                <text
+                  key={at}
+                  x={printed.x.toFixed(2)}
+                  y={printed.y.toFixed(2)}
+                  transform={
+                    printed.angle === 0
+                      ? undefined
+                      : `rotate(${printed.angle} ${printed.x.toFixed(2)} ${printed.y.toFixed(2)})`
+                  }
+                >
+                  {printed.text}
+                </text>
+              ))}
+            </svg>
+          ))}
+        </span>
+      </span>
+      {/*
+        Points on the die that catch the light, twinkling for as long as the
+        result is up. Inside the scene rather than over the stage, so they ride
+        the die's own place on it: a matched pair is scattered and turned, and
+        its glints turn with it.
+      */}
+      {glinting && (
+        <span className="bigdice-glints" aria-hidden="true">
+          {Array.from({ length: GLINTS }, (_, index) => (
+            <i key={index} />
+          ))}
+        </span>
+      )}
+    </span>
+  )
+})
 
 /**
  * The die itself, drawn as the face you would be looking down at.
@@ -345,7 +599,15 @@ function BigDice({
  * true silhouette — the d20's hexagonal outline with the top face picked out in
  * the middle is what tells it apart from the d4's plain triangle.
  */
-function Die({ sides, face }: { sides: number; face: string }): JSX.Element {
+function Die({
+  sides,
+  face,
+  discarded = false
+}: {
+  sides: number
+  face: string
+  discarded?: boolean
+}): JSX.Element {
   const shapes: Record<number, JSX.Element> = {
     4: <polygon points="50,10 93,84 7,84" />,
     6: <rect x="12" y="12" width="76" height="76" rx="11" />,
@@ -387,7 +649,11 @@ function Die({ sides, face }: { sides: number; face: string }): JSX.Element {
   const textY = sides === 4 ? 60 : sides === 20 ? 57 : sides === 10 ? 56 : 50
 
   return (
-    <svg className={`die d${sides}`} viewBox="0 0 100 100" aria-hidden="true">
+    <svg
+      className={`die d${sides} ${discarded ? 'discarded' : ''}`}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+    >
       {shapes[sides]}
       <text x="50" y={textY} className="die-face">
         {face}
@@ -405,7 +671,7 @@ function BigDiceSettings({ settings, setSettings }: ModuleProps<State, Settings>
           checked={settings.solid}
           onChange={(event) => setSettings({ solid: event.target.checked })}
         />
-        Throw the d20 as a solid die
+        Throw solid dice rather than flat faces
       </label>
       <label className="check">
         <input
@@ -453,7 +719,8 @@ function BigDiceSettings({ settings, setSettings }: ModuleProps<State, Settings>
       </label>
       <p className="note">
         One die, thrown by clicking it — meant to be turned towards the table for the rolls everyone
-        wants to watch. The Dice Roller module is the one for expressions like <code>4d6kh3</code>.
+        wants to watch. Advantage and disadvantage are on the die itself, under the d20. The Dice
+        Roller module is the one for expressions like <code>4d6kh3</code>.
       </p>
     </div>
   )
@@ -465,7 +732,7 @@ export const bigDiceModule = defineModule<State, Settings>({
   icon: '🎯',
   blurb: 'One oversized die, thrown by clicking it — for rolls the table watches.',
   category: 'Tools',
-  defaultState: () => ({ sides: 20, value: null, history: [] }),
+  defaultState: () => ({ sides: 20, mode: 'normal', value: null, pair: null, history: [] }),
   defaultSettings: () => ({
     showHistory: true,
     historyLimit: 10,

@@ -52,8 +52,12 @@ on screen; whether it *looks right* is still eyes only.
   list behind Conditions, Player Abilities and Diseases.
 - `src/renderer/src/components/MarkupText.tsx`, `MarkupTextarea.tsx` and
   `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
-- `src/renderer/src/lib/dieSolid.ts` — the d20 as geometry rather than as a
-  picture: its twenty faces, where each one sits, and how lit it is.
+- `src/renderer/src/lib/dieSolid.ts` — the dice as geometry rather than as
+  pictures: every solid's faces, where each one sits, and how lit it is.
+- `src/renderer/src/lib/bigDice.ts` — what Big Dice throws and how many solids
+  that puts on screen. Percentile as a physical pair, advantage as two d20s
+  with one discarded. Kept out of `lib/dice.ts`, which is the expression
+  language and shares nothing with it.
 - `src/main/imageStore.ts` — the files the Image module is allowed to display,
   and the ids the `dmscreen-image://` handler serves them under.
 - `src/main/document.ts` — the layout document, and the one copy of it that
@@ -347,11 +351,13 @@ The timers in `App.tsx` and the transition in `styles.css` are two halves of one
 duration and have to agree. Big Dice's wash and beams follow the same rule for
 the same reason, and their stage *is* the button that throws the die.
 
-## The big die
+## The big dice
 
-The d20 in Big Dice is a real solid, built from twenty SVG faces on
-`transform-style: preserve-3d`. Every other die, and the d20 with `solid` turned
-off, is the flat top-down face the module has always drawn. Both renderers stay.
+Every die in Big Dice is a real solid, built from SVG faces on
+`transform-style: preserve-3d` — d4, d6, d8, d10, d12, d20 and the percentile
+pair. With `solid` turned off, each is the flat top-down face the module has
+always drawn. Both renderers stay, and **both have to answer everything**: the
+flat one draws a discarded advantage die too, in its own terms.
 
 **The geometry lives in `lib/dieSolid.ts` and the module owns none of it.** The
 face table, the resting orientation for each number, the throw and the shading
@@ -359,6 +365,77 @@ are pure functions with unit tests. WebGL would have bought real lighting and
 cost a library, a physics engine, a GPU context per panel in every window, and
 the whole of that testability — a canvas asserts nothing, so every smoke shot
 here would collapse into a check that an element exists.
+
+**Every solid is derived, never a table of floats.** `buildSolid` takes a list
+of faces and does the rest: outward normals, the projection into each face's own
+viewBox, the numbering, the resting orientations. The derivation is the thing a
+test can hold to account, and hundreds of hand-copied numbers are not.
+
+**A face is defined by its corners and one `up` point**, which is what stands a
+triangle on its base and hangs a d10's kite from its apex. Corners arrive from
+set operations in no particular order, so they are walked by angle before being
+drawn — a square taken in extraction order comes out a bowtie.
+
+**The cube's `up` is the *die's* up axis, not a corner of each face.** Any edge
+of a square is as good as the other three, so a face left to choose lands on an
+arbitrary quarter turn — and on a cube, where three faces meet at right angles
+in plain view, that reads as numbers lying on their sides for no reason. The
+four faces beside the up axis take it and read upright together; the two it runs
+through take the depth axis, which is why looking down at a real die's top face
+reads it with the front of the die at the bottom. Nowhere else does it show: a
+d20's neighbours really are turned every which way, on the real die too.
+
+**A die is fitted to how wide it looks standing still, and pays for it in the
+air.** `span` used to be the bounding sphere, which sizes a die by something you
+cannot see — a cube's corners reach half again past its faces, so a d6 came out
+at 60% of the box while a d20 filled 92%, and side by side they read as
+different sizes. `span` is now the widest the die ever looks *at rest*; `swing`
+is how much wider it gets mid-throw, and the stylesheet gives exactly that back
+as a scale at the top of the arc. It reads as a die thrown away from you and
+caught again, which is what is happening.
+
+**The perspective is proportional to the die, never a constant.** At a fixed
+900px the lens changed with the panel: a die in a small pane sat 40px towards
+the camera and gained 5%, one in a big pane sat 115px forward and gained 15%, so
+the same solid was drawn wide-angle in one and nearly flat in another. It showed
+worst on the cube, where straight edges make the distortion unmistakable.
+
+**Dualise rather than gather.** The dodecahedron's pentagons were first built by
+taking "the five textbook vertices leaning furthest towards each face normal".
+That is wrong and looks nearly right: the standard dodecahedron and the standard
+icosahedron differ by a rotation, so one's vertex directions are not the other's
+face normals, and the five corners it picks are not coplanar. Building it as the
+icosahedron's dual is exact by construction. `dieSolid.test.ts` asserts every
+face of every solid is flat, which is what caught it.
+
+**Two solids rest off axis, and have to.** A cube's neighbours meet it at exactly
+90°, so a face square to the camera leaves every other face on the horizon and
+the shading correctly drops them — the solid d6 would be a flat square. The
+tetrahedron is worse: all three visible faces sit at 70.5°, so it reads as a
+triangle with a Y drawn on it. Both carry a small `TILT` composed onto their
+resting orientations, with the angle argued at the constant. Nothing else needs
+one; every other solid here has an obtuse dihedral angle and shows three to five
+faces unaided.
+
+**The d6's tilt is the smallest one that works, not a three-quarter view.** A
+proper 30° turn was tried and is worse for the one thing the die is for: with
+three faces all readable, which one is the *result* stops being obvious. Ten
+degrees leaves the thrown face square enough to read as the front and its two
+neighbours as thin bands, which say "cube" without competing.
+
+**The d4 is read at its apex, and that is a decision, not a detail.** A
+tetrahedron has no face pointing anywhere useful, so a real d4 is read either at
+the apex or along the bottom edge. This module presents a die to a camera rather
+than resting it on a table, and "the corner towards you" survives that
+translation where "the edge against the table" does not — there is no table. So
+each face carries three numbers, one per corner, and a face's own `value` is the
+number it *lacks*: an identity, not a result. Nothing else here prints more than
+one number per face, which is why `SolidFace.labels` is a list.
+
+**`SolidFace.corners` is there for the tests, and says so.** Nothing draws from
+it — `points` is its projection — but it is the only way to ask whether a face is
+flat, which is a real question for the d10's kite: its zigzag equator is planar
+at exactly one radius and nowhere else.
 
 **The throw writes to the DOM, never through `setState`.** It runs a frame at a
 time, and every write to panel state marks the layout unsaved, sends the whole
@@ -375,6 +452,22 @@ turned away is not drawn at all, which is what lets a convex solid skip sorting
 entirely — and is why none of this leans on `backface-visibility` reaching an
 SVG element. Faces are drawn slightly oversized so neighbours overlap: cut to
 their exact edges, the hairline seams let you see through the solid.
+
+**A number stops being drawn before its face does.** The same dot product fades
+it out between 60° and 77°. Past that the face is a sliver a few pixels wide and
+its number has compressed into a bright smear sitting on the die's own outline —
+which is what read as a ghost of the number on the face beside it. The face
+stays; it is what says the die is a solid. Faded rather than switched, or a
+tumbling die flickers its numbers as faces cross the line. `opacity`, not
+`visibility`, so the numbers stay in `innerText` for the smoke harness.
+
+**The cube's faces are drawn *under* size, and it is the only one.** A right
+angle is the case the overlap does not survive: everywhere else the oversized
+rim tilts away and tucks under its neighbour, but on a cube it projects straight
+out past the neighbour's plane, and so does the outer half of the polygon's own
+stroke. That is five or six pixels of one face painted over the front of the
+next — the gold speckling that used to break the cube's edges. Pulled in by half
+a stroke instead, so the stroke's outer edge lands on the true edge of the face.
 
 **A critical is lit, not replayed.** The beams and the wash are derived from the
 settled value, so a panel restored with a 20 in it comes back already lit; only
@@ -396,11 +489,142 @@ origin once per turn, and the element orbits instead of turning in place. The
 beams are centred with margins, and `transform` is left carrying nothing but
 scale.
 
-**The die's own numbers are no longer worth asserting on.** All twenty sit in
+**The die's own numbers are no longer worth asserting on.** Every face sits in
 the DOM at once, so a smoke `text: ['20']` passes whatever face is up. Assert on
 `.bigdice-total` and on the classes the flourish puts on the stage — and note
 that a critical replaces the total with its call-out rather than sitting beside
-it, so `.bigdice-total` is absent on a 20 and a 1.
+it, so `.bigdice-total` is absent on a 20 and a 1. A percentile total is the
+exception worth keeping: no face carries `62`, so it can only have come from the
+readout adding the pair up.
+
+### Pairs
+
+Percentile and advantage both put two dice on one stage, so there is one list
+saying what is on it rather than three branches over the same markup: `slots()`
+returns a die, a value and whether it was discarded, and both renderers draw
+whatever they are handed.
+
+**Advantage is a control on the die, not a setting in the drawer.** It is a
+per-roll decision made several times a fight, and the settings drawer is two
+clicks and a different mental mode away. The chips also say which mode the panel
+is in without being opened. They are hidden off the d20, which is the only die
+with the rule.
+
+**The critical call-out follows the kept die.** A natural 20 that disadvantage
+threw away is not a critical, so the flourish reads the kept value exactly as it
+always did. The discarded die stays on screen, dimmed and struck through, which
+is where the table sees what the rule cost them — that is the whole point of
+showing both.
+
+**Two dice that agree discard nothing.** Which of two 13s was "kept" is a
+question with no answer, and striking one out claims a distinction the throw did
+not make — the pair that matters most, two natural 20s, is exactly where getting
+that wrong would be worst.
+
+**A pair is one history entry.** It prints the kept number with the dropped one
+struck through beside it, and carries its mode in the tooltip: an 18 taken from
+`18, 4` is otherwise indistinguishable from an 18 thrown normally. A tie prints
+one number, because nothing was dropped.
+
+**`throwsAPair` asks which modes pair, never which one is not `normal`.** A mode
+string this version does not know — a panel saved while the plain throw was
+still called `flat` — then throws one die rather than quietly gaining a second
+and keeping the higher. That is the whole of the migration, and there is no
+other.
+
+**A mode with no pair yet is still one die.** Switching to advantage must not
+conjure a second die out of a result thrown flat, so the pair — not the mode —
+is what says there are two. Switching modes clears it.
+
+**The dice in flight are state, not a ref.** Without that, the first advantage
+throw tumbles one die and grows a second at the landing, which reads as the
+second die appearing out of nothing. One clock and one frame loop drive however
+many dice are on the stage, so a pair lands together; each gets its own spin,
+because two solids turning in step read as one rigid object.
+
+**A discarded die is told apart two ways — smaller, and drained of the accent.**
+Dimming alone reads as badly lit. A third signal, a red line across it, was
+tried and struck the wrong note: a discarded die is not an error, it is a die
+the rule did not use, and crossing it out made every advantage roll look like a
+warning.
+
+**The dimming is restyled faces, not a `filter`.** A filter would have to sit on
+the scene, whose only children are the ones carrying the 3D — and a filter there
+forces `transform-style: flat`, collapsing the solid into a pile of triangles.
+
+**The flat die is capped on height, and both terms of the cap have to be cut.**
+It is `height: 100%; width: auto`, so a `max-width` rarely binds. Taking 70% of
+the stage while dropping the pixel cap made the discarded die *larger* than the
+kept one in any panel tall enough for the cap to have been doing the work. The
+cap is `--flat-cap`, so a fraction of it is written once.
+
+### What lands, and what happens while it is in the air
+
+**Nothing is decided until the dice stop, so nothing is marked while they turn.**
+No strike, no discard, and no flourish — including the *previous* throw's, which
+would otherwise sit there through the tumble and read as a verdict on a roll
+still happening. The readout shows three dots rather than the last number, which
+is the one thing on this panel that could be mistaken for the result.
+
+**The landing is a CSS transition; the throw is not.** The tumble is painted
+frame by frame from JS onto `.bigdice-solid` and `.bigdice-hop`, neither of
+which may carry a transition or the lift goes laggy. Everything after — the
+loser drawing back, the winner taking the middle — is `transform` and `opacity`
+on `.bigdice-scene`, which changes once.
+
+**A critical takes the middle.** With one die out of the roll, the loser goes
+entirely and the winner slides to the centre of the stage, on the slower of the
+two curves so the discard reads as its cause. That is why the paired gap is a
+margin in `--die-size` and not a `gap`: the distance a die has to travel is then
+a number the stylesheet knows. `data-side` says which way, because the wash and
+the beams are siblings of the dice and `:first-child` would count them.
+
+**`--die-size` drops on the *stage* when a pair is showing, not on the scenes.**
+The wash, the beams and the shockwave are the stage's own children and are all
+measured in it; set one rung lower they go on being drawn around a die twice the
+size of the ones actually there.
+
+**Two dice showing the same face are scattered, not lined up.** They are the
+same shape at the same size in the same orientation, so side by side they are
+one sprite stamped twice — and leaning them together, which was tried, overlaps
+two identical silhouettes into one mangled outline with a seam down it. An
+offset along the diagonal and opposite quarter-turns is what stops them
+matching, and it is how two dice actually come to rest. The pair still balances
+about the middle, so the beams and the shockwave stay centred on it. Any tie
+gets it, not only the twin: nothing is discarded on a tie either.
+
+The in-plane rotation goes on the scene, which holds the perspective, so it
+turns the finished picture and leaves the thrown face square to the camera.
+
+**Two natural 20s, or two natural 1s, get their own flourish.** About one throw
+in four hundred, so it is the one thing in the app allowed to be loud. It is two
+effects, and the split is the point:
+
+**The burst is what landing looked like** — four rings out of the middle in two
+waves, under a wash that flares twice. Rings rather than a flash, because a
+flash is one frame the eye can miss and a television smears; and a second wave
+rather than a longer first one, because arriving twice is what makes it read as
+an event rather than as a transition. Gated on a throw made in *this* session,
+like the beams' `.sweep`.
+
+**The shine is what a twin *is*** — eight points on each die catching the light,
+over and over for as long as the result is up. A burst of sparks thrown outward
+was tried first and is the wrong idea: it happens *near* the dice and is then
+over, where this happens *to* them and keeps happening. It lives inside the
+scene rather than over the stage, so each glint rides its own die — a matched
+pair is scattered and turned, and its glints go with it. Not gated on `thrown`,
+because a restored panel is still showing a double.
+
+The positions are art direction, so the stylesheet holds them and the markup
+says only how many. The durations are deliberately unequal: with one duration
+the eight blink together like fairy lights. A quarter of each cycle is lit,
+which leaves two or three alight at once — an eighth read as broken, and more
+would be a steady glow, which is just a brighter die.
+
+**The shine is assertable and the burst is not.** A pair of 20s cannot be rolled
+to order, so nothing reaches the rings; the twin shots assert the glints
+instead. The rings were checked by driving a forced-twin build under the harness
+and photographing the waves, which is the way to look at them again.
 
 **The wash and the beams are measured against `--die-size`, never the panel.**
 Sized as a percentage of the stage they come apart the moment a panel is not
