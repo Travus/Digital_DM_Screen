@@ -160,11 +160,37 @@ describe.each(ALL)('%s, as a solid', (_name, die) => {
     }
   })
 
-  it('fits inside the span the stylesheet sizes it by', () => {
-    for (const face of die.faces) {
-      for (const corner of face.corners)
-        expect(length(corner)).toBeLessThanOrEqual(die.span / 2 + 1e-9)
+  /*
+    `span` is how wide the die looks standing still, so it has to *hold* at
+    rest — nothing may poke outside the box the stylesheet fits it to — while
+    still being tight enough to be worth using: a bounding sphere would pass the
+    first half of this and fail the second, which is what it used to do.
+  */
+  it('fits inside the span the stylesheet sizes it by, at every rest', () => {
+    for (const value of die.rests.keys()) {
+      const rest = restRotation(die, value)
+      for (const face of die.faces) {
+        for (const corner of face.corners) {
+          const [x, y] = transform(rest, corner)
+          expect(2 * Math.hypot(x, y)).toBeLessThanOrEqual(die.span + 1e-9)
+        }
+      }
     }
+  })
+
+  it('measures a span the die nearly fills, rather than a sphere around it', () => {
+    const sphere = 2 * Math.max(...die.faces.flatMap((face) => face.corners.map(length)))
+    expect(die.span).toBeGreaterThan(sphere * 0.55)
+    expect(die.span).toBeLessThanOrEqual(sphere + 1e-9)
+  })
+
+  /* The shrink the stylesheet applies at the top of a throw is exactly what
+     buys back the difference, so it has to be that difference. */
+  it('reports a swing that covers everything the span leaves out', () => {
+    const sphere = 2 * Math.max(...die.faces.flatMap((face) => face.corners.map(length)))
+    expect(die.swing).toBeCloseTo(sphere / die.span, 9)
+    expect(die.swing).toBeGreaterThanOrEqual(1)
+    expect(die.span * die.swing).toBeCloseTo(sphere, 9)
   })
 
   it('rests on a face it actually has', () => {
@@ -217,9 +243,15 @@ describe.each(PAIRED)('%s, numbered as a die', (_name, die) => {
   it('turns the rolled face towards the camera', () => {
     for (const face of die.faces) {
       const normal = transform(restRotation(die, face.value), face.normal)
-      // The d6 is the exception and says why in `D6_TILT`: it rests a few
-      // degrees off axis, because a cube square to the camera has no depth.
-      expect(normal[2]).toBeGreaterThan(die.kind === 'd6' ? 0.9 : 0.999999)
+      /*
+        Square on, except for the d6, which says why in `D6_TILT`: a cube shown
+        square to the camera has no depth at all. Its number's own face comes to
+        rest around 32° off — far enough for the two beside it to read as the
+        sides of a cube, near enough to leave the number legible. Pinned rather
+        than loosely bounded, because that balance is the whole of the choice.
+      */
+      if (die.kind === 'd6') expect(Math.acos(normal[2])).toBeCloseTo(0.556, 2)
+      else expect(normal[2]).toBeGreaterThan(0.999999)
     }
   })
 
@@ -256,11 +288,13 @@ describe('the d20', () => {
     for (const face of die.faces) expect(face.corners).toHaveLength(3)
   })
 
-  /* Pinned rather than derived a second time: these three are what the
-     stylesheet sizes the die by, and a change in any of them is a change in
-     how big the die comes out. */
+  /* Pinned rather than derived a second time: these are what the stylesheet
+     sizes the die by, and a change in any of them is a change in how big the
+     die comes out. The icosahedron is nearly a ball, so its span is nearly its
+     sphere and there is almost nothing for the swing to give back. */
   it('measures as it always has', () => {
-    expect(die.span).toBeCloseTo(3.8042, 3)
+    expect(die.span).toBeCloseTo(3.7367, 3)
+    expect(die.swing).toBeCloseTo(1.0181, 3)
     expect(die.inradius).toBeCloseTo(1.5115, 3)
     expect(die.faceBox).toBeCloseTo(2.4056, 3)
   })
@@ -270,6 +304,55 @@ describe('the d20', () => {
       const ys = face.points.split(' ').map((pair) => Number(pair.split(',')[1]))
       // One corner well above the centre, two below it. CSS y counts downwards.
       expect(ys.filter((y) => y < 50)).toHaveLength(1)
+    }
+  })
+})
+
+describe('the d6', () => {
+  const die = SOLIDS[6]
+
+  /*
+    The one solid whose faces are squared to the *die's* up axis rather than to
+    a corner of their own. Any edge of a square is as good as the other three,
+    so left to pick one each face lands on an arbitrary quarter turn — and on a
+    cube, where three faces meet at right angles in plain view, that reads as
+    numbers lying on their sides for no reason.
+
+    Asserted as agreement rather than as absolute angles: what matters is that
+    the four faces around the up axis point the same way, not which way.
+  */
+  it('squares the four side faces to one shared up axis', () => {
+    const sides = die.faces.filter((face) => Math.abs(face.normal[1]) < 0.5)
+    expect(sides).toHaveLength(4)
+    for (const face of sides) {
+      // A face's second basis column runs down its own front. Squared to the
+      // die's up axis, that column *is* the die's down axis. Compared loosely
+      // because half of these come out as negative zero.
+      expect(face.basis[3]).toBeCloseTo(0, 9)
+      expect(face.basis[4]).toBeCloseTo(1, 9)
+      expect(face.basis[5]).toBeCloseTo(0, 9)
+    }
+  })
+
+  it('gives the top and bottom the depth axis, which is what a real die does', () => {
+    const caps = die.faces.filter((face) => Math.abs(face.normal[1]) > 0.5)
+    expect(caps).toHaveLength(2)
+    for (const face of caps) {
+      // No up axis to lie along, so the number's top points at the viewer —
+      // look down at a die and you read its top face with the front at the
+      // bottom.
+      const down: Vec3 = [face.basis[3], face.basis[4], face.basis[5]]
+      expect(Math.abs(down[2])).toBeCloseTo(1, 9)
+    }
+  })
+
+  /* A cube square to the camera shows one face and nothing else, so the tilt is
+     load-bearing rather than decorative. Three is the threshold for reading as
+     a solid; more than four would mean it had turned past its own corner. */
+  it('rests showing three faces, which is what the tilt is for', () => {
+    for (const value of die.rests.keys()) {
+      const lit = faceLighting(die, restRotation(die, value)).filter((shade) => shade.visible)
+      expect(lit).toHaveLength(3)
     }
   })
 })

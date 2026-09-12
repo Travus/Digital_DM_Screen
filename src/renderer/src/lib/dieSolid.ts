@@ -55,8 +55,24 @@ export interface DieSolid {
   /** Names the die in CSS (`.bigdice-scene.d12`) and in React keys. */
   kind: string
   faces: readonly SolidFace[]
-  /** The solid's widest span, which is what the die is fitted to. */
+  /**
+   * How wide the die looks *at rest*, which is what it is fitted to.
+   *
+   * Not the bounding sphere, which is what this was and which sizes dice by
+   * something you cannot see: a cube's corners stick out half again as far as
+   * its faces, so fitted that way a d6 came out at 60% of the box while a d20
+   * filled 92% of it, and the two read as different sizes sitting side by side.
+   */
   span: number
+  /**
+   * How much wider the die gets mid-throw, as a multiple of `span`.
+   *
+   * The bounding sphere has to be paid for somewhere, and this is where: fitting
+   * to the resting width means a tumbling die would overrun its panel, so the
+   * stylesheet shrinks it by this much at the top of its arc. That reads as a
+   * die thrown away from you and caught again, which is what is happening.
+   */
+  swing: number
   /** How far each face sits from the centre of the solid. */
   inradius: number
   /** A face element's width, given its polygon is drawn at `FACE_RADIUS`. */
@@ -260,10 +276,12 @@ export function toRotate3d(face: SolidFace): string {
 /**
  * One face of a solid, before it knows its number.
  *
- * `up` is a point on the face — a corner, an edge midpoint — whose direction
- * from the face's centre becomes "up the screen" when the face is looked at.
- * That is what stands a triangle on its base and hangs a kite by its apex
- * corner, and it is why every solid below chooses it deliberately.
+ * `up` is a point whose direction from the face's centre, flattened onto the
+ * face, becomes "up the screen" when that face is looked at. Usually a point on
+ * the face — a corner, an edge midpoint — which is what stands a triangle on
+ * its base and hangs a kite by its apex corner. It does not have to be: the
+ * cube hands every face the *die's* own up axis, so its numbers agree with each
+ * other rather than each choosing its own quarter turn.
  */
 interface FaceGeometry {
   normal: Vec3
@@ -404,16 +422,40 @@ function buildSolid(spec: SolidSpec): DieSolid {
     faces.map((face) => [face.value, multiply(tilt, transpose(face.basis))])
   )
 
-  const corners = spec.faces.flatMap((face) => face.corners)
+  const span = restingWidth(faces, rests)
   return {
     kind: spec.kind,
     faces: Object.freeze(faces),
-    span: 2 * Math.max(...corners.map(length)),
+    span,
+    swing: (2 * Math.max(...faces.flatMap((face) => face.corners.map(length)))) / span,
     inradius: geometries[0].inradius,
     faceBox: (100 * geometries[0].reach) / FACE_RADIUS,
     restingValue: spec.restingValue,
     rests
   }
+}
+
+/**
+ * The widest the die ever looks standing still: the smallest circle around its
+ * corners once a resting orientation has been applied, over every face it can
+ * rest on.
+ *
+ * A circle rather than the silhouette's true width, because the die turns
+ * inside its box as it lands and a bound that held only for one heading would
+ * be no bound at all. It overstates by a few per cent on the tetrahedron, which
+ * is the one solid here with no corner opposite another.
+ */
+function restingWidth(faces: readonly SolidFace[], rests: ReadonlyMap<number, Mat3>): number {
+  let widest = 0
+  for (const rest of rests.values()) {
+    for (const face of faces) {
+      for (const corner of face.corners) {
+        const [x, y] = transform(rest, corner)
+        widest = Math.max(widest, 2 * Math.hypot(x, y))
+      }
+    }
+  }
+  return widest
 }
 
 const PHI = (1 + Math.sqrt(5)) / 2
@@ -480,18 +522,32 @@ function octahedronFaces(): FaceSpec[] {
   return out
 }
 
-/** Standing on an edge rather than hanging off a corner — dice sit square. */
+/**
+ * The cube, with every face's number squared to the *die's* up axis.
+ *
+ * This one cannot take a corner or an edge midpoint for `up` the way the other
+ * solids do. Any edge of a square is as good as the other three, so each face
+ * ends up rotated by an arbitrary quarter turn — and on a cube, where you see
+ * three faces meeting at right angles, that reads as numbers lying on their
+ * sides for no reason. Nowhere else does it show: a d20's neighbours really are
+ * turned every which way, on the real die as much as on this one.
+ *
+ * So the four faces the up axis runs beside take that axis, and read upright
+ * together. The two it runs *through* have no such direction and take the depth
+ * axis instead — which is what a real die does, and why looking down at one's
+ * top face reads it with the front of the die at the bottom.
+ */
 function cubeFaces(): FaceSpec[] {
   const corners: Vec3[] = []
   for (const sx of [1, -1])
     for (const sy of [1, -1]) for (const sz of [1, -1]) corners.push([sx, sy, sz])
 
   return [0, 1, 2].flatMap((axis) =>
-    [1, -1].map((sign) => {
-      const face = corners.filter((corner) => corner[axis] === sign)
-      const edgeMate = face.find((corner) => Math.abs(length(subtract(corner, face[0])) - 2) < 1e-9)
-      return { corners: face, up: average([face[0], edgeMate ?? face[1]]) }
-    })
+    [1, -1].map((sign) => ({
+      corners: corners.filter((corner) => corner[axis] === sign),
+      // CSS y points down, so the die's up axis is negative y.
+      up: axis === 1 ? ([0, 0, 1] as Vec3) : ([0, -1, 0] as Vec3)
+    }))
   )
 }
 
@@ -643,10 +699,12 @@ function tetrahedron(): DieSolid {
   )
 
   const geometry = describeFace([vertices[1], vertices[2], vertices[3]], vertices[1])
+  const span = restingWidth(faces, rests)
   return {
     kind: 'd4',
     faces: Object.freeze(faces),
-    span: 2 * length(vertices[0]),
+    span,
+    swing: (2 * length(vertices[0])) / span,
     inradius: geometry.inradius,
     faceBox: (100 * geometry.reach) / FACE_RADIUS,
     restingValue: 3,
@@ -655,7 +713,7 @@ function tetrahedron(): DieSolid {
 }
 
 /**
- * The d6 alone rests off axis, and has to.
+ * The d6 rests off axis, and has to.
  *
  * A cube's neighbours meet it at exactly 90°, so a face brought square to the
  * camera leaves every other face on the horizon and `faceLighting` drops them
@@ -663,10 +721,13 @@ function tetrahedron(): DieSolid {
  * renderer it is meant to be an alternative to. Every other solid here has an
  * obtuse dihedral angle and shows three to five faces unaided.
  *
- * Modest on purpose — far enough to put two neighbouring faces on screen,
- * not far enough to leave the number on the top face hard to read.
+ * A quarter of a right angle each way, which is the angle a die is photographed
+ * at. The first attempt was half this and read as janky rather than as a
+ * three-quarter view: it left the two neighbouring faces at 73° and 76°, thin
+ * enough to look like an error on a square rather than the sides of a cube.
+ * Here they land near 65° and 72°, with the number's own face at 32°.
  */
-const D6_TILT = multiply(rotation([0, 1, 0], 0.3), rotation([1, 0, 0], -0.26))
+const D6_TILT = multiply(rotation([0, 1, 0], 0.44), rotation([1, 0, 0], -0.35))
 
 /**
  * The dice, built once at load.

@@ -1395,6 +1395,135 @@ const shots = [
       text: ['3']
     }
   },
+  // The other way round: the kept die is the natural 20, so the loser leaves
+  // entirely and the winner takes the middle. `.solo` is what drives both, and
+  // the shot is taken well past the transition so the die is photographed where
+  // it arrives rather than on its way there.
+  {
+    name: 'bigdice-advantage-nat20-solo',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'advantage',
+        value: 20,
+        pair: [7, 20],
+        history: []
+      }
+    },
+    settle: 900,
+    // The discarded die is still in the DOM — it is the flourish that leaves,
+    // never the dice — so `missing` cannot say it has gone. That it is invisible
+    // is eyes only; that the stage entered the state that sends it away is not.
+    expect: {
+      found: [
+        '.bigdice-stage.solo.nat20',
+        '.bigdice-scene.discarded',
+        '.bigdice-flourish',
+        '.bigdice-beams'
+      ],
+      missing: ['.bigdice-stage.twin', '.bigdice-shock', '.bigdice-total'],
+      text: ['CRITICAL SUCCESS']
+    }
+  },
+  // Two natural 20s, about one throw in four hundred. Neither die lost, so
+  // neither is struck or dimmed: they lean together instead, and the shockwave
+  // and the bigger call-out are what say this is not an ordinary critical.
+  //
+  // The rings themselves are not in this shot and cannot be in any shot. Like
+  // the beams' `.sweep`, they are gated on a throw made in *this* session, so a
+  // restored panel shows the twin already arrived rather than replaying it on
+  // every launch — and a pair of 20s cannot be rolled to order, so no click can
+  // reach the state either. Whether the shockwave reads is eyes only.
+  {
+    name: 'bigdice-twin-nat20',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'advantage',
+        value: 20,
+        pair: [20, 20],
+        history: [{ id: 'throw_t', sides: 20, value: 20, pair: [20, 20], mode: 'advantage' }]
+      }
+    },
+    settle: 900,
+    // No strike and nothing discarded is the load-bearing half: a pair that
+    // agreed threw nothing away, and crossing one of two natural 20s out would
+    // be the worst place in the module to get that wrong. The history entry
+    // drops its second number for the same reason.
+    expect: {
+      found: ['.bigdice-stage.twin.nat20', '.bigdice-flourish.twin', '.bigdice-beams'],
+      missing: [
+        '.bigdice-scene.discarded',
+        '.bigdice-strike',
+        '.bigdice-stage.solo',
+        '.bigdice-dropped'
+      ],
+      text: ['DOUBLE CRITICAL']
+    }
+  },
+  // Two natural 1s, which take the same shape down the other set of rules.
+  {
+    name: 'bigdice-twin-nat1',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'disadvantage',
+        value: 1,
+        pair: [1, 1],
+        history: []
+      }
+    },
+    settle: 900,
+    expect: {
+      found: ['.bigdice-stage.twin.nat1', '.bigdice-flourish.twin.grim'],
+      missing: ['.bigdice-scene.discarded', '.bigdice-stage.nat20'],
+      text: ['DOUBLE DISASTER']
+    }
+  },
+  // Mid-throw, caught deliberately: the one state no seeded layout can reach.
+  //
+  // This is the answer to "what do the effects do while the dice are in the
+  // air": nothing is decided, so nothing is marked. No strike, no flourish —
+  // not even the *previous* throw's, which used to sit there through the tumble
+  // and read as a verdict on a roll still happening — and the readout is three
+  // dots rather than the last number, which is the one thing here that could be
+  // mistaken for the result.
+  {
+    name: 'bigdice-rolling',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'advantage',
+        value: 20,
+        pair: [20, 20],
+        history: [{ id: 'throw_old', sides: 20, value: 20, pair: [20, 20], mode: 'advantage' }]
+      }
+    },
+    click: '.bigdice-stage',
+    // Well inside the 1400 ms throw, and after the first frames have moved the
+    // dice off their resting orientation.
+    settle: 500,
+    expect: {
+      found: ['.bigdice-stage.tumbling', '.bigdice-rolling', '.bigdice-scene'],
+      missing: [
+        '.bigdice-total',
+        '.bigdice-flourish',
+        '.bigdice-scene.discarded',
+        '.bigdice-strike',
+        '.bigdice-beams',
+        '.bigdice-stage.twin',
+        '.bigdice-stage.solo'
+      ]
+    }
+  },
   // The same pair through the flat renderer, which has to answer advantage too:
   // a DM who turned the solids off still gets both dice and a strike, drawn in
   // the terms that renderer is built in.

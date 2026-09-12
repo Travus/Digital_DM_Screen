@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { uid } from '../../../shared/layout'
 import {
+  criticalOf,
   DICE,
   dieLabel,
   historyTitle,
@@ -19,6 +20,8 @@ import {
   percentileText,
   slots,
   throwDice,
+  throwsAPair,
+  twinCriticalOf,
   type Mode,
   type Pair,
   type Sides
@@ -91,8 +94,8 @@ interface Settings {
 }
 
 const MODE_LABEL: Record<Mode, string> = {
-  flat: 'Flat',
   advantage: 'Advantage',
+  normal: 'Normal',
   disadvantage: 'Disadvantage'
 }
 
@@ -227,7 +230,7 @@ function BigDice({
 
     // Two independent values every tick, so an advantage pair tumbles as two
     // dice. Single dice read the first and ignore the second.
-    const tick = (): number => throwDice(state.sides, 'flat', settings.zeroIsHundred).value
+    const tick = (): number => throwDice(state.sides, 'normal', settings.zeroIsHundred).value
     timers.current.push(window.setInterval(() => setFaces([tick(), tick()]), TICK_MS))
     timers.current.push(window.setInterval(() => settle(result.value, result.pair), TUMBLE_MS))
   }
@@ -248,26 +251,30 @@ function BigDice({
       ]
     }
     const showing = tumbling ? faces : pair
-    if (!showMode || state.mode === 'flat' || showing === null) {
+    if (!throwsAPair(state.sides, state.mode) || showing === null) {
       return [{ face: shown === null ? '' : String(shown), discarded: false }]
     }
-    const kept = keptIndex(showing, state.mode)
     // Nothing is discarded until the dice have stopped: a strike through a
-    // number still changing claims a result that has not happened.
+    // number still changing claims a result that has not happened. Two equal
+    // dice discard nothing either, for the reason `slots()` gives.
+    const kept = tumbling || showing[0] === showing[1] ? -1 : keptIndex(showing, state.mode)
     return showing.map((value, index) => ({
       face: String(value),
-      discarded: !tumbling && kept !== index
+      discarded: kept >= 0 && kept !== index
     }))
   })()
 
-  const critical =
-    settings.critFlourish && !tumbling && state.sides === 20 && state.value !== null
-      ? state.value === 20
-        ? 'nat20'
-        : state.value === 1
-          ? 'nat1'
-          : ''
-      : ''
+  /*
+    Nothing is decided until the dice stop, so no flourish is drawn while they
+    are in the air — including the *previous* throw's, which would otherwise sit
+    there through the tumble and read as a verdict on a roll still happening.
+  */
+  const critical = settings.critFlourish && !tumbling ? criticalOf(state.sides, state.value) : ''
+  const twin = critical !== '' ? twinCriticalOf(pair) : ''
+  /* One die is out of the roll and the other is a critical: the loser goes
+     entirely and the winner takes the middle. Not when both are the critical —
+     that is the twin case, and neither of them lost. */
+  const solo = critical !== '' && twin === '' && resting.length > 1
 
   const stageClasses = [
     'bigdice-stage',
@@ -276,7 +283,9 @@ function BigDice({
     /* Two dice share the room one had, so the stage has to know. Both renderers
        answer it, because both can end up showing a pair. */
     (settings.solid ? resting.length : flat.length) > 1 && 'paired',
-    critical
+    critical,
+    solo && 'solo',
+    twin !== '' && 'twin'
   ]
     .filter(Boolean)
     .join(' ')
@@ -303,6 +312,10 @@ function BigDice({
         away behind the ⋯ menu is the wrong place for something changed that
         often, and the chips also say which mode the panel is in without being
         opened. Hidden off the d20 because no other die has the rule.
+
+        `MODES` is in drawing order, so the plain throw sits between the two
+        that modify it and the row reads as a scale rather than as a default
+        with two options bolted on.
       */}
       {showMode && (
         <div className="chip-row bigdice-modes">
@@ -312,7 +325,7 @@ function BigDice({
               className={`chip action ${state.mode === mode ? 'on' : ''}`}
               data-mode={mode}
               /* The pair goes with the mode: a disadvantage pair left on screen
-                 after switching to flat is two dice the next throw cannot
+                 after switching to normal is two dice the next throw cannot
                  explain. */
               onClick={() => setState({ mode, pair: null })}
             >
@@ -332,6 +345,9 @@ function BigDice({
           <>
             <span className={`bigdice-wash ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
             <span className={`bigdice-beams ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
+            {/* Two rings out of the middle, on a throw that happened here. The
+                twin is rare enough to be worth an effect nothing else uses. */}
+            {twin !== '' && thrown && <span className="bigdice-shock" aria-hidden="true" />}
           </>
         )}
 
@@ -341,6 +357,11 @@ function BigDice({
               key={`${slot.solid.kind}-${index}`}
               solid={slot.solid}
               discarded={slot.discarded && !tumbling}
+              /* Which way in is which way out. The stylesheet moves a die
+                 towards the middle and cannot tell from the DOM which side it
+                 started on — the wash and the beams are siblings, so
+                 `:first-child` counts them. */
+              side={resting.length > 1 ? (index === 0 ? 'left' : 'right') : 'only'}
               ref={(handle) => {
                 dice.current[index] = handle
               }}
@@ -373,8 +394,21 @@ function BigDice({
         the stage is where the table sees what the rule cost them.
       */}
       <div className="bigdice-readout">
-        {state.value === null ? (
+        {tumbling ? (
+          /* Not the previous throw's number, which is what used to sit here
+             through a tumble — a stale answer under dice still deciding is the
+             one thing on this panel that could be misread as the result. */
+          <span className="bigdice-rolling" aria-label="Rolling">
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : state.value === null ? (
           <span className="bigdice-prompt">Click the die to throw it</span>
+        ) : twin === 'nat20' ? (
+          <span className="bigdice-flourish twin">Double Critical</span>
+        ) : twin === 'nat1' ? (
+          <span className="bigdice-flourish twin grim">Double Disaster</span>
         ) : critical === 'nat20' ? (
           <span className="bigdice-flourish">Critical Success</span>
         ) : critical === 'nat1' ? (
@@ -394,8 +428,9 @@ function BigDice({
             >
               {entry.value}
               {/* The discarded number, so a pair stays one entry that can still
-                  be read as a pair. */}
-              {entry.pair && entry.mode && (
+                  be read as a pair. A tie discarded nothing, so it prints the
+                  one number the throw actually came to. */}
+              {entry.pair && entry.mode && entry.pair[0] !== entry.pair[1] && (
                 <span className="bigdice-dropped">
                   {entry.pair[keptIndex(entry.pair, entry.mode) === 0 ? 1 : 0]}
                 </span>
@@ -421,10 +456,10 @@ interface SolidHandle {
  * second and put every one of those frames through the store. The parent owns
  * the clock so a pair lands together, and reaches each die through this.
  */
-const SolidDie = forwardRef<SolidHandle, { solid: DieSolid; discarded: boolean }>(function SolidDie(
-  { solid, discarded },
-  ref
-): JSX.Element {
+const SolidDie = forwardRef<
+  SolidHandle,
+  { solid: DieSolid; discarded: boolean; side: 'left' | 'right' | 'only' }
+>(function SolidDie({ solid, discarded, side }, ref): JSX.Element {
   const hopRef = useRef<HTMLSpanElement>(null)
   const solidRef = useRef<HTMLSpanElement>(null)
   const faceRefs = useRef<(SVGSVGElement | null)[]>([])
@@ -446,9 +481,11 @@ const SolidDie = forwardRef<SolidHandle, { solid: DieSolid; discarded: boolean }
   return (
     <span
       className={`bigdice-scene ${solid.kind} ${discarded ? 'discarded' : ''}`}
+      data-side={side}
       style={
         {
           '--span': solid.span,
+          '--swing': solid.swing,
           '--face-box': solid.faceBox,
           '--inradius': solid.inradius
         } as CSSProperties
@@ -640,7 +677,7 @@ export const bigDiceModule = defineModule<State, Settings>({
   icon: '🎯',
   blurb: 'One oversized die, thrown by clicking it — for rolls the table watches.',
   category: 'Tools',
-  defaultState: () => ({ sides: 20, mode: 'flat', value: null, pair: null, history: [] }),
+  defaultState: () => ({ sides: 20, mode: 'normal', value: null, pair: null, history: [] }),
   defaultSettings: () => ({
     showHistory: true,
     historyLimit: 10,

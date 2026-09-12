@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  criticalOf,
   dieLabel,
   historyTitle,
   keptIndex,
   modeApplies,
+  MODES,
   percentileFaces,
   percentileText,
   rollPercentile,
   slots,
   throwDice,
+  throwsAPair,
+  twinCriticalOf,
   type Pair
 } from './bigDice'
 import { PERCENTILE, SOLIDS } from './dieSolid'
@@ -43,6 +47,35 @@ describe('modeApplies', () => {
   })
 })
 
+describe('MODES', () => {
+  /* The array is the drawing order, so this is the only place the layout of the
+     chip row is written down. Normal between the two that modify it reads as a
+     scale; normal first reads as a default with two options bolted on. */
+  it('puts the plain throw between the two that modify it', () => {
+    expect(MODES).toEqual(['advantage', 'normal', 'disadvantage'])
+  })
+})
+
+describe('throwsAPair', () => {
+  it('is the two modes that name a second die, on the d20', () => {
+    expect(throwsAPair(20, 'advantage')).toBe(true)
+    expect(throwsAPair(20, 'disadvantage')).toBe(true)
+    expect(throwsAPair(20, 'normal')).toBe(false)
+    expect(throwsAPair(6, 'advantage')).toBe(false)
+  })
+
+  /*
+    Asked as "is it one of the two that pair" rather than "is it not normal", so
+    a mode this version does not know throws one die. A panel saved before the
+    mode was renamed holds `flat`, and the wrong test would have quietly given
+    it two dice and kept the higher.
+  */
+  it('throws one die for a mode it does not recognise', () => {
+    expect(throwsAPair(20, 'flat' as never)).toBe(false)
+    expect(throwDice(20, 'flat' as never, true).pair).toBeNull()
+  })
+})
+
 describe('keptIndex', () => {
   it('keeps the higher under advantage and the lower under disadvantage', () => {
     expect(keptIndex([7, 19], 'advantage')).toBe(1)
@@ -51,19 +84,40 @@ describe('keptIndex', () => {
     expect(keptIndex([19, 7], 'disadvantage')).toBe(1)
   })
 
-  /*
-    A tie still has a discarded die on screen, and two identical numbers give
-    nothing to tell them apart. Keeping the first is arbitrary; it only has to
-    be the same answer every time, or the strike-through moves between two
-    dice showing the same thing.
-  */
-  it('keeps the first of two equal dice, either way round', () => {
+  it('keeps the first of two equal dice, which hold the same value anyway', () => {
     expect(keptIndex([13, 13], 'advantage')).toBe(0)
     expect(keptIndex([13, 13], 'disadvantage')).toBe(0)
   })
+})
 
-  it('keeps the first under flat, which has no pair to choose from', () => {
-    expect(keptIndex([4, 9], 'flat')).toBe(1)
+describe('criticalOf', () => {
+  it('names a natural 20 and a natural 1 on the d20', () => {
+    expect(criticalOf(20, 20)).toBe('nat20')
+    expect(criticalOf(20, 1)).toBe('nat1')
+    expect(criticalOf(20, 14)).toBe('')
+  })
+
+  it('is nothing on a die with no criticals, and nothing before a throw', () => {
+    expect(criticalOf(12, 12)).toBe('')
+    expect(criticalOf(100, 1)).toBe('')
+    expect(criticalOf(20, null)).toBe('')
+  })
+})
+
+describe('twinCriticalOf', () => {
+  it('names a pair of natural 20s and a pair of natural 1s', () => {
+    expect(twinCriticalOf([20, 20])).toBe('nat20')
+    expect(twinCriticalOf([1, 1])).toBe('nat1')
+  })
+
+  it('is nothing for a pair that merely contains one', () => {
+    expect(twinCriticalOf([20, 3])).toBe('')
+    expect(twinCriticalOf([1, 17])).toBe('')
+  })
+
+  it('is nothing for an ordinary tie, and nothing without a pair at all', () => {
+    expect(twinCriticalOf([13, 13])).toBe('')
+    expect(twinCriticalOf(null)).toBe('')
   })
 })
 
@@ -115,9 +169,9 @@ describe('rollPercentile', () => {
 })
 
 describe('throwDice', () => {
-  it('throws one die and no pair when flat', () => {
+  it('throws one die and no pair when normal', () => {
     rolls(face(14, 20))
-    expect(throwDice(20, 'flat', true)).toEqual({ value: 14, pair: null })
+    expect(throwDice(20, 'normal', true)).toEqual({ value: 14, pair: null })
   })
 
   it('throws two and keeps the higher under advantage', () => {
@@ -150,22 +204,24 @@ describe('throwDice', () => {
 
 describe('slots', () => {
   it('is one die for a plain throw', () => {
-    expect(slots(12, 'flat', 9, null)).toEqual([{ solid: SOLIDS[12], value: 9, discarded: false }])
+    expect(slots(12, 'normal', 9, null)).toEqual([
+      { solid: SOLIDS[12], value: 9, discarded: false }
+    ])
   })
 
   it('rests a die on nothing before the first throw', () => {
-    expect(slots(8, 'flat', null, null)[0].value).toBeNull()
+    expect(slots(8, 'normal', null, null)[0].value).toBeNull()
   })
 
   it('is the two physical dice for percentile, tens first', () => {
-    expect(slots(100, 'flat', 62, null)).toEqual([
+    expect(slots(100, 'normal', 62, null)).toEqual([
       { solid: PERCENTILE[0], value: 60, discarded: false },
       { solid: PERCENTILE[1], value: 2, discarded: false }
     ])
   })
 
   it('leaves both percentile dice blank before the first throw', () => {
-    expect(slots(100, 'flat', null, null).map((slot) => slot.value)).toEqual([null, null])
+    expect(slots(100, 'normal', null, null).map((slot) => slot.value)).toEqual([null, null])
   })
 
   it('shows both d20s with the discarded one marked', () => {
@@ -184,16 +240,16 @@ describe('slots', () => {
 
   /*
     Switching to advantage must not conjure a second die out of a result that
-    was thrown flat. The pair is what says there are two, so until one has been
-    thrown the stage is still one die.
+    was thrown normally. The pair is what says there are two, so until one has
+    been thrown the stage is still one die.
   */
   it('stays one die in a pair mode that has not thrown yet', () => {
     expect(slots(20, 'advantage', 14, null)).toHaveLength(1)
     expect(slots(20, 'advantage', null, null)).toHaveLength(1)
   })
 
-  it('drops a stale pair when the mode goes back to flat', () => {
-    expect(slots(20, 'flat', 18, [6, 18])).toEqual([
+  it('drops a stale pair when the mode goes back to normal', () => {
+    expect(slots(20, 'normal', 18, [6, 18])).toEqual([
       { solid: SOLIDS[20], value: 18, discarded: false }
     ])
   })
@@ -202,28 +258,43 @@ describe('slots', () => {
     expect(slots(6, 'advantage', 4, [4, 2] as Pair)).toHaveLength(1)
   })
 
-  it('never marks both dice discarded', () => {
+  /*
+    Which of two 13s was "kept" is a question with no answer, and a strike
+    through one of them claims a distinction the throw did not make. The pair
+    that matters most — two natural 20s — is exactly where crossing one out
+    would be worst.
+  */
+  it('discards neither of two equal dice', () => {
+    for (const mode of ['advantage', 'disadvantage'] as const) {
+      expect(slots(20, mode, 13, [13, 13]).map((slot) => slot.discarded)).toEqual([false, false])
+      expect(slots(20, mode, 20, [20, 20]).map((slot) => slot.discarded)).toEqual([false, false])
+    }
+  })
+
+  it('discards exactly one whenever the two differ', () => {
     for (const pair of [
       [1, 20],
       [20, 1],
-      [9, 9]
+      [9, 14]
     ] as Pair[]) {
       for (const mode of ['advantage', 'disadvantage'] as const) {
         const marked = slots(20, mode, pair[keptIndex(pair, mode)], pair)
         expect(marked.filter((slot) => slot.discarded)).toHaveLength(1)
+        // Never the one whose value the roll came to.
+        expect(marked[keptIndex(pair, mode)].discarded).toBe(false)
       }
     }
   })
 })
 
 describe('historyTitle', () => {
-  it('names the die on its own for a flat throw', () => {
-    expect(historyTitle(20, 'flat')).toBe('d20')
+  it('names the die on its own for a plain throw', () => {
+    expect(historyTitle(20, 'normal')).toBe('d20')
     expect(historyTitle(8, undefined)).toBe('d8')
   })
 
   /* An 18 kept from 18 and 4 prints as an 18, so without the mode in the
-     tooltip it is indistinguishable from a flat 18 — which is the one thing
+     tooltip it is indistinguishable from a plain 18 — which is the one thing
      about the entry worth remembering. */
   it('says which rule a pair was thrown under', () => {
     expect(historyTitle(20, 'advantage')).toBe('d20 · advantage')

@@ -2664,21 +2664,47 @@ code {
   display: block;
   width: 0;
   height: 0;
-  perspective: 900px;
+  /*
+    Proportional to the die, not a constant. At a fixed 900px the lens changed
+    with the panel — a die in a small panel sat 40px towards the camera and
+    gained 5%, one in a big panel sat 115px forward and gained 15% — so the same
+    solid was drawn wide-angle in one pane and nearly flat in another. It showed
+    worst on the cube, where straight edges and right angles make the distortion
+    impossible to read as anything but wrong.
+  */
+  perspective: calc(var(--die-size) * 3.6);
+  /* Where the die sits once it has landed. The throw itself is painted frame by
+     frame from JS and never transitions; these are the states after it. */
+  transition:
+    transform 560ms cubic-bezier(0.32, 0.02, 0.22, 1),
+    opacity 380ms ease-out;
 }
 
 /*
   A scene is a zero-sized point with the die hanging off it in 3D, so flexbox
   has nothing to lay out and two of them would sit on top of each other. The
-  margin is the die's own width, given back by hand.
+  margin is the die's own width, given back by hand — and because it is written
+  here rather than as a `gap`, the distance a die has to travel to reach the
+  middle is a number the stylesheet knows.
 */
-.bigdice-stage.paired .bigdice-scene {
+/*
+  Two dice share the room one had, so the size drops — and it drops on the
+  *stage*, not on the scenes. The wash, the beams and the shockwave are the
+  stage's own children and are all measured in `--die-size`; set one rung lower
+  they would go on being drawn around a die twice the size of the ones actually
+  there, which is how the flourish comes adrift from what it is lighting.
+*/
+.bigdice-stage.paired {
   --die-size: min(42cqw, 78cqh, 300px);
-  margin: 0 calc(var(--die-size) / 2);
+  gap: 0;
 }
 
-.bigdice.roomy .bigdice-stage.paired .bigdice-scene {
+.bigdice.roomy .bigdice-stage.paired {
   --die-size: min(42cqw, 78cqh, 380px);
+}
+
+.bigdice-stage.paired .bigdice-scene {
+  margin: 0 calc(var(--die-size) * 0.58);
 }
 
 /*
@@ -2687,21 +2713,19 @@ code {
   as long as the one that counts. Smaller, greyer, and crossed out is the
   combination that says "this one did not happen" from across a room.
 
-  Named through `.paired` so it outweighs the sizing rule above rather than
-  racing it — a discarded die is only ever one of two.
+  Shrunk with a `scale` rather than by overriding `--die-size`, so it animates:
+  both dice land the same size and the loser draws back, which is the moment the
+  roll is decided. A custom property cannot transition without `@property`, and
+  changing it would move the margins and shove the other die sideways.
 
   Dimmed by restyling the faces rather than with a `filter`, which would have to
   sit on the scene: the strike lives in there and has to stay red, and the only
   elements below it are the ones carrying the 3D, where a filter forces
   `transform-style: flat` and collapses the solid into a pile of triangles.
 */
-.bigdice-stage.paired .bigdice-scene.discarded {
-  --die-size: min(32cqw, 58cqh, 220px);
-  opacity: 0.8;
-}
-
-.bigdice.roomy .bigdice-stage.paired .bigdice-scene.discarded {
-  --die-size: min(32cqw, 58cqh, 280px);
+.bigdice-scene.discarded {
+  transform: scale(0.72);
+  opacity: 0.62;
 }
 
 .bigdice-scene.discarded .bigdice-face {
@@ -2711,6 +2735,28 @@ code {
 
 .bigdice-scene.discarded .bigdice-face text {
   fill: var(--text-faint);
+}
+
+/*
+  A critical, with the other die out of the roll: the loser goes entirely and
+  the winner takes the middle. Both halves are the same transition, so the eye
+  follows one movement rather than watching two things happen at once — and the
+  centring runs on the slower curve, so the discard reads as its cause.
+
+  `data-side` rather than `:first-child`: the wash and the beams are siblings of
+  the dice, so a structural selector counts them and picks the wrong die.
+*/
+.bigdice-stage.solo .bigdice-scene.discarded {
+  transform: scale(0.35);
+  opacity: 0;
+}
+
+.bigdice-stage.solo .bigdice-scene[data-side='left']:not(.discarded) {
+  transform: translateX(calc(var(--die-size) * 0.58));
+}
+
+.bigdice-stage.solo .bigdice-scene[data-side='right']:not(.discarded) {
+  transform: translateX(calc(var(--die-size) * -0.58));
 }
 
 /*
@@ -2738,11 +2784,26 @@ code {
 /* Three nested transforms, each with one job: the scene holds the perspective,
    the hop carries the arc, the solid carries the rotation. Collapsing them
    means one string for the throw to rebuild every frame. */
+/*
+  The arc, and the shrink that pays for it.
+
+  A die is fitted to how wide it looks *standing still*, so a tumbling one would
+  overrun the panel — a cube's corners reach half again past its faces. The
+  scale gives exactly that back at the top of the throw, where `--lift` is 1 and
+  the die is turned furthest from where it will land; at both ends `--lift` is 0
+  and the scale is exactly 1, which is where the die has to be the size the
+  layout was built for. It reads as a die thrown away from you and caught again,
+  which is what a thrown die does.
+
+  The translate is written after the scale so the arc stays in screen pixels
+  rather than shrinking along with the die.
+*/
 .bigdice-hop {
   display: block;
   /* Measured against the die, and kept modest. Any higher and the die leaves
      the top of the panel, which reads as thrown away rather than thrown. */
-  transform: translateY(calc(var(--die-size) * var(--lift, 0) * -0.22));
+  transform: translateY(calc(var(--die-size) * var(--lift, 0) * -0.22))
+    scale(calc(1 - (1 - 1 / var(--swing, 1)) * var(--lift, 0)));
   transform-style: preserve-3d;
 }
 
@@ -2870,10 +2931,21 @@ code {
   line is inside the viewBox, so it scales with the die rather than needing a
   box placed from JS the way the solid's does.
 */
+/*
+  The transition sits on the discarded state rather than on `.die`, so it runs
+  only when a die is being taken out of the roll. On `.die` it would also catch
+  the tumble, which drops `max-width` from 86% to 46% for swing room and back —
+  an animated shrink and grow around every throw, finishing half a second after
+  the result had already landed.
+*/
 .die.discarded {
   fill: var(--bg-3);
   stroke: var(--line);
   opacity: 0.8;
+  transition:
+    max-width 560ms cubic-bezier(0.32, 0.02, 0.22, 1),
+    max-height 420ms ease-out,
+    opacity 380ms ease-out;
 }
 
 /*
@@ -2888,6 +2960,21 @@ code {
 .bigdice-pair .die.discarded {
   max-height: min(70%, calc(var(--flat-cap) * 0.7));
   max-width: 31%;
+}
+
+/*
+  The same landing the solids get, spelt for a renderer with no scene to
+  transform: the loser goes entirely when the die that beat it is a critical.
+
+  Its *width* is what animates. These are flex items, so collapsing the loser's
+  width is what lets the survivor slide into the middle — a transform would
+  leave its box behind and the winner off-centre. Laying out for 560 ms costs
+  nothing on a panel holding two SVGs, and is not the case the beams' note is
+  about: those turn for as long as the critical is on screen.
+*/
+.bigdice-stage.solo .bigdice-pair .die.discarded {
+  max-width: 0;
+  opacity: 0;
 }
 
 .die.discarded .facet {
@@ -2980,6 +3067,49 @@ code {
   color: var(--text-faint);
 }
 
+/*
+  Three dots while the dice are in the air.
+
+  The readout used to hold the *previous* throw's number through a tumble, which
+  is the one thing on this panel that could be read as the result — a number
+  sitting still under dice that are still deciding. This says "not yet" and
+  cannot be mistaken for an answer.
+*/
+.bigdice-rolling {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.bigdice-rolling i {
+  width: 8px;
+  height: 8px;
+  background: var(--text-faint);
+  border-radius: 50%;
+  animation: bigdice-rolling 900ms ease-in-out infinite;
+}
+
+.bigdice-rolling i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.bigdice-rolling i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes bigdice-rolling {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
 /* Sized to be read from across a table, which is the whole point of it. */
 .bigdice-flourish {
   font-size: 15px;
@@ -2991,6 +3121,31 @@ code {
 
 .bigdice-flourish.grim {
   color: var(--danger);
+}
+
+/*
+  Two natural 20s, or two natural 1s — about one throw in four hundred. Bigger,
+  and it arrives rather than simply being there, because the whole point of the
+  twin is that it is worth looking up for.
+*/
+.bigdice-flourish.twin {
+  font-size: 19px;
+  letter-spacing: 0.2em;
+  /* `currentColor`, not `--tint`: that is set on the stage and the readout is
+     its sibling, so it would resolve to nothing here. */
+  text-shadow: 0 0 18px color-mix(in srgb, currentColor 55%, transparent);
+  animation: bigdice-twin-word 720ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+
+@keyframes bigdice-twin-word {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* The tint the wash and the beams are drawn in, inherited by both. */
@@ -3166,6 +3321,77 @@ code {
   }
 }
 
+/* ------------------------------------------------- the twin, one throw in 400 */
+
+/*
+  Two natural 20s, or two natural 1s.
+
+  Neither die lost, so neither is struck or dimmed — they lean in together
+  instead, on the same transition every other landing uses, and the difference
+  is what happens around them. The nudge is small: this is two dice agreeing,
+  not two dice colliding.
+*/
+.bigdice-stage.twin .bigdice-scene[data-side='left'] {
+  transform: translateX(calc(var(--die-size) * 0.15)) scale(1.05);
+}
+
+.bigdice-stage.twin .bigdice-scene[data-side='right'] {
+  transform: translateX(calc(var(--die-size) * -0.15)) scale(1.05);
+}
+
+/* Brighter edges than an ordinary critical, so the pair reads as lit from
+   inside rather than merely tinted. */
+.bigdice-stage.twin .bigdice-face {
+  stroke: var(--tint);
+  stroke-width: 3;
+}
+
+/*
+  Two rings out of the middle, a beat apart.
+
+  Rings rather than a flash: a flash is one frame the eye can miss and a
+  television smears, where an expanding outline is still legible at the back of
+  a room. `scale` and `opacity` only, like the beams — nothing here repaints.
+*/
+.bigdice-shock {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--die-size) * 2.2);
+  height: calc(var(--die-size) * 2.2);
+  margin-top: calc(var(--die-size) * -1.1);
+  margin-left: calc(var(--die-size) * -1.1);
+  pointer-events: none;
+}
+
+.bigdice-shock::before,
+.bigdice-shock::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--tint);
+  border-radius: 50%;
+  animation: bigdice-shock 1100ms cubic-bezier(0.12, 0.7, 0.3, 1) both;
+}
+
+/* The second ring is the whole of the effect: one is a pulse, two is a
+   shockwave. Late enough to read as a second event, not as a thick edge. */
+.bigdice-shock::after {
+  animation-delay: 260ms;
+}
+
+@keyframes bigdice-shock {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
 .bigdice-history {
   display: flex;
   flex-wrap: wrap;
@@ -3215,11 +3441,27 @@ code {
 
   /* The beams stay lit. Only the turning stops: the flourish is information
      about the throw, and taking it away would be answering a motion preference
-     with a missing result. */
+     with a missing result. The twin's word keeps its size and loses its pop,
+     for the same reason. */
   .bigdice-beams,
   .bigdice-beams.sweep,
-  .bigdice-wash.sweep {
+  .bigdice-wash.sweep,
+  .bigdice-flourish.twin,
+  .bigdice-rolling i {
     animation: none;
+  }
+
+  /* The shockwave is motion and nothing else — there is no still frame of it
+     worth keeping, so it does not run at all. */
+  .bigdice-shock {
+    display: none;
+  }
+
+  /* A die that moved to the middle still has to *be* in the middle, so the
+     transitions are cut rather than the positions they arrive at. */
+  .bigdice-scene,
+  .die.discarded {
+    transition: none;
   }
 }
 

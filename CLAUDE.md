@@ -376,6 +376,30 @@ triangle on its base and hangs a d10's kite from its apex. Corners arrive from
 set operations in no particular order, so they are walked by angle before being
 drawn — a square taken in extraction order comes out a bowtie.
 
+**The cube's `up` is the *die's* up axis, not a corner of each face.** Any edge
+of a square is as good as the other three, so a face left to choose lands on an
+arbitrary quarter turn — and on a cube, where three faces meet at right angles
+in plain view, that reads as numbers lying on their sides for no reason. The
+four faces beside the up axis take it and read upright together; the two it runs
+through take the depth axis, which is why looking down at a real die's top face
+reads it with the front of the die at the bottom. Nowhere else does it show: a
+d20's neighbours really are turned every which way, on the real die too.
+
+**A die is fitted to how wide it looks standing still, and pays for it in the
+air.** `span` used to be the bounding sphere, which sizes a die by something you
+cannot see — a cube's corners reach half again past its faces, so a d6 came out
+at 60% of the box while a d20 filled 92%, and side by side they read as
+different sizes. `span` is now the widest the die ever looks *at rest*; `swing`
+is how much wider it gets mid-throw, and the stylesheet gives exactly that back
+as a scale at the top of the arc. It reads as a die thrown away from you and
+caught again, which is what is happening.
+
+**The perspective is proportional to the die, never a constant.** At a fixed
+900px the lens changed with the panel: a die in a small pane sat 40px towards
+the camera and gained 5%, one in a big pane sat 115px forward and gained 15%, so
+the same solid was drawn wide-angle in one and nearly flat in another. It showed
+worst on the cube, where straight edges make the distortion unmistakable.
+
 **Dualise rather than gather.** The dodecahedron's pentagons were first built by
 taking "the five textbook vertices leaning furthest towards each face normal".
 That is wrong and looks nearly right: the standard dodecahedron and the standard
@@ -470,9 +494,21 @@ always did. The discarded die stays on screen, dimmed and struck through, which
 is where the table sees what the rule cost them — that is the whole point of
 showing both.
 
+**Two dice that agree discard nothing.** Which of two 13s was "kept" is a
+question with no answer, and striking one out claims a distinction the throw did
+not make — the pair that matters most, two natural 20s, is exactly where getting
+that wrong would be worst.
+
 **A pair is one history entry.** It prints the kept number with the dropped one
 struck through beside it, and carries its mode in the tooltip: an 18 taken from
-`18, 4` is otherwise indistinguishable from a flat 18.
+`18, 4` is otherwise indistinguishable from an 18 thrown normally. A tie prints
+one number, because nothing was dropped.
+
+**`throwsAPair` asks which modes pair, never which one is not `normal`.** A mode
+string this version does not know — a panel saved while the plain throw was
+still called `flat` — then throws one die rather than quietly gaining a second
+and keeping the higher. That is the whole of the migration, and there is no
+other.
 
 **A mode with no pair yet is still one die.** Switching to advantage must not
 conjure a second die out of a result thrown flat, so the pair — not the mode —
@@ -498,6 +534,41 @@ It is `height: 100%; width: auto`, so a `max-width` rarely binds. Taking 70% of
 the stage while dropping the pixel cap made the discarded die *larger* than the
 kept one in any panel tall enough for the cap to have been doing the work. The
 cap is `--flat-cap`, so a fraction of it is written once.
+
+### What lands, and what happens while it is in the air
+
+**Nothing is decided until the dice stop, so nothing is marked while they turn.**
+No strike, no discard, and no flourish — including the *previous* throw's, which
+would otherwise sit there through the tumble and read as a verdict on a roll
+still happening. The readout shows three dots rather than the last number, which
+is the one thing on this panel that could be mistaken for the result.
+
+**The landing is a CSS transition; the throw is not.** The tumble is painted
+frame by frame from JS onto `.bigdice-solid` and `.bigdice-hop`, neither of
+which may carry a transition or the lift goes laggy. Everything after — the
+loser drawing back, the winner taking the middle — is `transform` and `opacity`
+on `.bigdice-scene`, which changes once.
+
+**A critical takes the middle.** With one die out of the roll, the loser goes
+entirely and the winner slides to the centre of the stage, on the slower of the
+two curves so the discard reads as its cause. That is why the paired gap is a
+margin in `--die-size` and not a `gap`: the distance a die has to travel is then
+a number the stylesheet knows. `data-side` says which way, because the wash and
+the beams are siblings of the dice and `:first-child` would count them.
+
+**`--die-size` drops on the *stage* when a pair is showing, not on the scenes.**
+The wash, the beams and the shockwave are the stage's own children and are all
+measured in it; set one rung lower they go on being drawn around a die twice the
+size of the ones actually there.
+
+**Two natural 20s, or two natural 1s, get their own flourish.** About one throw
+in four hundred. Neither die lost, so neither is struck — they lean together
+instead, and two rings expand out of the middle. Rings rather than a flash: a
+flash is one frame the eye can miss and a television smears. Like the beams'
+`.sweep` it is gated on a throw made in *this* session, so a restored panel
+shows the twin already arrived rather than replaying it on every launch — which
+also means no smoke shot can carry it, since a pair of 20s cannot be rolled to
+order. That one is eyes only.
 
 **The wash and the beams are measured against `--die-size`, never the panel.**
 Sized as a percentage of the stage they come apart the moment a panel is not
