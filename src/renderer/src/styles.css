@@ -3305,12 +3305,39 @@ code {
   is what happens around them. The nudge is small: this is two dice agreeing,
   not two dice colliding.
 */
-.bigdice-stage.twin .bigdice-scene[data-side='left'] {
-  transform: translateX(calc(var(--die-size) * 0.15)) scale(1.05);
+/*
+  Two dice that came up the same number are scattered, not lined up.
+
+  They are the same shape at the same size showing the same face, so drawn side
+  by side they are one sprite stamped twice — and leaning them together, which
+  was tried first, overlapped their identical silhouettes into a single mangled
+  outline with a seam down it. Nothing says "two dice" like their not matching:
+  an offset along the diagonal and opposite quarter-turns, which is how two dice
+  actually come to rest. The pair still balances about the middle, so the beams
+  and the shockwave stay centred on it.
+
+  Rotated in the plane of the screen rather than in the die's own space: the
+  scene holds the perspective, so a `rotate` here turns the finished picture and
+  leaves the thrown face square to the camera, where it has to stay.
+*/
+.bigdice-stage.matched .bigdice-scene[data-side='left'] {
+  transform: translate(calc(var(--die-size) * -0.05), calc(var(--die-size) * -0.1)) rotate(-6deg);
 }
 
-.bigdice-stage.twin .bigdice-scene[data-side='right'] {
-  transform: translateX(calc(var(--die-size) * -0.15)) scale(1.05);
+.bigdice-stage.matched .bigdice-scene[data-side='right'] {
+  transform: translate(calc(var(--die-size) * 0.05), calc(var(--die-size) * 0.1)) rotate(6deg);
+}
+
+/* The twin scatters the same way and stands a little taller, so the flourish is
+   in how the pair is lit rather than in where it sits. */
+.bigdice-stage.matched.twin .bigdice-scene[data-side='left'] {
+  transform: translate(calc(var(--die-size) * -0.05), calc(var(--die-size) * -0.1)) rotate(-6deg)
+    scale(1.05);
+}
+
+.bigdice-stage.matched.twin .bigdice-scene[data-side='right'] {
+  transform: translate(calc(var(--die-size) * 0.05), calc(var(--die-size) * 0.1)) rotate(6deg)
+    scale(1.05);
 }
 
 /* Brighter edges than an ordinary critical, so the pair reads as lit from

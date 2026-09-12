@@ -1477,9 +1477,45 @@ const shots = [
     // be the worst place in the module to get that wrong. The history entry
     // drops its second number for the same reason.
     expect: {
-      found: ['.bigdice-stage.twin.nat20', '.bigdice-flourish.twin', '.bigdice-beams'],
+      found: [
+        '.bigdice-stage.twin.matched.nat20',
+        '.bigdice-flourish.twin',
+        '.bigdice-beams',
+        '.bigdice-scene[data-side="left"]',
+        '.bigdice-scene[data-side="right"]'
+      ],
       missing: ['.bigdice-scene.discarded', '.bigdice-stage.solo', '.bigdice-dropped'],
       text: ['DOUBLE CRITICAL']
+    }
+  },
+  // An ordinary tie — two dice that agreed on a number nobody writes home
+  // about. Nothing is discarded, so both are full size showing the same face,
+  // and without the scatter they are one sprite stamped twice. No flourish:
+  // this is the plainest result the pair modes can produce, and the shot is
+  // here to prove the scatter is not something only the twin gets.
+  {
+    name: 'bigdice-tie',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'advantage',
+        value: 13,
+        pair: [13, 13],
+        history: [{ id: 'throw_tie', sides: 20, value: 13, pair: [13, 13], mode: 'advantage' }]
+      }
+    },
+    settle: 900,
+    expect: {
+      found: ['.bigdice-stage.matched', '.bigdice-total'],
+      missing: [
+        '.bigdice-stage.twin',
+        '.bigdice-scene.discarded',
+        '.bigdice-flourish',
+        '.bigdice-dropped'
+      ],
+      text: ['13']
     }
   },
   // Two natural 1s, which take the same shape down the other set of rules.

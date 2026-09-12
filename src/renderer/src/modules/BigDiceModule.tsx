@@ -271,6 +271,12 @@ function BigDice({
   */
   const critical = settings.critFlourish && !tumbling ? criticalOf(state.sides, state.value) : ''
   const twin = critical !== '' ? twinCriticalOf(pair) : ''
+  /* Two dice showing the same face are one sprite stamped twice unless they are
+     scattered. Any tie, not only the twin: `slots` discards neither, so both
+     are full size and identical. Off while they are still turning, when they
+     are not showing the same thing yet. */
+  const matched =
+    !tumbling && pair !== null && pair[0] === pair[1] && throwsAPair(state.sides, state.mode)
   /* One die is out of the roll and the other is a critical: the loser goes
      entirely and the winner takes the middle. Not when both are the critical —
      that is the twin case, and neither of them lost. */
@@ -285,6 +291,7 @@ function BigDice({
     (settings.solid ? resting.length : flat.length) > 1 && 'paired',
     critical,
     solo && 'solo',
+    matched && 'matched',
     twin !== '' && 'twin'
   ]
     .filter(Boolean)
