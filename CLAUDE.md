@@ -417,6 +417,12 @@ resting orientations, with the angle argued at the constant. Nothing else needs
 one; every other solid here has an obtuse dihedral angle and shows three to five
 faces unaided.
 
+**The d6's tilt is the smallest one that works, not a three-quarter view.** A
+proper 30° turn was tried and is worse for the one thing the die is for: with
+three faces all readable, which one is the *result* stops being obvious. Ten
+degrees leaves the thrown face square enough to read as the front and its two
+neighbours as thin bands, which say "cube" without competing.
+
 **The d4 is read at its apex, and that is a decision, not a detail.** A
 tetrahedron has no face pointing anywhere useful, so a real d4 is read either at
 the apex or along the bottom edge. This module presents a die to a camera rather
@@ -446,6 +452,22 @@ turned away is not drawn at all, which is what lets a convex solid skip sorting
 entirely — and is why none of this leans on `backface-visibility` reaching an
 SVG element. Faces are drawn slightly oversized so neighbours overlap: cut to
 their exact edges, the hairline seams let you see through the solid.
+
+**A number stops being drawn before its face does.** The same dot product fades
+it out between 60° and 77°. Past that the face is a sliver a few pixels wide and
+its number has compressed into a bright smear sitting on the die's own outline —
+which is what read as a ghost of the number on the face beside it. The face
+stays; it is what says the die is a solid. Faded rather than switched, or a
+tumbling die flickers its numbers as faces cross the line. `opacity`, not
+`visibility`, so the numbers stay in `innerText` for the smoke harness.
+
+**The cube's faces are drawn *under* size, and it is the only one.** A right
+angle is the case the overlap does not survive: everywhere else the oversized
+rim tilts away and tucks under its neighbour, but on a cube it projects straight
+out past the neighbour's plane, and so does the outer half of the polygon's own
+stroke. That is five or six pixels of one face painted over the front of the
+next — the gold speckling that used to break the cube's edges. Pulled in by half
+a stroke instead, so the stroke's outer edge lands on the true edge of the face.
 
 **A critical is lit, not replayed.** The beams and the wash are derived from the
 settled value, so a panel restored with a 20 in it comes back already lit; only
@@ -520,14 +542,15 @@ second die appearing out of nothing. One clock and one frame loop drive however
 many dice are on the stage, so a pair lands together; each gets its own spin,
 because two solids turning in step read as one rigid object.
 
-**A discarded die is told apart three ways — smaller, greyer, crossed out.** One
-alone is not enough: dimmed alone reads as badly lit, and struck alone still
-holds the eye as long as the die that counted.
+**A discarded die is told apart two ways — smaller, and drained of the accent.**
+Dimming alone reads as badly lit. A third signal, a red line across it, was
+tried and struck the wrong note: a discarded die is not an error, it is a die
+the rule did not use, and crossing it out made every advantage roll look like a
+warning.
 
 **The dimming is restyled faces, not a `filter`.** A filter would have to sit on
-the scene, where it would grey the strike that has to stay red; the only
-elements below it are the ones carrying the 3D, and a filter there forces
-`transform-style: flat` and collapses the solid into a pile of triangles.
+the scene, whose only children are the ones carrying the 3D — and a filter there
+forces `transform-style: flat`, collapsing the solid into a pile of triangles.
 
 **The flat die is capped on height, and both terms of the cap have to be cut.**
 It is `height: 100%; width: auto`, so a `max-width` rarely binds. Taking 70% of

@@ -246,11 +246,12 @@ describe.each(PAIRED)('%s, numbered as a die', (_name, die) => {
       /*
         Square on, except for the d6, which says why in `D6_TILT`: a cube shown
         square to the camera has no depth at all. Its number's own face comes to
-        rest around 32° off — far enough for the two beside it to read as the
-        sides of a cube, near enough to leave the number legible. Pinned rather
-        than loosely bounded, because that balance is the whole of the choice.
+        rest about 12.5° off — the smallest turn that puts the neighbours on
+        screen, and no more, because the die is for reading a result and three
+        equally readable faces stop saying which one that is. Pinned rather than
+        loosely bounded, because the smallness is the whole of the choice.
       */
-      if (die.kind === 'd6') expect(Math.acos(normal[2])).toBeCloseTo(0.556, 2)
+      if (die.kind === 'd6') expect(Math.acos(normal[2])).toBeCloseTo(0.219, 2)
       else expect(normal[2]).toBeGreaterThan(0.999999)
     }
   })

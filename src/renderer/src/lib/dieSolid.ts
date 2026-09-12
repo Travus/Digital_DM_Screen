@@ -93,6 +93,16 @@ export interface Spin {
 export interface FaceLight {
   visible: boolean
   brightness: number
+  /**
+   * How much of the face's number to draw, 0 to 1.
+   *
+   * A face turned almost edge-on is a sliver a few pixels wide, and its number
+   * compresses into that sliver as a bright smear sitting on the die's own
+   * outline — unreadable by definition, and the thing that read as a ghost of
+   * the number on the face beside it. The face itself stays: it is what says
+   * the die is a solid. Its number has nothing left to say.
+   */
+  legible: number
 }
 
 /** How long a throw runs. */
@@ -107,6 +117,10 @@ const FACE_RADIUS = 48
 /**
  * Faces are drawn a little oversized so neighbours overlap. Cut to their exact
  * edges, the hairline seams between them let you see through the solid.
+ *
+ * It works because every solid here meets itself at an obtuse angle, so the
+ * oversized rim tilts away and tucks under its neighbour. The cube is the
+ * exception and overrides it — see `cubeFaces`.
  */
 const FACE_OVERLAP = 1.025
 
@@ -116,6 +130,18 @@ const DIFFUSE = 0.62
 
 /** A face turned this far from the camera is not drawn at all. */
 const FACING = 0.02
+
+/**
+ * Where a face's number is still worth printing, as the cosine of its turn from
+ * the camera: full above 60°, gone by 77°, faded between.
+ *
+ * The upper bound is where a digit is still a digit rather than a bright wedge;
+ * the lower is where the face has narrowed to a few pixels and the number is
+ * sitting on the silhouette. Between them it fades rather than switching, or a
+ * tumbling die flickers its numbers on and off as faces cross the line.
+ */
+const READABLE = 0.5
+const ILLEGIBLE = 0.22
 
 /* ------------------------------------------------------------------ vectors */
 
@@ -294,7 +320,11 @@ interface FaceGeometry {
   project: (point: Vec3) => { x: number; y: number }
 }
 
-function describeFace(corners: readonly Vec3[], up: Vec3): FaceGeometry {
+function describeFace(
+  corners: readonly Vec3[],
+  up: Vec3,
+  overlap: number = FACE_OVERLAP
+): FaceGeometry {
   const centroid = average(corners)
   const winding = cross(subtract(corners[1], corners[0]), subtract(corners[2], corners[0]))
   // The solid is centred on the origin, so outward is the side the centroid is on.
@@ -331,8 +361,8 @@ function describeFace(corners: readonly Vec3[], up: Vec3): FaceGeometry {
   const points = ordered
     .map((corner) => {
       const offset = subtract(corner, origin)
-      const x = 50 + dot(offset, axisX) * scale * FACE_OVERLAP
-      const y = 50 + dot(offset, axisY) * scale * FACE_OVERLAP
+      const x = 50 + dot(offset, axisX) * scale * overlap
+      const y = 50 + dot(offset, axisY) * scale * overlap
       return `${x.toFixed(2)},${y.toFixed(2)}`
     })
     .join(' ')
@@ -374,6 +404,8 @@ interface FaceSpec {
   up: Vec3
   /** Where the number sits, as a point on the face. Corner average otherwise. */
   labelAnchor?: Vec3
+  /** Overrides `FACE_OVERLAP` for this face. Only the cube needs it. */
+  overlap?: number
 }
 
 interface SolidSpec {
@@ -394,7 +426,7 @@ interface SolidSpec {
 }
 
 function buildSolid(spec: SolidSpec): DieSolid {
-  const geometries = spec.faces.map((face) => describeFace(face.corners, face.up))
+  const geometries = spec.faces.map((face) => describeFace(face.corners, face.up, face.overlap))
   const numbers = numberFaces(geometries.map((geometry) => geometry.normal))
   const toValue = spec.value ?? ((n: number) => n)
   const toText = spec.text ?? ((value: number) => String(value))
@@ -546,10 +578,30 @@ function cubeFaces(): FaceSpec[] {
     [1, -1].map((sign) => ({
       corners: corners.filter((corner) => corner[axis] === sign),
       // CSS y points down, so the die's up axis is negative y.
-      up: axis === 1 ? ([0, 0, 1] as Vec3) : ([0, -1, 0] as Vec3)
+      up: axis === 1 ? ([0, 0, 1] as Vec3) : ([0, -1, 0] as Vec3),
+      overlap: CUBE_OVERLAP
     }))
   )
 }
+
+/**
+ * The cube is the one solid whose faces are drawn *under* size, not over.
+ *
+ * A right angle is the case `FACE_OVERLAP` does not survive. Everywhere else
+ * the oversized rim tilts away from the camera and hides under its neighbour;
+ * on a cube it projects straight out past the neighbour's plane, and so does
+ * the outer half of the polygon's own stroke. Together that is five or six
+ * pixels of one face painted over the front of the next, which is the gold
+ * speckling that used to break the cube's edges.
+ *
+ * Pulled in by exactly half a stroke instead, so the stroke's outer edge lands
+ * on the true edge of the face: neighbours meet along one clean line, with
+ * nothing over and nothing missing. The number comes from the stroke width in
+ * `styles.css` and the square's own proportions — a polygon drawn to
+ * `FACE_RADIUS` puts a square's edge at `FACE_RADIUS / √2`, and the stroke
+ * reaches one viewBox unit past it.
+ */
+const CUBE_OVERLAP = 1 - 1 / (FACE_RADIUS / Math.SQRT2)
 
 /**
  * The twelve pentagons, built as the icosahedron's dual.
@@ -713,7 +765,7 @@ function tetrahedron(): DieSolid {
 }
 
 /**
- * The d6 rests off axis, and has to.
+ * The d6 rests off axis, and has to — but only just.
  *
  * A cube's neighbours meet it at exactly 90°, so a face brought square to the
  * camera leaves every other face on the horizon and `faceLighting` drops them
@@ -721,13 +773,13 @@ function tetrahedron(): DieSolid {
  * renderer it is meant to be an alternative to. Every other solid here has an
  * obtuse dihedral angle and shows three to five faces unaided.
  *
- * A quarter of a right angle each way, which is the angle a die is photographed
- * at. The first attempt was half this and read as janky rather than as a
- * three-quarter view: it left the two neighbouring faces at 73° and 76°, thin
- * enough to look like an error on a square rather than the sides of a cube.
- * Here they land near 65° and 72°, with the number's own face at 32°.
+ * So this is the smallest tilt that does the job, not a three-quarter view. A
+ * proper 30° turn was tried and is worse for the one thing the die is for:
+ * with three faces all readable, which one is the *result* stops being obvious.
+ * Ten degrees leaves the thrown face square enough to read as the front and its
+ * two neighbours as thin bands, which say "cube" without competing.
  */
-const D6_TILT = multiply(rotation([0, 1, 0], 0.44), rotation([1, 0, 0], -0.35))
+const D6_TILT = multiply(rotation([0, 1, 0], 0.17), rotation([1, 0, 0], -0.14))
 
 /**
  * The dice, built once at load.
@@ -837,9 +889,11 @@ export function randomSpin(random: () => number = Math.random): Spin {
 export function faceLighting(die: DieSolid, current: Mat3): FaceLight[] {
   return die.faces.map((face) => {
     const normal = transform(current, face.normal)
+    const facing = normal[2]
     return {
-      visible: normal[2] > FACING,
-      brightness: AMBIENT + DIFFUSE * Math.max(0, dot(normal, LIGHT))
+      visible: facing > FACING,
+      brightness: AMBIENT + DIFFUSE * Math.max(0, dot(normal, LIGHT)),
+      legible: Math.max(0, Math.min(1, (facing - ILLEGIBLE) / (READABLE - ILLEGIBLE)))
     }
   })
 }

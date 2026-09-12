@@ -2708,19 +2708,20 @@ code {
 }
 
 /*
-  Thrown, and then thrown away. Three treatments rather than one: a die only
-  dimmed reads as badly lit, and a die only struck through still holds the eye
-  as long as the one that counts. Smaller, greyer, and crossed out is the
-  combination that says "this one did not happen" from across a room.
+  Thrown, and then thrown away: smaller, and drained of the accent the kept die
+  keeps. Two treatments rather than one, because dimming alone reads as badly
+  lit — but no more than two. A red line across it was tried and struck the
+  wrong note entirely: a discarded die is not an error, it is a die the rule
+  did not use, and crossing it out made every advantage roll look like a
+  warning.
 
   Shrunk with a `scale` rather than by overriding `--die-size`, so it animates:
   both dice land the same size and the loser draws back, which is the moment the
   roll is decided. A custom property cannot transition without `@property`, and
   changing it would move the margins and shove the other die sideways.
 
-  Dimmed by restyling the faces rather than with a `filter`, which would have to
-  sit on the scene: the strike lives in there and has to stay red, and the only
-  elements below it are the ones carrying the 3D, where a filter forces
+  Dimmed by restyling the faces rather than with a `filter` on the scene, whose
+  only children are the ones carrying the 3D — a filter there forces
   `transform-style: flat` and collapses the solid into a pile of triangles.
 */
 .bigdice-scene.discarded {
@@ -2757,28 +2758,6 @@ code {
 
 .bigdice-stage.solo .bigdice-scene[data-side='right']:not(.discarded) {
   transform: translateX(calc(var(--die-size) * -0.58));
-}
-
-/*
-  Drawn over the scene rather than inside a face. A solid's number is wherever
-  the die landed — and three of them at once on the d4 — so there is no glyph to
-  put a line through; the die as a whole is what is crossed out. The scene is a
-  point, so the box is placed from the die's own size.
-*/
-.bigdice-strike {
-  position: absolute;
-  top: calc(var(--die-size) / -2);
-  left: calc(var(--die-size) / -2);
-  width: var(--die-size);
-  height: var(--die-size);
-  background: linear-gradient(
-    to top right,
-    transparent calc(50% - 2px),
-    var(--danger) calc(50% - 2px),
-    var(--danger) calc(50% + 2px),
-    transparent calc(50% + 2px)
-  );
-  opacity: 0.85;
 }
 
 /* Three nested transforms, each with one job: the scene holds the perspective,
@@ -2845,6 +2824,11 @@ code {
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
+  /* Set per face per frame by the throw — a number on a face turned nearly
+     edge-on has compressed into a smear on the die's own outline, and is what
+     read as a ghost of the number beside it. `opacity`, not `visibility`, so
+     the numbers stay in `innerText` and the smoke harness can still read them. */
+  opacity: var(--legible, 1);
 }
 
 /*
@@ -2926,10 +2910,8 @@ code {
 }
 
 /*
-  The flat renderer's discarded die. Same three signals the solid's gets —
-  smaller, greyer, crossed out — spelt in the terms this one is drawn in. The
-  line is inside the viewBox, so it scales with the die rather than needing a
-  box placed from JS the way the solid's does.
+  The flat renderer's discarded die: the same two signals the solid's gets —
+  smaller, and drained of the accent — spelt in the terms this one is drawn in.
 */
 /*
   The transition sits on the discarded state rather than on `.die`, so it runs
@@ -2984,14 +2966,6 @@ code {
 
 .die.discarded .die-face {
   fill: var(--text-faint);
-}
-
-.die-strike {
-  stroke: var(--danger);
-  stroke-width: 5;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  opacity: 0.85;
 }
 
 /* Interior edges, so a d20 does not read as a plain hexagon. */

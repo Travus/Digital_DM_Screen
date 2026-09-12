@@ -474,6 +474,9 @@ const SolidDie = forwardRef<
         if (!element) return
         element.style.visibility = shade.visible ? 'visible' : 'hidden'
         element.style.filter = `brightness(${shade.brightness.toFixed(3)})`
+        // A property on the face rather than a style on the text: one write per
+        // face per frame either way, and the stylesheet keeps the rule.
+        element.style.setProperty('--legible', shade.legible.toFixed(3))
       })
     }
   }))
@@ -525,9 +528,6 @@ const SolidDie = forwardRef<
           ))}
         </span>
       </span>
-      {/* A line drawn over the die rather than through the number: a solid's
-            number is three of them on a d4 and sits wherever the face landed. */}
-      {discarded && <span className="bigdice-strike" aria-hidden="true" />}
     </span>
   )
 })
@@ -600,9 +600,6 @@ function Die({
       <text x="50" y={textY} className="die-face">
         {face}
       </text>
-      {/* Drawn inside the viewBox so it scales with the die, unlike the solid's,
-          which has no 2D box to live in. */}
-      {discarded && <line className="die-strike" x1="8" y1="88" x2="92" y2="12" />}
     </svg>
   )
 }

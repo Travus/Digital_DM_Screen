@@ -1303,6 +1303,29 @@ const shots = [
       found: ['.bigdice-scene.d4', '.bigdice-scene.d6', '.bigdice-scene.d8', '.bigdice-face']
     }
   },
+  // A d6 actually thrown, photographed after it has settled.
+  //
+  // Not the same shot as `bigdice-solids`, which renders a seeded die that has
+  // never moved. A die that has *animated* to a stop is a different thing to
+  // photograph: every face's `filter` and `visibility` is rewritten sixty times
+  // a second on the way there, and the artefact that made this shot necessary —
+  // a ghost of a face's number left a few pixels off its own — only ever
+  // appeared after a throw. The cube is where it showed, because its flat faces
+  // and straight edges leave a stale layer nowhere to hide.
+  {
+    name: 'bigdice-d6-thrown',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = { sides: 6, value: 4, history: [] }
+    },
+    click: '.bigdice-stage',
+    settle: 1700,
+    expect: {
+      found: ['.bigdice-scene.d6', '.bigdice-total'],
+      missing: ['.bigdice-stage.tumbling', '.bigdice-rolling']
+    }
+  },
   // The dodecahedron, and the two shapes the d10 family is built from. The
   // pentagons are here because they are the one face the first attempt got
   // wrong — gathered from textbook coordinates they came out non-planar, and a
@@ -1358,14 +1381,13 @@ const shots = [
         ]
       }
     },
-    // Exactly one die discarded, the strike drawn over it, and the kept value in
-    // the readout. The history strip carries the dropped number beside the kept
-    // one, which is what makes a pair one entry rather than two.
+    // Exactly one die discarded, and the kept value in the readout. The history
+    // strip carries the dropped number beside the kept one, which is what makes
+    // a pair one entry rather than two.
     expect: {
       found: [
         '.bigdice-stage.paired',
         '.bigdice-scene.discarded',
-        '.bigdice-strike',
         '.bigdice-modes .chip.on[data-mode="advantage"]',
         '.bigdice-dropped'
       ],
@@ -1390,7 +1412,7 @@ const shots = [
       }
     },
     expect: {
-      found: ['.bigdice-total', '.bigdice-scene.discarded', '.bigdice-strike'],
+      found: ['.bigdice-total', '.bigdice-scene.discarded'],
       missing: ['.bigdice-flourish', '.bigdice-stage.nat20', '.bigdice-beams'],
       text: ['3']
     }
@@ -1456,12 +1478,7 @@ const shots = [
     // drops its second number for the same reason.
     expect: {
       found: ['.bigdice-stage.twin.nat20', '.bigdice-flourish.twin', '.bigdice-beams'],
-      missing: [
-        '.bigdice-scene.discarded',
-        '.bigdice-strike',
-        '.bigdice-stage.solo',
-        '.bigdice-dropped'
-      ],
+      missing: ['.bigdice-scene.discarded', '.bigdice-stage.solo', '.bigdice-dropped'],
       text: ['DOUBLE CRITICAL']
     }
   },
@@ -1517,7 +1534,6 @@ const shots = [
         '.bigdice-total',
         '.bigdice-flourish',
         '.bigdice-scene.discarded',
-        '.bigdice-strike',
         '.bigdice-beams',
         '.bigdice-stage.twin',
         '.bigdice-stage.solo'
@@ -1525,8 +1541,8 @@ const shots = [
     }
   },
   // The same pair through the flat renderer, which has to answer advantage too:
-  // a DM who turned the solids off still gets both dice and a strike, drawn in
-  // the terms that renderer is built in.
+  // a DM who turned the solids off still gets both dice, with the loser drawn
+  // back and drained, in the terms that renderer is built in.
   {
     name: 'bigdice-flat-advantage',
     layout: starter,
@@ -1542,7 +1558,7 @@ const shots = [
       }
     },
     expect: {
-      found: ['.bigdice-pair .die.d20', '.die.discarded', '.die-strike', '.bigdice-total'],
+      found: ['.bigdice-pair .die.d20', '.die.discarded', '.bigdice-total'],
       missing: ['.bigdice-scene'],
       text: ['5', '16']
     }
