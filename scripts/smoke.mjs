@@ -1270,6 +1270,154 @@ const shots = [
       missing: ['.bigdice-total']
     }
   },
+  // Three of the new solids at once, because each is a different shape derived a
+  // different way and no table of numbers can say whether one came out looking
+  // like a die. The d4 is the one to read closely: its number is printed three
+  // times per face and read at the apex pointing at the camera, so a throw shows
+  // as three copies of one number radiating from the middle.
+  //
+  // The d6 is the second: a cube square to the camera is a flat square, so it
+  // alone rests a few degrees off axis. If this shot shows a plain square, the
+  // tilt has gone.
+  {
+    name: 'bigdice-solids',
+    layout: starter,
+    mutate: (doc) => {
+      const seat = (id, sides, value) => {
+        doc.panels[id].moduleId = 'bigdice'
+        doc.panels[id].state = { sides, value, history: [] }
+        doc.panels[id].settings = { showHistory: false }
+      }
+      seat('panel_init', 4, 3)
+      seat('panel_party', 6, 5)
+      seat('panel_ref', 8, 7)
+    },
+    // Which solid is which is eyes only; that each built the shape it was asked
+    // for is not — the kind is on the scene, so a d6 drawn as an octahedron
+    // would still be a legible failure in the shot beside it.
+    //
+    // No `text` on the numbers. Every face of a solid carries its own number in
+    // the DOM, so asserting "3" is somewhere on screen is satisfied by any d4
+    // resting on anything. The same trap the nat20 shot below documents.
+    expect: {
+      found: ['.bigdice-scene.d4', '.bigdice-scene.d6', '.bigdice-scene.d8', '.bigdice-face']
+    }
+  },
+  // The dodecahedron, and the two shapes the d10 family is built from. The
+  // pentagons are here because they are the one face the first attempt got
+  // wrong — gathered from textbook coordinates they came out non-planar, and a
+  // non-planar face draws as a fold with gaps at its edges.
+  //
+  // The percentile pair is the same trapezohedron twice with different numbers,
+  // so this is also the shot that would catch the two dice coming out identical.
+  {
+    name: 'bigdice-solid-percentile',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = { sides: 12, value: 11, history: [] }
+      doc.panels.panel_party.moduleId = 'bigdice'
+      doc.panels.panel_party.state = { sides: 10, value: 10, history: [] }
+      doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.state = { sides: 100, value: 62, history: [] }
+    },
+    // Both halves of the pair by name, and the stage knowing it holds two dice.
+    // `62` is worth asserting where a face value would not be: no single face
+    // carries it, so it can only have come from the readout adding the pair up.
+    expect: {
+      found: [
+        '.bigdice-scene.d12',
+        '.bigdice-scene.d10',
+        '.bigdice-stage.paired .bigdice-scene.d10-tens',
+        '.bigdice-stage.paired .bigdice-scene.d10-units'
+      ],
+      text: ['62']
+    }
+  },
+  // Advantage: two solids, the lower one dimmed, shrunk and struck through, and
+  // the readout showing only what was kept. Seeded because a pair of particular
+  // values cannot be arranged by clicking.
+  //
+  // In the starter's big left panel on purpose. The discarded die is told apart
+  // by size, colour and a line across it, and none of the three is legible in a
+  // panel that leaves the pair a hundred pixels to share.
+  {
+    name: 'bigdice-advantage',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'advantage',
+        value: 18,
+        pair: [4, 18],
+        history: [
+          { id: 'throw_a', sides: 20, value: 18, pair: [4, 18], mode: 'advantage' },
+          { id: 'throw_b', sides: 20, value: 6, pair: [6, 11], mode: 'disadvantage' },
+          { id: 'throw_c', sides: 20, value: 13 }
+        ]
+      }
+    },
+    // Exactly one die discarded, the strike drawn over it, and the kept value in
+    // the readout. The history strip carries the dropped number beside the kept
+    // one, which is what makes a pair one entry rather than two.
+    expect: {
+      found: [
+        '.bigdice-stage.paired',
+        '.bigdice-scene.discarded',
+        '.bigdice-strike',
+        '.bigdice-modes .chip.on[data-mode="advantage"]',
+        '.bigdice-dropped'
+      ],
+      text: ['18', 'Advantage']
+    }
+  },
+  // Disadvantage keeps the other die, and the critical call-out follows the one
+  // it kept: a natural 20 thrown and then discarded is not a critical. The 20
+  // here is the *dropped* die, so the readout must print 3 and no flourish —
+  // which is the whole of the rule this module had to decide.
+  {
+    name: 'bigdice-disadvantage-nat20-dropped',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'disadvantage',
+        value: 3,
+        pair: [20, 3],
+        history: []
+      }
+    },
+    expect: {
+      found: ['.bigdice-total', '.bigdice-scene.discarded', '.bigdice-strike'],
+      missing: ['.bigdice-flourish', '.bigdice-stage.nat20', '.bigdice-beams'],
+      text: ['3']
+    }
+  },
+  // The same pair through the flat renderer, which has to answer advantage too:
+  // a DM who turned the solids off still gets both dice and a strike, drawn in
+  // the terms that renderer is built in.
+  {
+    name: 'bigdice-flat-advantage',
+    layout: starter,
+    mutate: (doc) => {
+      doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.settings = { solid: false }
+      doc.panels.panel_init.state = {
+        sides: 20,
+        mode: 'disadvantage',
+        value: 5,
+        pair: [5, 16],
+        history: []
+      }
+    },
+    expect: {
+      found: ['.bigdice-pair .die.d20', '.die.discarded', '.die-strike', '.bigdice-total'],
+      missing: ['.bigdice-scene'],
+      text: ['5', '16']
+    }
+  },
   // The same panel with the solid turned off, which is the whole of what that
   // setting does. Two renderers live in this module and only one of them is
   // reachable by clicking, so the other needs seeding.
@@ -1355,15 +1503,20 @@ const shots = [
       text: ['CRITICAL FAILURE']
     }
   },
-  // Percentile renders as the two ten-sided dice it physically is, so this is
-  // the shot that would catch it collapsing back to one. Seeded at 100 — the one
-  // throw in a hundred that shows 00 and 0, and the only three-digit total the
-  // history strip ever has to hold.
+  // Percentile through the flat renderer, where it has to stay the two
+  // ten-sided dice it physically is rather than collapsing back to one. Seeded
+  // at 100 — the one throw in a hundred that shows 00 and 0, and the only
+  // three-digit total the history strip ever has to hold.
+  //
+  // `solid: false` is load-bearing now that every die has a solid: without it
+  // this panel renders as the trapezohedron pair, which is a different shot
+  // (`bigdice-solid-percentile`) asserting a different thing.
   {
     name: 'bigdice-percentile',
     layout: starter,
     mutate: (doc) => {
       doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.settings = { solid: false }
       doc.panels.panel_ref.state = {
         sides: 100,
         value: 100,
@@ -1374,10 +1527,9 @@ const shots = [
         ]
       }
     },
-    // Percentile must still render as the two physical dice it is, rather than
-    // collapsing back to one. Asserted through a child: `.bigdice-pair` is
-    // `display: contents` so the dice can join the stage's flex layout, which
-    // leaves the wrapper itself with no box to be visible in.
+    // Asserted through a child: `.bigdice-pair` is `display: contents` so the
+    // dice can join the stage's flex layout, which leaves the wrapper itself
+    // with no box to be visible in.
     expect: {
       found: ['.bigdice-pair .die', '.bigdice-total', '.bigdice-history'],
       text: ['100']
@@ -1385,14 +1537,18 @@ const shots = [
   },
   // The two numbers that came closest to overflowing their faces, at two very
   // different panel sizes: a d12 showing 12 and a d4 showing 4. Both sit inside
-  // an inner face, so this is what would catch either one clipping again.
+  // an inner face of the flat die, so this is what would catch either one
+  // clipping again — and it is the flat die's question alone, since a solid
+  // prints its numbers on real faces sized from the geometry.
   {
     name: 'bigdice-tight-faces',
     layout: starter,
     mutate: (doc) => {
       doc.panels.panel_init.moduleId = 'bigdice'
+      doc.panels.panel_init.settings = { solid: false }
       doc.panels.panel_init.state = { sides: 4, value: 4, history: [] }
       doc.panels.panel_ref.moduleId = 'bigdice'
+      doc.panels.panel_ref.settings = { solid: false }
       doc.panels.panel_ref.state = { sides: 12, value: 12, history: [] }
     },
     // Whether either number clips its face is eyes-only; that both dice

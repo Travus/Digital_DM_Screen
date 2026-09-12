@@ -2599,6 +2599,12 @@ code {
 */
 .bigdice-stage {
   --die-size: min(86cqw, 86cqh, 400px);
+  /* The same cap for the flat die, which is sized by its own height rather than
+     through `--die-size`. Named so the rules below can take a fraction of it —
+     a discarded die spelling its own pixel cap is a second copy to get wrong,
+     and one that quietly *raised* the cap is how a discarded die came out
+     larger than the one that counted. */
+  --flat-cap: 420px;
   container-type: size;
   position: relative;
   /* Under the chip row and the history, both of which the beams overhang. */
@@ -2620,13 +2626,15 @@ code {
   display: contents;
 }
 
-.bigdice.roomy .die {
-  max-height: min(100%, 520px);
-}
-
-/* The fullscreen cap, matching the flat die's above. */
+/* The fullscreen caps, one per renderer, lifted together. */
 .bigdice.roomy .bigdice-stage {
   --die-size: min(86cqw, 86cqh, 520px);
+  --flat-cap: 520px;
+}
+
+/* Two flat dice share the room one had, so neither may take the full width. */
+.bigdice-stage.paired .die {
+  max-width: 44%;
 }
 
 /*
@@ -2641,11 +2649,13 @@ code {
 }
 
 /*
-  The solid d20, built from twenty faces in `lib/dieSolid.ts`.
+  A solid die, built from its faces in `lib/dieSolid.ts`.
 
   One world unit, in pixels. The numbers it is built from reach CSS from the
   geometry as custom properties rather than being written out again here, since
-  a second copy of a number is a second copy to get wrong.
+  a second copy of a number is a second copy to get wrong. That is also what
+  lets one rule draw all six solids: they differ only in those three values and
+  in how many faces they have.
 */
 .bigdice-scene {
   --unit: calc(var(--die-size) / var(--span));
@@ -2655,6 +2665,74 @@ code {
   width: 0;
   height: 0;
   perspective: 900px;
+}
+
+/*
+  A scene is a zero-sized point with the die hanging off it in 3D, so flexbox
+  has nothing to lay out and two of them would sit on top of each other. The
+  margin is the die's own width, given back by hand.
+*/
+.bigdice-stage.paired .bigdice-scene {
+  --die-size: min(42cqw, 78cqh, 300px);
+  margin: 0 calc(var(--die-size) / 2);
+}
+
+.bigdice.roomy .bigdice-stage.paired .bigdice-scene {
+  --die-size: min(42cqw, 78cqh, 380px);
+}
+
+/*
+  Thrown, and then thrown away. Three treatments rather than one: a die only
+  dimmed reads as badly lit, and a die only struck through still holds the eye
+  as long as the one that counts. Smaller, greyer, and crossed out is the
+  combination that says "this one did not happen" from across a room.
+
+  Named through `.paired` so it outweighs the sizing rule above rather than
+  racing it — a discarded die is only ever one of two.
+
+  Dimmed by restyling the faces rather than with a `filter`, which would have to
+  sit on the scene: the strike lives in there and has to stay red, and the only
+  elements below it are the ones carrying the 3D, where a filter forces
+  `transform-style: flat` and collapses the solid into a pile of triangles.
+*/
+.bigdice-stage.paired .bigdice-scene.discarded {
+  --die-size: min(32cqw, 58cqh, 220px);
+  opacity: 0.8;
+}
+
+.bigdice.roomy .bigdice-stage.paired .bigdice-scene.discarded {
+  --die-size: min(32cqw, 58cqh, 280px);
+}
+
+.bigdice-scene.discarded .bigdice-face {
+  fill: var(--bg-3);
+  stroke: var(--line);
+}
+
+.bigdice-scene.discarded .bigdice-face text {
+  fill: var(--text-faint);
+}
+
+/*
+  Drawn over the scene rather than inside a face. A solid's number is wherever
+  the die landed — and three of them at once on the d4 — so there is no glyph to
+  put a line through; the die as a whole is what is crossed out. The scene is a
+  point, so the box is placed from the die's own size.
+*/
+.bigdice-strike {
+  position: absolute;
+  top: calc(var(--die-size) / -2);
+  left: calc(var(--die-size) / -2);
+  width: var(--die-size);
+  height: var(--die-size);
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 2px),
+    var(--danger) calc(50% - 2px),
+    var(--danger) calc(50% + 2px),
+    transparent calc(50% + 2px)
+  );
+  opacity: 0.85;
 }
 
 /* Three nested transforms, each with one job: the scene holds the perspective,
@@ -2709,6 +2787,19 @@ code {
 }
 
 /*
+  Two faces need a smaller number than the rest, for opposite reasons: the d4
+  prints three of them on one triangle, and the percentile tens die prints two
+  digits inside a kite narrow enough that "00" reached both edges.
+*/
+.bigdice-scene.d4 .bigdice-face text {
+  font-size: 21px;
+}
+
+.bigdice-scene.d10-tens .bigdice-face text {
+  font-size: 24px;
+}
+
+/*
   Capped rather than simply filling the panel. The die is meant to be read from
   across a table, not to become a 700px wall — and in a fullscreened panel it
   would, pushing the result underneath it out of sight. `.roomy` lifts the cap
@@ -2717,7 +2808,7 @@ code {
 */
 .die {
   height: 100%;
-  max-height: min(100%, 420px);
+  max-height: min(100%, var(--flat-cap));
   width: auto;
   max-width: 46%;
   overflow: visible;
@@ -2771,6 +2862,49 @@ code {
 
 .bigdice-stage:focus-visible .die {
   stroke-width: 5;
+}
+
+/*
+  The flat renderer's discarded die. Same three signals the solid's gets —
+  smaller, greyer, crossed out — spelt in the terms this one is drawn in. The
+  line is inside the viewBox, so it scales with the die rather than needing a
+  box placed from JS the way the solid's does.
+*/
+.die.discarded {
+  fill: var(--bg-3);
+  stroke: var(--line);
+  opacity: 0.8;
+}
+
+/*
+  Capped on *height*, not width. A flat die is `height: 100%; width: auto`, so
+  its width follows from the height through the viewBox and a `max-width` only
+  binds in a narrow panel. Both terms are cut, not just the percentage: taking
+  70% of the stage while dropping the pixel cap made the discarded die *larger*
+  than the kept one in any panel tall enough for the cap to have been doing the
+  work. Named through its wrapper to outweigh `.bigdice-stage:not(.tumbling)
+  .die`; a discarded flat die is only ever inside a pair.
+*/
+.bigdice-pair .die.discarded {
+  max-height: min(70%, calc(var(--flat-cap) * 0.7));
+  max-width: 31%;
+}
+
+.die.discarded .facet {
+  fill: none;
+  stroke: var(--line);
+}
+
+.die.discarded .die-face {
+  fill: var(--text-faint);
+}
+
+.die-strike {
+  stroke: var(--danger);
+  stroke-width: 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
 }
 
 /* Interior edges, so a d20 does not read as a plain hexagon. */
@@ -3049,6 +3183,28 @@ code {
   background: var(--bg-4);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+}
+
+/*
+  The number a pair threw away, inside the entry that kept the other one. One
+  chip rather than two, because it was one throw — and struck through, so the
+  kept number is still the one the eye lands on.
+*/
+.bigdice-dropped {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+/*
+  The mode chips, under the dice row. Smaller than the dice they qualify: the
+  die is the choice, the mode is a modifier on it, and two rows of equal chips
+  read as two rows of the same kind of thing.
+*/
+.bigdice-modes .chip {
+  padding: 1px 8px;
+  font-size: 11px;
 }
 
 /* Nothing about a die needs to move for it to be readable. */

@@ -52,8 +52,12 @@ on screen; whether it *looks right* is still eyes only.
   list behind Conditions, Player Abilities and Diseases.
 - `src/renderer/src/components/MarkupText.tsx`, `MarkupTextarea.tsx` and
   `markupKeys.ts` — the shared bold/italic surfaces behind Table and Notes.
-- `src/renderer/src/lib/dieSolid.ts` — the d20 as geometry rather than as a
-  picture: its twenty faces, where each one sits, and how lit it is.
+- `src/renderer/src/lib/dieSolid.ts` — the dice as geometry rather than as
+  pictures: every solid's faces, where each one sits, and how lit it is.
+- `src/renderer/src/lib/bigDice.ts` — what Big Dice throws and how many solids
+  that puts on screen. Percentile as a physical pair, advantage as two d20s
+  with one discarded. Kept out of `lib/dice.ts`, which is the expression
+  language and shares nothing with it.
 - `src/main/imageStore.ts` — the files the Image module is allowed to display,
   and the ids the `dmscreen-image://` handler serves them under.
 - `src/main/document.ts` — the layout document, and the one copy of it that
@@ -347,11 +351,13 @@ The timers in `App.tsx` and the transition in `styles.css` are two halves of one
 duration and have to agree. Big Dice's wash and beams follow the same rule for
 the same reason, and their stage *is* the button that throws the die.
 
-## The big die
+## The big dice
 
-The d20 in Big Dice is a real solid, built from twenty SVG faces on
-`transform-style: preserve-3d`. Every other die, and the d20 with `solid` turned
-off, is the flat top-down face the module has always drawn. Both renderers stay.
+Every die in Big Dice is a real solid, built from SVG faces on
+`transform-style: preserve-3d` — d4, d6, d8, d10, d12, d20 and the percentile
+pair. With `solid` turned off, each is the flat top-down face the module has
+always drawn. Both renderers stay, and **both have to answer everything**: the
+flat one draws a discarded advantage die too, in its own terms.
 
 **The geometry lives in `lib/dieSolid.ts` and the module owns none of it.** The
 face table, the resting orientation for each number, the throw and the shading
@@ -359,6 +365,47 @@ are pure functions with unit tests. WebGL would have bought real lighting and
 cost a library, a physics engine, a GPU context per panel in every window, and
 the whole of that testability — a canvas asserts nothing, so every smoke shot
 here would collapse into a check that an element exists.
+
+**Every solid is derived, never a table of floats.** `buildSolid` takes a list
+of faces and does the rest: outward normals, the projection into each face's own
+viewBox, the numbering, the resting orientations. The derivation is the thing a
+test can hold to account, and hundreds of hand-copied numbers are not.
+
+**A face is defined by its corners and one `up` point**, which is what stands a
+triangle on its base and hangs a d10's kite from its apex. Corners arrive from
+set operations in no particular order, so they are walked by angle before being
+drawn — a square taken in extraction order comes out a bowtie.
+
+**Dualise rather than gather.** The dodecahedron's pentagons were first built by
+taking "the five textbook vertices leaning furthest towards each face normal".
+That is wrong and looks nearly right: the standard dodecahedron and the standard
+icosahedron differ by a rotation, so one's vertex directions are not the other's
+face normals, and the five corners it picks are not coplanar. Building it as the
+icosahedron's dual is exact by construction. `dieSolid.test.ts` asserts every
+face of every solid is flat, which is what caught it.
+
+**Two solids rest off axis, and have to.** A cube's neighbours meet it at exactly
+90°, so a face square to the camera leaves every other face on the horizon and
+the shading correctly drops them — the solid d6 would be a flat square. The
+tetrahedron is worse: all three visible faces sit at 70.5°, so it reads as a
+triangle with a Y drawn on it. Both carry a small `TILT` composed onto their
+resting orientations, with the angle argued at the constant. Nothing else needs
+one; every other solid here has an obtuse dihedral angle and shows three to five
+faces unaided.
+
+**The d4 is read at its apex, and that is a decision, not a detail.** A
+tetrahedron has no face pointing anywhere useful, so a real d4 is read either at
+the apex or along the bottom edge. This module presents a die to a camera rather
+than resting it on a table, and "the corner towards you" survives that
+translation where "the edge against the table" does not — there is no table. So
+each face carries three numbers, one per corner, and a face's own `value` is the
+number it *lacks*: an identity, not a result. Nothing else here prints more than
+one number per face, which is why `SolidFace.labels` is a list.
+
+**`SolidFace.corners` is there for the tests, and says so.** Nothing draws from
+it — `points` is its projection — but it is the only way to ask whether a face is
+flat, which is a real question for the d10's kite: its zigzag equator is planar
+at exactly one radius and nowhere else.
 
 **The throw writes to the DOM, never through `setState`.** It runs a frame at a
 time, and every write to panel state marks the layout unsaved, sends the whole
@@ -396,11 +443,61 @@ origin once per turn, and the element orbits instead of turning in place. The
 beams are centred with margins, and `transform` is left carrying nothing but
 scale.
 
-**The die's own numbers are no longer worth asserting on.** All twenty sit in
+**The die's own numbers are no longer worth asserting on.** Every face sits in
 the DOM at once, so a smoke `text: ['20']` passes whatever face is up. Assert on
 `.bigdice-total` and on the classes the flourish puts on the stage — and note
 that a critical replaces the total with its call-out rather than sitting beside
-it, so `.bigdice-total` is absent on a 20 and a 1.
+it, so `.bigdice-total` is absent on a 20 and a 1. A percentile total is the
+exception worth keeping: no face carries `62`, so it can only have come from the
+readout adding the pair up.
+
+### Pairs
+
+Percentile and advantage both put two dice on one stage, so there is one list
+saying what is on it rather than three branches over the same markup: `slots()`
+returns a die, a value and whether it was discarded, and both renderers draw
+whatever they are handed.
+
+**Advantage is a control on the die, not a setting in the drawer.** It is a
+per-roll decision made several times a fight, and the settings drawer is two
+clicks and a different mental mode away. The chips also say which mode the panel
+is in without being opened. They are hidden off the d20, which is the only die
+with the rule.
+
+**The critical call-out follows the kept die.** A natural 20 that disadvantage
+threw away is not a critical, so the flourish reads the kept value exactly as it
+always did. The discarded die stays on screen, dimmed and struck through, which
+is where the table sees what the rule cost them — that is the whole point of
+showing both.
+
+**A pair is one history entry.** It prints the kept number with the dropped one
+struck through beside it, and carries its mode in the tooltip: an 18 taken from
+`18, 4` is otherwise indistinguishable from a flat 18.
+
+**A mode with no pair yet is still one die.** Switching to advantage must not
+conjure a second die out of a result thrown flat, so the pair — not the mode —
+is what says there are two. Switching modes clears it.
+
+**The dice in flight are state, not a ref.** Without that, the first advantage
+throw tumbles one die and grows a second at the landing, which reads as the
+second die appearing out of nothing. One clock and one frame loop drive however
+many dice are on the stage, so a pair lands together; each gets its own spin,
+because two solids turning in step read as one rigid object.
+
+**A discarded die is told apart three ways — smaller, greyer, crossed out.** One
+alone is not enough: dimmed alone reads as badly lit, and struck alone still
+holds the eye as long as the die that counted.
+
+**The dimming is restyled faces, not a `filter`.** A filter would have to sit on
+the scene, where it would grey the strike that has to stay red; the only
+elements below it are the ones carrying the 3D, and a filter there forces
+`transform-style: flat` and collapses the solid into a pile of triangles.
+
+**The flat die is capped on height, and both terms of the cap have to be cut.**
+It is `height: 100%; width: auto`, so a `max-width` rarely binds. Taking 70% of
+the stage while dropping the pixel cap made the discarded die *larger* than the
+kept one in any panel tall enough for the cap to have been doing the work. The
+cap is `--flat-cap`, so a fraction of it is written once.
 
 **The wash and the beams are measured against `--die-size`, never the panel.**
 Sized as a percentage of the stage they come apart the moment a panel is not
