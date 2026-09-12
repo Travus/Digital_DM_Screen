@@ -57,6 +57,17 @@ import { defineModule, type ModuleProps } from './types'
 const TUMBLE_MS = 700
 const TICK_MS = 70
 
+/**
+ * The twin's burst: how many rings go out, and how many sparks ride them.
+ *
+ * Four rings because two waves of two is a burst that repeats, where one wave
+ * is a pulse. Two dozen sparks is where the ring stops looking like a wheel of
+ * spokes and starts looking scattered — the stylesheet nudges every third one
+ * off the true angle for the same reason.
+ */
+const SHOCK_RINGS = 4
+const SPARKS = 24
+
 interface HistoryEntry {
   id: string
   sides: number
@@ -352,9 +363,31 @@ function BigDice({
           <>
             <span className={`bigdice-wash ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
             <span className={`bigdice-beams ${thrown ? 'sweep' : ''}`} aria-hidden="true" />
-            {/* Two rings out of the middle, on a throw that happened here. The
-                twin is rare enough to be worth an effect nothing else uses. */}
-            {twin !== '' && thrown && <span className="bigdice-shock" aria-hidden="true" />}
+            {/*
+              The twin, on a throw that happened here: two waves of rings out of
+              the middle and a scatter of sparks riding them. One throw in four
+              hundred, so it gets an effect nothing else in the app uses.
+
+              Both are empty elements the stylesheet animates — the count is the
+              only thing worth saying here, and it lives beside the CSS that
+              staggers them.
+            */}
+            {twin !== '' && thrown && (
+              <>
+                <span className="bigdice-shock" aria-hidden="true">
+                  {Array.from({ length: SHOCK_RINGS }, (_, index) => (
+                    <i key={index} />
+                  ))}
+                </span>
+                <span className="bigdice-sparks" aria-hidden="true">
+                  {Array.from({ length: SPARKS }, (_, index) => (
+                    // Its place in the ring, which is all the stylesheet needs
+                    // to give each one an angle, a delay and a distance.
+                    <i key={index} style={{ '--i': index } as CSSProperties} />
+                  ))}
+                </span>
+              </>
+            )}
           </>
         )}
 

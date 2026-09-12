@@ -584,14 +584,37 @@ The wash, the beams and the shockwave are the stage's own children and are all
 measured in it; set one rung lower they go on being drawn around a die twice the
 size of the ones actually there.
 
-**Two natural 20s, or two natural 1s, get their own flourish.** About one throw
-in four hundred. Neither die lost, so neither is struck — they lean together
-instead, and two rings expand out of the middle. Rings rather than a flash: a
-flash is one frame the eye can miss and a television smears. Like the beams'
-`.sweep` it is gated on a throw made in *this* session, so a restored panel
-shows the twin already arrived rather than replaying it on every launch — which
-also means no smoke shot can carry it, since a pair of 20s cannot be rolled to
-order. That one is eyes only.
+**Two dice showing the same face are scattered, not lined up.** They are the
+same shape at the same size in the same orientation, so side by side they are
+one sprite stamped twice — and leaning them together, which was tried, overlaps
+two identical silhouettes into one mangled outline with a seam down it. An
+offset along the diagonal and opposite quarter-turns is what stops them
+matching, and it is how two dice actually come to rest. The pair still balances
+about the middle, so the beams and the shockwave stay centred on it. Any tie
+gets it, not only the twin: nothing is discarded on a tie either.
+
+The in-plane rotation goes on the scene, which holds the perspective, so it
+turns the finished picture and leaves the thrown face square to the camera.
+
+**Two natural 20s, or two natural 1s, get their own burst.** About one throw in
+four hundred, so it is the one effect in the app that is allowed to be loud:
+four rings in two waves, two dozen sparks riding them, and a wash that flares
+twice. Rings rather than a flash — a flash is one frame the eye can miss and a
+television smears — and a second wave rather than a longer first one, because
+arriving twice is what makes it read as an event rather than a transition.
+
+**A spark's heading is the `rotate` property and its flight is `transform`.**
+The individual transform properties apply *before* `transform`, so the outward
+`translateY` happens in the spark's own turned frame and carries it along its
+own bearing. That is the same composition the beams' comment warns about, used
+on purpose rather than tripped over: the markup says only which spark it is, and
+the stylesheet derives the angle, the delay and the distance from that.
+
+Like the beams' `.sweep`, all of it is gated on a throw made in *this* session,
+so a restored panel shows the twin already arrived rather than replaying it on
+every launch. That also means **no smoke shot can carry it** — a pair of 20s
+cannot be rolled to order. It was checked by driving a forced-twin build under
+the harness and photographing the waves; that is the way to look at it again.
 
 **The wash and the beams are measured against `--die-size`, never the panel.**
 Sized as a percentage of the stage they come apart the moment a panel is not

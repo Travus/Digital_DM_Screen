@@ -3348,11 +3348,14 @@ code {
 }
 
 /*
-  Two rings out of the middle, a beat apart.
+  Rings out of the middle, in two waves.
 
   Rings rather than a flash: a flash is one frame the eye can miss and a
   television smears, where an expanding outline is still legible at the back of
-  a room. `scale` and `opacity` only, like the beams — nothing here repaints.
+  a room. Two of them close together is a shockwave; a second pair a beat later
+  is the thing arriving twice, which is what makes it read as an event rather
+  than a transition. `scale` and `opacity` only, like the beams — nothing in
+  here repaints.
 */
 .bigdice-shock {
   position: absolute;
@@ -3366,9 +3369,7 @@ code {
   pointer-events: none;
 }
 
-.bigdice-shock::before,
-.bigdice-shock::after {
-  content: '';
+.bigdice-shock i {
   position: absolute;
   inset: 0;
   border: 3px solid var(--tint);
@@ -3376,10 +3377,19 @@ code {
   animation: bigdice-shock 1100ms cubic-bezier(0.12, 0.7, 0.3, 1) both;
 }
 
-/* The second ring is the whole of the effect: one is a pulse, two is a
-   shockwave. Late enough to read as a second event, not as a thick edge. */
-.bigdice-shock::after {
-  animation-delay: 260ms;
+.bigdice-shock i:nth-child(2) {
+  animation-delay: 190ms;
+}
+
+/* The gap before the second wave. Long enough that the first has faded, short
+   enough that it is plainly the same event happening again. */
+.bigdice-shock i:nth-child(3) {
+  animation-delay: 820ms;
+}
+
+.bigdice-shock i:nth-child(4) {
+  animation-delay: 1010ms;
+  border-width: 2px;
 }
 
 @keyframes bigdice-shock {
@@ -3390,6 +3400,109 @@ code {
   100% {
     opacity: 0;
     transform: scale(1);
+  }
+}
+
+/*
+  Sparks, thrown out along the rings.
+
+  Each one is a point in a ring, and `--i` — its place in that ring — is the
+  only thing the markup says. Everything else is derived here: the angle it
+  flies at, when it goes, and how far.
+
+  The angle is the `rotate` property, not a rotation inside `transform`, and
+  that is the whole trick. The individual transform properties are applied
+  *before* `transform`, so a spark's outward `translateY` happens in its own
+  turned frame and carries it along its own heading — the same composition the
+  beams' comment warns about, used deliberately rather than tripped over.
+*/
+.bigdice-sparks {
+  position: absolute;
+  /* Over the dice: a spark passes in front of what it was thrown off. Harmless
+     above the stage because nothing here takes a click. */
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.bigdice-sparks i {
+  --reach: 1.15;
+  position: absolute;
+  width: calc(var(--die-size) * 0.15);
+  height: calc(var(--die-size) * 0.15);
+  margin: calc(var(--die-size) * -0.075);
+  /* White at the core, the tint at the points: a spark that reads as burning
+     rather than as a gold chip. Painted once and then only moved, which is what
+     keeps it on the compositor. */
+  background: radial-gradient(circle closest-side, #fff 0%, var(--tint) 45%, var(--tint) 100%);
+  /* A four-point star, sharper than a plus. Cheaper than an SVG, and it scales
+     with the die because everything here is measured in `--die-size`. */
+  clip-path: polygon(50% 0%, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0% 50%, 43% 43%);
+  opacity: 0;
+  rotate: calc(var(--i) * 15deg);
+  animation: bigdice-spark 1150ms cubic-bezier(0.1, 0.72, 0.3, 1) calc(var(--i) * 18ms) both;
+}
+
+/* Off the true angle and short of the full distance, so two dozen sparks read
+   as a scatter rather than as the spokes of a wheel. */
+.bigdice-sparks i:nth-child(3n) {
+  --reach: 0.78;
+  rotate: calc(var(--i) * 15deg + 9deg);
+}
+
+.bigdice-sparks i:nth-child(4n) {
+  --reach: 1.42;
+  rotate: calc(var(--i) * 15deg - 7deg);
+}
+
+/* Half of them ride the second wave of rings rather than the first. */
+.bigdice-sparks i:nth-child(even) {
+  animation-delay: calc(820ms + var(--i) * 16ms);
+}
+
+/* The spin is the spark's own, on top of the heading `rotate` gave it — a
+   tumbling ember rather than a decal sliding outwards. */
+@keyframes bigdice-spark {
+  0% {
+    opacity: 0;
+    transform: translateY(calc(var(--die-size) * -0.2)) scale(0.2) rotate(0deg);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(calc(var(--die-size) * -0.45 * var(--reach))) scale(1.1) rotate(20deg);
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(calc(var(--die-size) * -1.3 * var(--reach))) scale(0.3) rotate(80deg);
+  }
+}
+
+/* The wash flares twice for a twin, under the two waves of rings. */
+.bigdice-stage.twin .bigdice-wash.sweep {
+  animation: bigdice-twin-wash 1900ms ease-out both;
+}
+
+@keyframes bigdice-twin-wash {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0.38;
+  }
+  50% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0.34;
   }
 }
 
@@ -3447,14 +3560,17 @@ code {
   .bigdice-beams,
   .bigdice-beams.sweep,
   .bigdice-wash.sweep,
+  .bigdice-stage.twin .bigdice-wash.sweep,
   .bigdice-flourish.twin,
   .bigdice-rolling i {
     animation: none;
   }
 
-  /* The shockwave is motion and nothing else — there is no still frame of it
-     worth keeping, so it does not run at all. */
-  .bigdice-shock {
+  /* The rings and the sparks are motion and nothing else — there is no still
+     frame of either worth keeping, so they do not run at all. The result is
+     still lit, still gold, and still says what it is. */
+  .bigdice-shock,
+  .bigdice-sparks {
     display: none;
   }
 
