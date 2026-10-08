@@ -1,0 +1,131 @@
+# Transitive security fixes, which Dependabot structurally cannot deliver.
+#
+# Three separate gaps, and this covers all of them:
+#
+#   - Its npm version updates read package.json, so a package that appears only
+#     in the lockfile is never refreshed. All four advisories open when this was
+#     written were transitive.
+#   - Its security updates need an alert, and alerts for development-scoped
+#     packages are auto-triaged away — a *high* brace-expansion alert was
+#     dismissed the second it was created, so no PR was ever opened.
+#   - Where GitHub's advisory database and npm's disagree there is no alert at
+#     all: http-cache-semantics and source-map-js sat in the dependency graph at
+#     the exact versions `npm audit` flags, with zero alerts between them.
+#
+# The lockfile does not heal on its own either. `npm ci` installs it verbatim,
+# so a caret range in package.json never floats to pick up a patch — something
+# has to rewrite the lockfile, and nothing else here ever does.
+#
+# This only ever writes to its own branch. The pull request it opens is gated by
+# the same five required checks as any other, which is what makes an unattended
+# dependency bump safe to land: `build / linux` is what would catch a packaging
+# toolchain bump breaking the AppStream metainfo or the deb description.
+#
+# Same trap as Audit: scheduled workflows fire only on the default branch, and
+# GitHub disables them after 60 days without a commit. If this stops running,
+# that is why.
+name: Security refresh
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC — an hour before Audit, so a fix that is already in
+    # flight is visible before the gate that would have reported the advisory.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+# Deliberately read-only. The branch and the pull request are written with an
+# app token, never GITHUB_TOKEN: a pull request opened by GITHUB_TOKEN fires no
+# workflows, so the five required checks would never report and the thing could
+# never be merged — the same shape of trap as a `paths` filter on a required
+# workflow.
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  refresh:
+    name: refresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: token
+        with:
+          app-id: ${{ vars.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.token.outputs.token }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Never --force. npm's suggested fix for the moderates inside
+      # electron-builder's own tree is electron-builder@26.5.0 — *older* than
+      # what is pinned, and flagged as a major. --force would quietly downgrade
+      # the packaging toolchain to clear advisories that only affect builds.
+      - name: Refresh the lockfile
+        run: npm audit fix --package-lock-only
+
+      # `npm audit fix` stops at a transitive it thinks is already satisfied, so
+      # it can leave a package one patch below the fix and still report success.
+      # brace-expansion was the case that found this: it stayed on 5.0.9 with
+      # 5.0.12 available and the gate still red. A plain update moves it.
+      - name: Chase anything the fix left behind
+        run: |
+          left=$(npm audit --json \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                const v=JSON.parse(s).vulnerabilities||{};
+                console.log(Object.values(v)
+                  .filter(x=>["high","critical"].includes(x.severity) && x.fixAvailable===true)
+                  .map(x=>x.name).join(" "));
+              })')
+          if [ -n "$left" ]; then
+            echo "still fixable: $left"
+            npm update $left --package-lock-only
+          fi
+
+      - id: changed
+        run: git diff --quiet package.json package-lock.json || echo 'yes=1' >> "$GITHUB_OUTPUT"
+
+      # Reported, not enforced. A high with no fix below a major should still
+      # open a pull request carrying everything that *could* be fixed, rather
+      # than being withheld because it could not reach green — the same bargain
+      # `resolve()` and `sanitiseKeymap` make.
+      #
+      # Written to RUNNER_TEMP rather than the tree, so the commit below cannot
+      # pick either file up.
+      - if: steps.changed.outputs.yes
+        id: verify
+        run: |
+          npm ci
+          if npm audit --audit-level=high; then
+            echo 'gate=green' >> "$GITHUB_OUTPUT"
+          else
+            echo 'gate=still red — see the report' >> "$GITHUB_OUTPUT"
+          fi
+          npm audit --json > "$RUNNER_TEMP/audit.json" || true
+          node scripts/audit-summary.mjs < "$RUNNER_TEMP/audit.json" > "$RUNNER_TEMP/summary.txt"
+
+      # One rolling branch, force-pushed, so a week that fixes nothing new
+      # updates the open pull request instead of stacking another beside it.
+      - if: steps.changed.outputs.yes
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C security-refresh
+          git commit -am 'Refresh the lockfile for security advisories'
+          git push --force-with-lease -u origin security-refresh
+          if [ -z "$(gh pr list --head security-refresh --state open --json number -q '.[].number')" ]; then
+            gh pr create \
+              --title 'Refresh the lockfile for security advisories' \
+              --body "$(printf 'Vulnerability gate after the refresh: %s\n\n```\n%s\n```\n' \
+                         '${{ steps.verify.outputs.gate }}' "$(cat "$RUNNER_TEMP/summary.txt")")"
+          fi
