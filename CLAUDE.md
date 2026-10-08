@@ -1126,6 +1126,20 @@ both spellings. The Linux build job asserts the name survives on `ubuntu:24.04`
 and `ubuntu:22.04`; presence in the deb is not the failure mode. Use `appstreamcli
 dump <id>`, not `get`, which prints a fixed summary and would hide this.
 
+**`dump` is served from a cache, so the check refreshes it first.** That cache's
+staleness check is mtime-based, and on a fast runner the `apt-get install`, the
+`dpkg-deb -x` and the dump land close enough together to miss the invalidation —
+a deb that demonstrably carried the metainfo reported `Unable to find component`
+on roughly every other run, at the same base image digest as runs that passed,
+with only one `appstream` version in the archive to install and the file present
+in the listing the step before. Failing runs spent 14 s there where passing ones
+spent 28 s, which is the tell, and it never reproduced on slower local Docker. So
+the file is asserted on disk on its own, then the cache is forced, then the dump
+runs: "did the deb carry it" and "has AppStream caught up" are two questions and
+one error message cannot stand for both. The container script runs under `set -e`
+for the same reason — an unchecked apt or extraction used to fall through to the
+dump and be reported as missing packaging.
+
 **macOS must be built on macOS.** Measured against electron-builder 26.15.3 in the
 Wine container: `--mac dmg` fails on `sips process failed ENOENT`, and `--mac zip`
 *appears to succeed* while dereferencing the framework's symlinks, giving a
