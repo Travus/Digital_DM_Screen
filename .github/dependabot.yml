@@ -46,8 +46,13 @@ updates:
     # means shipping unpatched browser CVEs.
     #
     # Note these are ceilings, not freezes: the caret ranges in package.json
-    # still take patch and minor releases, so a security fix inside the current
-    # major arrives without anyone deciding anything.
+    # still take patch and minor releases. What they do not do is arrive on
+    # their own — `npm ci` installs the lockfile verbatim, so a range picks a
+    # release up only when something rewrites that lockfile. For a direct
+    # dependency that is the grouped pull request above. For a transitive one
+    # nothing here reaches it at all, which is what security-refresh.yml is
+    # for: version updates read package.json, and security updates need an
+    # alert that development-scoped packages do not reliably get.
     ignore:
       - dependency-name: 'vite'
         update-types: ['version-update:semver-major']

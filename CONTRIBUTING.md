@@ -137,12 +137,13 @@ Artifacts appear on the run, labelled with the PR number if the branch has one o
 
 ## CI
 
-Three workflows run on their own:
+Four workflows run on their own:
 
 | Workflow | When it runs |
 |---|---|
 | `ci.yml` | every pull request, and every push to `main` |
 | `audit.yml` | weekly, on demand, and on pull requests that touch the lockfile |
+| `security-refresh.yml` | weekly, and on demand |
 | `release.yml` | when you push a `v*.*.*` tag |
 
 `ci.yml` runs three jobs in order, and each waits for the one before it: `check` (format, lint, typecheck, tests), then `smoke`, then the installers. A change that fails to render never reaches the packaging step.
@@ -158,6 +159,14 @@ Installers built for a pull request carry its number: `Digital-DM-Screen-0.3.0-P
 ### Dependency audits
 
 `audit.yml` runs both of these weekly, and on any pull request that touches the lockfile. Run them yourself when you bump a dependency, before you open the pull request.
+
+`audit.yml` only reports. `security-refresh.yml` is the half that fixes: once a week it refreshes the lockfile, and if that clears anything it opens a pull request from a branch called `security-refresh`. It exists because Dependabot cannot do this — Dependabot's npm updates read `package.json`, so a package that appears only in the lockfile is never bumped, and its security alerts are auto-dismissed for development-scoped packages or missing entirely where GitHub's advisory database and npm's disagree. The pull request it opens runs the same required checks as any other, so an unattended dependency bump still has to build every installer before it can land. To do the same thing by hand:
+
+```sh
+docker compose run --rm build npm audit fix --package-lock-only
+```
+
+Never add `--force`. npm's suggested fix for the moderate advisories inside electron-builder's own tree is an *older* electron-builder flagged as a major, so `--force` downgrades the packaging toolchain to clear advisories that only affect builds.
 
 ```sh
 docker compose run --rm build node scripts/audit-deps.mjs

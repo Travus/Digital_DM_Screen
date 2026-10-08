@@ -1368,9 +1368,9 @@ Two tiers only, unit and smoke. No component or end-to-end runner.
 
 ## CI
 
-Five workflows, and **CI runs natively — no Docker at all**. `ci.yml` (check, then
-render, then installers), `release.yml`, `audit.yml`, and two called by the
-others: `render-check.yml` and `build-installers.yml`.
+Six workflows, and **CI runs natively — no Docker at all**. `ci.yml` (check, then
+render, then installers), `release.yml`, `audit.yml`, `security-refresh.yml`, and
+two called by the others: `render-check.yml` and `build-installers.yml`.
 
 **Each installer is built on the system it targets** — Windows on
 `windows-latest`, Linux on `ubuntu-latest`, macOS on `macos-15`.
@@ -1407,6 +1407,34 @@ line documenting that separator.
 **The audit report writes to a file rather than piping.** `npm audit` exits
 non-zero on any finding, and a pipe reports only the last command's status. The
 summary script is a formatter; the gate is a separate `--audit-level=high` step.
+
+**A transitive advisory is `security-refresh.yml`'s job, because Dependabot
+cannot reach one.** Its npm version updates read `package.json` and never touch
+a package that exists only in the lockfile; its security updates need an alert,
+and alerts for development-scoped packages are auto-triaged away — a *high*
+`brace-expansion` alert was dismissed the instant it was created. Where
+GitHub's advisory database and npm's disagree there is no alert to dismiss at
+all: `http-cache-semantics` and `source-map-js` sat in the dependency graph at
+the exact versions `npm audit` flags, with none between them. Nor does the
+lockfile heal itself, since `npm ci` installs it verbatim and a caret range
+never floats. So it is refreshed weekly onto a branch of its own, and the pull
+request that opens is gated by the same five required checks as any other —
+`build / linux` is what would catch the packaging toolchain moving and breaking
+the metainfo or the deb description.
+
+**That pull request cannot be opened with `GITHUB_TOKEN`.** One created by it
+fires no workflows, so the five required checks never report and the branch is
+unmergeable — the same trap as a `paths` filter on a required workflow. It uses
+an app token instead.
+
+**`npm audit fix` is never given `--force`, there or by hand.** npm's suggested
+fix for the moderates inside electron-builder's own tree is
+`electron-builder@26.5.0` — *older* than what is pinned, and flagged as a
+major, so `--force` downgrades the packaging toolchain to clear advisories that
+only ever affect builds. It also stops at a transitive it considers already
+satisfied, which is why the workflow follows it with a plain `npm update` of
+anything still high and still fixable: `brace-expansion` stayed a patch below
+its fix and kept the gate red.
 
 **Never pipe a long output into `grep -q`.** An Actions step runs under
 `pipefail`, and `grep -q` exits on its first match — the writer upstream then
