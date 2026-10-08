@@ -91,9 +91,30 @@ jobs:
         run: |
           for image in ubuntu:24.04 ubuntu:22.04; do
             echo "::group::$image"
+            # `set -e`, because none of these steps used to be checked: a failed
+            # apt or a failed extraction fell straight through to the dump, which
+            # then reported the component as missing and sent you looking at the
+            # packaging rather than at the thing that actually broke.
+            #
+            # The file being on disk and AppStream seeing it are two different
+            # questions. `dump` is served from a metadata cache whose staleness
+            # check is mtime-based, and on a fast runner the install, the
+            # extraction and the dump land close enough together to miss the
+            # invalidation — which is how a deb that demonstrably carried the
+            # metainfo reported `Unable to find component` on roughly every other
+            # run, identically across two different base image digests and with
+            # only one `appstream` version in the archive. Asserting the file
+            # separately is what tells a cache that has not caught up apart from a
+            # deb that genuinely lost the file; the refresh is what stops the
+            # former happening. Both spellings of the subcommand exist on 0.15 and
+            # on 1.0, so `refresh` is safe on both images.
             out=$(docker run --rm -v "$PWD/release:/r:ro" "$image" bash -c '
+              set -e
               apt-get update -qq && apt-get install -y -qq appstream >/dev/null
               dpkg-deb -x /r/*.deb /
+              test -s /usr/share/metainfo/dev.travus.dmscreen.metainfo.xml \
+                || { echo "metainfo absent after extracting the deb" >&2; exit 1; }
+              appstreamcli refresh --force >/dev/null
               appstreamcli dump dev.travus.dmscreen')
             echo "$out"
             echo '::endgroup::'
