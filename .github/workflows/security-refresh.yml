@@ -69,22 +69,33 @@ jobs:
       # electron-builder's own tree is electron-builder@26.5.0 — *older* than
       # what is pinned, and flagged as a major. --force would quietly downgrade
       # the packaging toolchain to clear advisories that only affect builds.
+      #
+      # Its exit code is dropped on purpose, exactly as the Audit report drops
+      # `npm audit`'s. `npm audit fix` reports what is *left*, not what it did,
+      # so it exits 1 for as long as anything remains that only --force would
+      # move — which here is for ever, since those eight moderates are never
+      # going to be fixed. Judging the step by that status failed every run on a
+      # lockfile it had just corrected. What it achieved is the `git diff` below,
+      # and whether that was enough is the gate's answer, not this command's.
       - name: Refresh the lockfile
-        run: npm audit fix --package-lock-only
+        run: npm audit fix --package-lock-only || true
 
       # `npm audit fix` stops at a transitive it thinks is already satisfied, so
       # it can leave a package one patch below the fix and still report success.
       # brace-expansion was the case that found this: it stayed on 5.0.9 with
       # 5.0.12 available and the gate still red. A plain update moves it.
+      #
+      # Read from a file rather than a pipe, for the reason the report is: a step
+      # runs under `pipefail`, so `npm audit` exiting non-zero on a finding
+      # becomes the whole pipeline's status and fails the step — however well the
+      # command on the other end of the pipe did its job.
       - name: Chase anything the fix left behind
         run: |
-          left=$(npm audit --json \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-                const v=JSON.parse(s).vulnerabilities||{};
-                console.log(Object.values(v)
-                  .filter(x=>["high","critical"].includes(x.severity) && x.fixAvailable===true)
-                  .map(x=>x.name).join(" "));
-              })')
+          npm audit --json > "$RUNNER_TEMP/after-fix.json" || true
+          left=$(node -e 'const v = require(process.env.RUNNER_TEMP + "/after-fix.json").vulnerabilities || {};
+            console.log(Object.values(v)
+              .filter(x => ["high", "critical"].includes(x.severity) && x.fixAvailable === true)
+              .map(x => x.name).join(" "));')
           if [ -n "$left" ]; then
             echo "still fixable: $left"
             npm update $left --package-lock-only

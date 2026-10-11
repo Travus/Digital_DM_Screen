@@ -1450,6 +1450,15 @@ satisfied, which is why the workflow follows it with a plain `npm update` of
 anything still high and still fixable: `brace-expansion` stayed a patch below
 its fix and kept the gate red.
 
+**Its exit code is dropped too, like `npm audit`'s.** `npm audit fix` reports
+what is *left*, not what it did, so it exits 1 for as long as anything remains
+that only `--force` would move — for ever, here, given those eight moderates.
+The refresh failed its every dispatch on a lockfile it had just corrected until
+that status was ignored. What the step achieved is the `git diff` after it, and
+whether that was enough is the gate's answer. The same reading of `npm audit`
+one step later has to come off a file rather than a pipe, or `pipefail` makes
+the finding the pipeline's status and fails the step regardless of what read it.
+
 **Never pipe a long output into `grep -q`.** An Actions step runs under
 `pipefail`, and `grep -q` exits on its first match — the writer upstream then
 dies on a write error and *that* becomes the pipeline's status. A match early in
