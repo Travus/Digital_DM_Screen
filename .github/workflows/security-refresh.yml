@@ -56,9 +56,14 @@ jobs:
           app-id: ${{ vars.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_KEY }}
 
+      # Named rather than left to the trigger, so a dispatch from a branch tests
+      # that branch's workflow against main's lockfile. The commit below is
+      # parented on this checkout, and without the ref it would carry the branch
+      # into the pull request.
       - uses: actions/checkout@v7
         with:
           token: ${{ steps.token.outputs.token }}
+          ref: ${{ github.event.repository.default_branch }}
 
       - uses: actions/setup-node@v7
         with:
@@ -125,15 +130,40 @@ jobs:
 
       # One rolling branch, force-pushed, so a week that fixes nothing new
       # updates the open pull request instead of stacking another beside it.
+      #
+      # Built through the API rather than pushed, because main requires signed
+      # commits and a runner has no key: `git commit` here makes one the ruleset
+      # refuses, which passes all five checks and then can never merge. GitHub
+      # signs a commit an app creates this way, provided it names no author or
+      # committer, so neither is passed. The branch moves in one update, never by
+      # way of main's own commit: a head level with its base can close the open
+      # pull request.
+      #
+      # Blobs go in through a file because a lockfile outgrows the size limit on
+      # a single command line argument.
       - if: steps.changed.outputs.yes
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -C security-refresh
-          git commit -am 'Refresh the lockfile for security advisories'
-          git push --force-with-lease -u origin security-refresh
+          api="repos/$GITHUB_REPOSITORY/git"
+          parent=$(git rev-parse HEAD)
+          entries='[]'
+          for file in $(git diff --name-only package.json package-lock.json); do
+            base64 -w0 "$file" > "$RUNNER_TEMP/blob.b64"
+            jq -n --rawfile content "$RUNNER_TEMP/blob.b64" '{content: $content, encoding: "base64"}' > "$RUNNER_TEMP/blob.json"
+            blob=$(gh api "$api/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)
+            entries=$(jq -c --arg path "$file" --arg sha "$blob" '. + [{path: $path, mode: "100644", type: "blob", sha: $sha}]' <<< "$entries")
+          done
+          tree=$(jq -n --arg base "$(git rev-parse 'HEAD^{tree}')" --argjson entries "$entries" '{base_tree: $base, tree: $entries}' \
+            | gh api "$api/trees" --input - --jq .sha)
+          commit=$(jq -n --arg tree "$tree" --arg parent "$parent" \
+            '{message: "Refresh the lockfile for security advisories", tree: $tree, parents: [$parent]}' \
+            | gh api "$api/commits" --input - --jq .sha)
+          if gh api "$api/ref/heads/security-refresh" --silent 2>/dev/null; then
+            gh api -X PATCH "$api/refs/heads/security-refresh" -f sha="$commit" -F force=true --silent
+          else
+            gh api -X POST "$api/refs" -f ref=refs/heads/security-refresh -f sha="$commit" --silent
+          fi
           if [ -z "$(gh pr list --head security-refresh --state open --json number -q '.[].number')" ]; then
             gh pr create \
               --title 'Refresh the lockfile for security advisories' \

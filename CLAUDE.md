@@ -1441,6 +1441,13 @@ fires no workflows, so the five required checks never report and the branch is
 unmergeable — the same trap as a `paths` filter on a required workflow. It uses
 an app token instead.
 
+**Nor can its commit come from `git commit`.** `main` requires signed commits and
+a runner has no key, so a pushed commit passes all five required checks and then
+sits blocked with nothing on the checks tab to say why. The workflow builds the
+commit through the Git Data API with no author or committer, which GitHub signs
+for an app. It also checks out `main` by name, so a dispatch from a branch tests
+that branch's workflow and still opens a pull request holding only the lockfile.
+
 **`npm audit fix` is never given `--force`, there or by hand.** npm's suggested
 fix for the moderates inside electron-builder's own tree is
 `electron-builder@26.5.0` — *older* than what is pinned, and flagged as a
