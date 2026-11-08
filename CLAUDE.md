@@ -1288,6 +1288,16 @@ other 45 passed. Asking again beats lengthening a wait every shot pays. The empt
 check is there because nothing downstream would catch a blank PNG: expectations
 run in the renderer and pass whatever the capture returned.
 
+**A frame of one colour is blank too, and each attempt waits for a paint
+first.** `isEmpty()` only catches a zero-size image. A capture taken before the
+compositor painted is the right size and solid background, and `conditions-empty`
+passed every assertion that way. The DOM also runs ahead of the screen: an `<img>`
+fires `load` before it is decoded, which is how `image-fitted` photographed a
+`data-loaded` panel with no map in it. So `settlePaint` waits for every image to
+decode and for two frames, and `isUniformFrame` refuses the solid frame. Both
+waits are bounded and logged as `[smoke:retry]` when they run out. No shot can
+legitimately be one colour, since every one has the app's chrome in it.
+
 ### Shots run in parallel
 
 Four at a time by default — `min(4, cpus)`, sized for the CI runner. The suite is
