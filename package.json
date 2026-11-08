@@ -34,8 +34,6 @@
     "smoke:mac": "node scripts/smoke-mac.mjs"
   },
   "//pinned": {
-    "vite": "Held at 7.x — electron-vite 5 peers on vite ^5 || ^6 || ^7.",
-    "@vitejs/plugin-react": "Held at 5.x — 6.x requires vite 8, which electron-vite 5 rejects.",
     "zustand": "Held at 4.x — v5 dropped the useStore(selector, equalityFn) overload the initiative/party sync uses.",
     "react": "Held at 18.x — nothing here needs 19, and the upgrade buys no fixes we care about.",
     "typescript": "Held at 5.x — 7.x is the native rewrite; not worth the risk for this project yet."
