@@ -4,7 +4,7 @@
 # Pinned, and must stay in step with the `build` service in docker-compose.yml —
 # the two share a node_modules volume, so a mismatched node would have them
 # trampling each other's installs. Dependabot watches both files.
-FROM electronuserland/builder:24-wine-05.26
+FROM electronuserland/builder:24-wine-10.26
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
