@@ -13,6 +13,7 @@
  */
 import { app, type BrowserWindow } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import { isUniformFrame } from './smokeFrame'
 
 const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms))
 
@@ -384,6 +385,41 @@ async function waitForReady(window: BrowserWindow): Promise<void> {
   console.log('[renderer:error] the app never finished restoring its session')
 }
 
+/**
+ * Wait for the window to paint what the DOM now says, right before a capture.
+ *
+ * The expectations read the DOM, and the DOM is ahead of the screen in two ways
+ * this harness has photographed. An `<img>` fires `load` before Chromium has
+ * decoded it, so `data-loaded` can be true over a panel that is still empty —
+ * `image-fitted` came back without its map that way. And `waitForReady`'s two
+ * frames ran long before the steps, which leaves nothing between the last step
+ * and the capture to say a frame was ever produced.
+ *
+ * Both waits are bounded, because a shot that hangs here is a worse diagnostic
+ * than one captured early. Running out is logged as a retry, so a run that
+ * needed it says so without failing on it.
+ */
+async function settlePaint(window: BrowserWindow): Promise<void> {
+  const late = (await window.webContents.executeJavaScript(
+    `(async () => {
+      // A broken or missing image rejects its decode, which is a state some shots
+      // photograph on purpose, so a rejection only means there is nothing to wait for.
+      const decoded = Promise.all([...document.images].map((img) => img.decode().catch(() => {})))
+      await Promise.race([decoded, new Promise((done) => setTimeout(done, 2000))])
+      return await new Promise((done) => {
+        const bail = setTimeout(() => done(true), 1000)
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            clearTimeout(bail)
+            done(false)
+          })
+        )
+      })
+    })()`
+  )) as boolean
+  if (late) console.log('[smoke:retry] no frame was painted in the second before the capture')
+}
+
 /** How long an expectation is given to come true before the shot is failed. */
 const EXPECT_TIMEOUT_MS = 3000
 const EXPECT_POLL_MS = 150
@@ -511,6 +547,11 @@ export function installSmokeHook(
    * capture returned, so a blank PNG is the exact false green this harness
    * exists to prevent.
    *
+   * So does a frame of one colour. That is a capture taken before the compositor
+   * painted anything, and it is not empty, so `isEmpty()` waved it through:
+   * `conditions-empty` passed every assertion with a blank PNG on disk. Each
+   * attempt waits for a paint first, and only four blank frames in a row fail.
+   *
    * Logged as `[smoke:retry]`, which the driver prints but does not fail on — a
    * shot that needed two goes is worth seeing without being worth failing.
    */
@@ -518,8 +559,12 @@ export function installSmokeHook(
     let last: Error | null = null
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       try {
+        await settlePaint(window)
         const image = await window.webContents.capturePage()
         if (image.isEmpty()) throw new Error('capturePage returned an empty image')
+        if (isUniformFrame(image.toBitmap())) {
+          throw new Error('capturePage returned a frame of one colour, before anything was painted')
+        }
         return image.toPNG()
       } catch (error) {
         last = error as Error
