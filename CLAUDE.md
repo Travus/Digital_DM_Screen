@@ -20,8 +20,10 @@ arrangement — including every module's settings and live contents — saves to
 
 ## Hard rules
 
-**Never run node, npm or tsc on the host.** The entire toolchain lives in
-Docker. The host has no Node install and the user wants it kept that way.
+**The toolchain runs in Docker, and that is the supported setup.** It needs
+nothing installed beyond Docker. Node 24, the version the image pins, also runs
+the same scripts directly — see CONTRIBUTING.md. Work with whichever the person
+you are helping has set up, and do not install Node on a machine that lacks it.
 
 ```sh
 docker compose run --rm build npm install       # after dependency changes
@@ -30,8 +32,7 @@ docker compose run --rm build npm run build     # typecheck + bundle
 docker compose run --rm smoke                   # headless render check
 ```
 
-This is about *this machine*. CI installs Node and builds natively, one runner
-per platform — see CI below.
+CI installs Node and builds natively, one runner per platform — see CI below.
 
 **Verify UI changes by looking at them.** `docker compose run --rm smoke`
 screenshots the built app into `release/smoke/*.png`. Read those images. This has
@@ -1086,9 +1087,6 @@ unchanged filename. Gate the build on the check rather than printing it:
 if (Get-Process 'Digital DM Screen*' -EA SilentlyContinue) { "close the app first" }
 else { docker compose run --rm build npm run dist:all }
 ```
-
-**Closing it is pre-authorised** — Travus asked for it to be force-closed rather
-than prompted every time.
 
 **Don't key build-completion checks on a filename existing.** A stale artifact
 looks identical to a fresh one. Key on the process exiting, or compare timestamps.
